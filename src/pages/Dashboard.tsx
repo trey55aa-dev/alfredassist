@@ -33,6 +33,25 @@ export default function Dashboard() {
     minutes: 0,
   });
   const [journal] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
+  const [goals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
+
+  const goalStats = useMemo(() => {
+    const total = goals.length;
+    const done = goals.filter((g) => g.done).length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const active = goals
+      .filter((g) => !g.done)
+      .sort((a, b) => {
+        const da = daysUntil(a.deadline);
+        const db = daysUntil(b.deadline);
+        if (da !== null && db !== null) return da - db;
+        if (da !== null) return -1;
+        if (db !== null) return 1;
+        return progressPct(b) - progressPct(a);
+      })
+      .slice(0, 4);
+    return { total, done, pct, active };
+  }, [goals]);
 
   const todaysBrain = useMemo(
     () => brain.filter((b) => b.date === todayKey()).length,
