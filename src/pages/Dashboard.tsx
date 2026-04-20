@@ -7,7 +7,17 @@ import { Progress } from "@/components/ui/progress";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { greeting, todayKey } from "@/lib/alfred";
 import { GOALS_KEY, Goal, SEED_GOALS, progressPct, daysUntil } from "@/lib/goals";
+import {
+  STREAK_KEY,
+  StreakState,
+  emptyStreak,
+  currentStreak,
+  longestStreak,
+  last7Days,
+  reconcileToday,
+} from "@/lib/streak";
 import type { ChecklistState } from "./Checklist";
+import { DAILY } from "./Checklist";
 import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
@@ -59,11 +69,23 @@ export default function Dashboard() {
   );
 
   const tasksDone = useMemo(
-    () => Object.values(checklist.daily ?? {}).filter(Boolean).length,
+    () => DAILY.filter((d) => checklist.daily?.[d]).length,
     [checklist]
   );
-  const tasksTotal = useMemo(() => Object.keys(checklist.daily ?? {}).length || 1, [checklist]);
+  const tasksTotal = DAILY.length;
   const dailyPct = Math.round((tasksDone / tasksTotal) * 100);
+
+  // Streak — keep in sync if user lands here without visiting Checklist
+  const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
+  useEffect(() => {
+    const next = reconcileToday(streak, tasksDone === tasksTotal);
+    if (next !== streak) setStreak(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksDone, tasksTotal]);
+
+  const current = currentStreak(streak);
+  const longest = Math.max(longestStreak(streak), current);
+  const week = last7Days(streak);
 
   // Habit summary: last 7 days of brain dumps + journal entries by category
   const habits = useMemo(() => {
