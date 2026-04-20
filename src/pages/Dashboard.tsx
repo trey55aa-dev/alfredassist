@@ -7,7 +7,17 @@ import { Progress } from "@/components/ui/progress";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { greeting, todayKey } from "@/lib/alfred";
 import { GOALS_KEY, Goal, SEED_GOALS, progressPct, daysUntil } from "@/lib/goals";
+import {
+  STREAK_KEY,
+  StreakState,
+  emptyStreak,
+  currentStreak,
+  longestStreak,
+  last7Days,
+  reconcileToday,
+} from "@/lib/streak";
 import type { ChecklistState } from "./Checklist";
+import { DAILY } from "./Checklist";
 import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
@@ -59,11 +69,23 @@ export default function Dashboard() {
   );
 
   const tasksDone = useMemo(
-    () => Object.values(checklist.daily ?? {}).filter(Boolean).length,
+    () => DAILY.filter((d) => checklist.daily?.[d]).length,
     [checklist]
   );
-  const tasksTotal = useMemo(() => Object.keys(checklist.daily ?? {}).length || 1, [checklist]);
+  const tasksTotal = DAILY.length;
   const dailyPct = Math.round((tasksDone / tasksTotal) * 100);
+
+  // Streak — keep in sync if user lands here without visiting Checklist
+  const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
+  useEffect(() => {
+    const next = reconcileToday(streak, tasksDone === tasksTotal);
+    if (next !== streak) setStreak(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksDone, tasksTotal]);
+
+  const current = currentStreak(streak);
+  const longest = Math.max(longestStreak(streak), current);
+  const week = last7Days(streak);
 
   // Habit summary: last 7 days of brain dumps + journal entries by category
   const habits = useMemo(() => {
@@ -117,6 +139,79 @@ export default function Dashboard() {
             </Card>
           </Link>
         ))}
+      </section>
+
+      {/* Daily streak */}
+      <section>
+        <Card className="p-6 bg-gradient-card border-border">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-md bg-gradient-gold flex items-center justify-center shadow-gold">
+                <Flame className="h-7 w-7 text-primary-foreground" />
+              </div>
+              <div>
+                <h3 className="font-display text-2xl">Daily Streak</h3>
+                <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
+                  {current === 0
+                    ? "Complete the protocol to begin"
+                    : current === 1
+                      ? "1 day · the campaign begins"
+                      : `${current} days · longest ${longest}`}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-display text-6xl text-gold leading-none">
+                {current}
+              </div>
+              <div className="font-mono text-[9px] tracking-[0.3em] uppercase text-muted-foreground mt-1">
+                day{current === 1 ? "" : "s"}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-7 gap-1.5">
+            {week.map((d) => {
+              const date = new Date(d.date + "T00:00:00");
+              const isToday = d.date === todayKey();
+              const dayLabel = date.toLocaleDateString([], { weekday: "narrow" });
+              return (
+                <div key={d.date} className="text-center">
+                  <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60 mb-1">
+                    {dayLabel}
+                  </div>
+                  <div
+                    className={`aspect-square rounded-md flex items-center justify-center font-mono text-[10px] transition-all ${
+                      d.done
+                        ? "bg-gradient-gold text-primary-foreground shadow-gold"
+                        : isToday
+                          ? "bg-muted/40 border border-gold/40 text-gold"
+                          : "bg-muted/30 text-muted-foreground/40"
+                    }`}
+                  >
+                    {d.done ? <Flame className="h-3.5 w-3.5" /> : date.getDate()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {dailyPct < 100 && current === 0 && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              {tasksTotal - tasksDone} task{tasksTotal - tasksDone === 1 ? "" : "s"} between you and day one.
+            </p>
+          )}
+          {dailyPct < 100 && current > 0 && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Hold the line — finish today's protocol to extend the streak.
+            </p>
+          )}
+          {dailyPct === 100 && (
+            <p className="mt-4 text-sm text-gold font-display italic">
+              Today is conquered, sir. The streak holds.
+            </p>
+          )}
+        </Card>
       </section>
 
       {/* 2026 Goals widget */}

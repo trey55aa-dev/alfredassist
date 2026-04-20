@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey, weekKey } from "@/lib/alfred";
+import { STREAK_KEY, StreakState, emptyStreak, reconcileToday } from "@/lib/streak";
 import { useEffect, useMemo } from "react";
 
 export interface ChecklistState {
@@ -15,7 +16,7 @@ export interface ChecklistState {
   weekly: Record<string, boolean>;
 }
 
-const DAILY = [
+export const DAILY = [
   "Morning hydration & stretch",
   "Review top 3 priorities",
   "Deep work block — 90 min",
@@ -24,6 +25,8 @@ const DAILY = [
   "Inbox to zero",
   "Evening shutdown ritual",
 ];
+
+export const DAILY_TOTAL = DAILY.length;
 
 const WEEKLY = [
   "Weekly review — wins & losses",
@@ -41,6 +44,7 @@ export default function Checklist() {
     daily: {},
     weekly: {},
   });
+  const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
 
   // Auto-reset when day/week changes
   useEffect(() => {
@@ -66,6 +70,14 @@ export default function Checklist() {
 
   const dailyDone = useMemo(() => DAILY.filter((d) => state.daily[d]).length, [state]);
   const weeklyDone = useMemo(() => WEEKLY.filter((d) => state.weekly[d]).length, [state]);
+
+  // Reconcile streak whenever today's daily completion changes
+  useEffect(() => {
+    const isComplete = dailyDone === DAILY.length;
+    const next = reconcileToday(streak, isComplete);
+    if (next !== streak) setStreak(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyDone]);
 
   return (
     <div className="space-y-8">
