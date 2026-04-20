@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckSquare, Timer, Brain, Mic, ArrowRight, Flame } from "lucide-react";
+import { CheckSquare, Timer, Brain, Mic, ArrowRight, Flame, Target } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { greeting, todayKey } from "@/lib/alfred";
+import { GOALS_KEY, Goal, SEED_GOALS, progressPct, daysUntil } from "@/lib/goals";
 import type { ChecklistState } from "./Checklist";
 import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
+import { BackupRestore } from "@/components/BackupRestore";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
