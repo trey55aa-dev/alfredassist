@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey, weekKey } from "@/lib/alfred";
+import { STREAK_KEY, StreakState, emptyStreak, reconcileToday } from "@/lib/streak";
 import { useEffect, useMemo } from "react";
 
 export interface ChecklistState {
