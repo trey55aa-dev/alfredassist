@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash2, Check, Target } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey } from "@/lib/alfred";
+import { GOALS_KEY, Goal, SEED_GOALS } from "@/lib/goals";
 
 export type BrainLabel = "career" | "nil" | "body" | "money" | "life" | "skill";
 
@@ -16,6 +17,7 @@ export interface BrainEntry {
   date: string;
   done: boolean;
   createdAt: number;
+  goalId?: string;
 }
 
 const LABELS: BrainLabel[] = ["career", "nil", "body", "money", "life", "skill"];
@@ -31,8 +33,10 @@ const labelStyles: Record<BrainLabel, string> = {
 
 export default function BrainDump() {
   const [entries, setEntries] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
+  const [goals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
   const [text, setText] = useState("");
   const [label, setLabel] = useState<BrainLabel>("career");
+  const [goalId, setGoalId] = useState<string>("");
   const [filter, setFilter] = useState<BrainLabel | "all">("all");
 
   const add = () => {
@@ -45,20 +49,30 @@ export default function BrainDump() {
         date: todayKey(),
         done: false,
         createdAt: Date.now(),
+        goalId: goalId || undefined,
       },
       ...entries,
     ]);
     setText("");
+    setGoalId("");
   };
 
   const toggle = (id: string) =>
     setEntries(entries.map((e) => (e.id === id ? { ...e, done: !e.done } : e)));
   const remove = (id: string) => setEntries(entries.filter((e) => e.id !== id));
+  const linkGoal = (id: string, gid: string) =>
+    setEntries(entries.map((e) => (e.id === id ? { ...e, goalId: gid || undefined } : e)));
 
   const filtered = useMemo(
     () => (filter === "all" ? entries : entries.filter((e) => e.label === filter)),
     [entries, filter]
   );
+
+  const goalById = useMemo(() => {
+    const m = new Map<string, Goal>();
+    goals.forEach((g) => m.set(g.id, g));
+    return m;
+  }, [goals]);
 
   return (
     <div className="space-y-8">
@@ -101,6 +115,21 @@ export default function BrainDump() {
             <Plus className="h-4 w-4 mr-1" /> Capture
           </Button>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Target className="h-3.5 w-3.5 text-gold" />
+          <select
+            value={goalId}
+            onChange={(e) => setGoalId(e.target.value)}
+            className="flex-1 bg-background/40 border border-border rounded-md px-2 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-gold/40"
+          >
+            <option value="">Link to a goal (optional)</option>
+            {goals.map((g) => (
+              <option key={g.id} value={g.id}>
+                [{g.category}] {g.title}
+              </option>
+            ))}
+          </select>
+        </div>
       </Card>
 
       <div className="flex flex-wrap gap-2">
@@ -123,53 +152,74 @@ export default function BrainDump() {
             The slate is clean. Capture your first thought.
           </p>
         ) : (
-          filtered.map((e) => (
-            <Card
-              key={e.id}
-              className="p-4 bg-card/60 border-border hover:border-gold/30 transition-all flex items-start gap-3"
-            >
-              <button
-                onClick={() => toggle(e.id)}
-                className={`mt-0.5 h-5 w-5 rounded border flex items-center justify-center transition-all flex-shrink-0 ${
-                  e.done
-                    ? "bg-gold border-gold text-primary-foreground"
-                    : "border-border hover:border-gold"
-                }`}
+          filtered.map((e) => {
+            const linked = e.goalId ? goalById.get(e.goalId) : undefined;
+            return (
+              <Card
+                key={e.id}
+                className="p-4 bg-card/60 border-border hover:border-gold/30 transition-all flex items-start gap-3"
               >
-                {e.done && <Check className="h-3 w-3" />}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm whitespace-pre-wrap break-words ${
-                    e.done ? "line-through text-muted-foreground" : ""
+                <button
+                  onClick={() => toggle(e.id)}
+                  className={`mt-0.5 h-5 w-5 rounded border flex items-center justify-center transition-all flex-shrink-0 ${
+                    e.done
+                      ? "bg-gold border-gold text-primary-foreground"
+                      : "border-border hover:border-gold"
                   }`}
                 >
-                  {e.text}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded-full border text-[9px] font-mono uppercase tracking-[0.2em] ${labelStyles[e.label]}`}
+                  {e.done && <Check className="h-3 w-3" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm whitespace-pre-wrap break-words ${
+                      e.done ? "line-through text-muted-foreground" : ""
+                    }`}
                   >
-                    {e.label}
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                    {e.text}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded-full border text-[9px] font-mono uppercase tracking-[0.2em] ${labelStyles[e.label]}`}
+                    >
+                      {e.label}
+                    </span>
+                    {linked && (
+                      <span className="px-2 py-0.5 rounded-full border border-gold/30 bg-gold/10 text-gold text-[9px] font-mono uppercase tracking-[0.2em] inline-flex items-center gap-1">
+                        <Target className="h-2.5 w-2.5" />
+                        {linked.title}
+                      </span>
+                    )}
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {new Date(e.createdAt).toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    <select
+                      value={e.goalId ?? ""}
+                      onChange={(ev) => linkGoal(e.id, ev.target.value)}
+                      className="ml-auto bg-background/40 border border-border rounded px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground focus:outline-none focus:ring-1 focus:ring-gold/40 max-w-[160px]"
+                    >
+                      <option value="">— link goal —</option>
+                      {goals.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={() => remove(e.id)}
-                className="text-muted-foreground/60 hover:text-destructive transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </Card>
-          ))
+                <button
+                  onClick={() => remove(e.id)}
+                  className="text-muted-foreground/60 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </Card>
+            );
+          })
         )}
       </div>
     </div>
