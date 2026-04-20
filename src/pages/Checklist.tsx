@@ -15,7 +15,7 @@ export interface ChecklistState {
   weekly: Record<string, boolean>;
 }
 
-const DAILY = [
+export const DAILY = [
   "Morning hydration & stretch",
   "Review top 3 priorities",
   "Deep work block — 90 min",
@@ -24,6 +24,8 @@ const DAILY = [
   "Inbox to zero",
   "Evening shutdown ritual",
 ];
+
+export const DAILY_TOTAL = DAILY.length;
 
 const WEEKLY = [
   "Weekly review — wins & losses",
