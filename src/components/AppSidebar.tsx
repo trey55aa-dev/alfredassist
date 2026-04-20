@@ -7,6 +7,7 @@ import {
   CalendarDays,
   BookOpen,
   Mic,
+  Target,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +27,7 @@ const items = [
   { title: "Focus Timer", url: "/focus", icon: Timer },
   { title: "Brain Dump", url: "/brain-dump", icon: Brain },
   { title: "Weekly Planner", url: "/planner", icon: CalendarDays },
+  { title: "2026 Goals", url: "/goals-2026", icon: Target },
   { title: "Feature Guide", url: "/guide", icon: BookOpen },
   { title: "Audio Journal", url: "/journal", icon: Mic },
 ];
