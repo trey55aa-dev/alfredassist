@@ -44,6 +44,7 @@ export default function Checklist() {
     daily: {},
     weekly: {},
   });
+  const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
 
   // Auto-reset when day/week changes
   useEffect(() => {
@@ -69,6 +70,14 @@ export default function Checklist() {
 
   const dailyDone = useMemo(() => DAILY.filter((d) => state.daily[d]).length, [state]);
   const weeklyDone = useMemo(() => WEEKLY.filter((d) => state.weekly[d]).length, [state]);
+
+  // Reconcile streak whenever today's daily completion changes
+  useEffect(() => {
+    const isComplete = dailyDone === DAILY.length;
+    const next = reconcileToday(streak, isComplete);
+    if (next !== streak) setStreak(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyDone]);
 
   return (
     <div className="space-y-8">
