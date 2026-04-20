@@ -11,6 +11,7 @@ import BrainDump from "./pages/BrainDump";
 import Planner from "./pages/Planner";
 import Guide from "./pages/Guide";
 import Journal from "./pages/Journal";
+import Goals2026 from "./pages/Goals2026";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/planner" element={<Planner />} />
             <Route path="/guide" element={<Guide />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/goals-2026" element={<Goals2026 />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
