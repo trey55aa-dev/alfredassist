@@ -77,6 +77,9 @@ export default function Dashboard() {
           Your daily protocol awaits. The agenda is set, the timer primed, the journal open.
         </p>
         <div className="divider-gold mt-4" />
+        <div className="mt-4">
+          <BackupRestore />
+        </div>
       </div>
 
       {/* Stats */}
@@ -95,6 +98,75 @@ export default function Dashboard() {
             </Card>
           </Link>
         ))}
+      </section>
+
+      {/* 2026 Goals widget */}
+      <section>
+        <Card className="p-6 bg-gradient-card border-border">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Target className="h-5 w-5 text-gold" />
+              <div>
+                <h3 className="font-display text-2xl">2026 Campaign</h3>
+                <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
+                  {goalStats.done}/{goalStats.total} conquered · {goalStats.pct}%
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/goals-2026"
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-gold hover:text-gold-soft"
+            >
+              Open <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <Progress value={goalStats.pct} className="h-1.5 mb-4" />
+          {goalStats.active.length === 0 ? (
+            <p className="font-display italic text-muted-foreground text-sm">
+              All goals conquered. Set the next campaign.
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-2">
+              {goalStats.active.map((g) => {
+                const pct = progressPct(g);
+                const days = daysUntil(g.deadline);
+                return (
+                  <Link
+                    key={g.id}
+                    to="/goals-2026"
+                    className="group p-3 rounded-md bg-background/40 border border-border/60 hover:border-gold/40 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm text-foreground group-hover:text-gold transition-colors line-clamp-1">
+                        {g.title}
+                      </div>
+                      {g.quarter && (
+                        <span className="font-mono text-[9px] tracking-wider text-gold/70 flex-shrink-0">
+                          {g.quarter}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-gold"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-[9px] text-muted-foreground whitespace-nowrap">
+                        {days !== null
+                          ? days < 0
+                            ? "overdue"
+                            : `${days}d left`
+                          : g.category.toLowerCase()}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </Card>
       </section>
 
       {/* Daily progress + habits */}
