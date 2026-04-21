@@ -27,6 +27,7 @@ import {
   SEED_HABITS,
   habitsAtRisk,
   isCompleteForPeriod,
+  toggleHabitForToday,
 } from "@/lib/habits";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 
@@ -234,7 +235,11 @@ export default function Dashboard() {
         <section className="space-y-2">
           <RecoveryPanel
             recoveries={recoveries}
-            onMarkDone={() => {}}
+            onMarkDone={(id) => {
+              const habit = habits.find((h) => h.id === id);
+              if (!habit) return;
+              setHabitLogs(toggleHabitForToday(habit, habitLogs).logs);
+            }}
             compact
             limit={3}
           />
