@@ -40,7 +40,7 @@ export default function Dashboard() {
   }, []);
 
   const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
-  const [habitLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
+  const [habitLogs, setHabitLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
     date: todayKey(),
