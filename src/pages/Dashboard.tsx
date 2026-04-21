@@ -16,11 +16,19 @@ import {
   last7Days,
   reconcileToday,
 } from "@/lib/streak";
-import type { ChecklistState } from "./Checklist";
-import { DAILY } from "./Checklist";
 import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
+import {
+  HABITS_KEY,
+  HABIT_LOGS_KEY,
+  Habit,
+  HabitLog,
+  SEED_HABITS,
+  habitsAtRisk,
+  isCompleteForPeriod,
+} from "@/lib/habits";
+import { RecoveryPanel } from "@/components/RecoveryPanel";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
