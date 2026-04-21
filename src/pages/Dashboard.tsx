@@ -16,11 +16,20 @@ import {
   last7Days,
   reconcileToday,
 } from "@/lib/streak";
-import type { ChecklistState } from "./Checklist";
-import { DAILY } from "./Checklist";
 import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
+import {
+  HABITS_KEY,
+  HABIT_LOGS_KEY,
+  Habit,
+  HabitLog,
+  SEED_HABITS,
+  habitsAtRisk,
+  isCompleteForPeriod,
+  toggleHabitForToday,
+} from "@/lib/habits";
+import { RecoveryPanel } from "@/components/RecoveryPanel";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -31,11 +40,8 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const [checklist] = useLocalStorage<ChecklistState>("alfred.checklist", {
-    date: todayKey(),
-    daily: {},
-    weekly: {},
-  });
+  const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
+  const [habitLogs, setHabitLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
     date: todayKey(),
@@ -68,17 +74,22 @@ export default function Dashboard() {
     [brain]
   );
 
-  const tasksDone = useMemo(
-    () => DAILY.filter((d) => checklist.daily?.[d]).length,
-    [checklist]
+  const dailyHabits = useMemo(
+    () => habits.filter((h) => h.cadence === "daily" && !h.archived),
+    [habits]
   );
-  const tasksTotal = DAILY.length;
-  const dailyPct = Math.round((tasksDone / tasksTotal) * 100);
+  const tasksDone = useMemo(
+    () => dailyHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
+    [dailyHabits, habitLogs]
+  );
+  const tasksTotal = dailyHabits.length;
+  const dailyPct = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
   // Streak — keep in sync if user lands here without visiting Checklist
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   useEffect(() => {
-    const next = reconcileToday(streak, tasksDone === tasksTotal);
+    const isComplete = tasksTotal > 0 && tasksDone === tasksTotal;
+    const next = reconcileToday(streak, isComplete);
     if (next !== streak) setStreak(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksDone, tasksTotal]);
@@ -87,8 +98,13 @@ export default function Dashboard() {
   const longest = Math.max(longestStreak(streak), current);
   const week = last7Days(streak);
 
-  // Habit summary: last 7 days of brain dumps + journal entries by category
-  const habits = useMemo(() => {
+  const recoveries = useMemo(
+    () => habitsAtRisk(habits, habitLogs),
+    [habits, habitLogs]
+  );
+
+  // Habit summary: brain dumps by category
+  const habitSummary = useMemo(() => {
     const cats = ["career", "body", "money", "skill", "life"] as const;
     const out: Record<string, number> = {};
     cats.forEach((c) => {
@@ -214,6 +230,30 @@ export default function Dashboard() {
         </Card>
       </section>
 
+      {/* Habits at risk */}
+      {recoveries.length > 0 && (
+        <section className="space-y-2">
+          <RecoveryPanel
+            recoveries={recoveries}
+            onMarkDone={(id) => {
+              const habit = habits.find((h) => h.id === id);
+              if (!habit) return;
+              setHabitLogs(toggleHabitForToday(habit, habitLogs).logs);
+            }}
+            compact
+            limit={3}
+          />
+          <div className="text-right">
+            <Link
+              to="/checklist"
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-gold hover:text-gold-soft"
+            >
+              Open recovery plan <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </section>
+      )}
+
       {/* 2026 Goals widget */}
       <section>
         <Card className="p-6 bg-gradient-card border-border">
@@ -310,7 +350,7 @@ export default function Dashboard() {
             <Flame className="h-4 w-4 text-gold" />
           </div>
           <div className="space-y-3">
-            {Object.entries(habits).map(([k, v]) => {
+            {Object.entries(habitSummary).map(([k, v]) => {
               const pct = Math.min(100, v * 10);
               return (
                 <div key={k}>
