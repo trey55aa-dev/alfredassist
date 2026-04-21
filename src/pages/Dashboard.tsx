@@ -39,11 +39,8 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const [checklist] = useLocalStorage<ChecklistState>("alfred.checklist", {
-    date: todayKey(),
-    daily: {},
-    weekly: {},
-  });
+  const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
+  const [habitLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
     date: todayKey(),
