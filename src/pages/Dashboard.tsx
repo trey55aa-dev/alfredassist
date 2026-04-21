@@ -325,7 +325,7 @@ export default function Dashboard() {
             <Flame className="h-4 w-4 text-gold" />
           </div>
           <div className="space-y-3">
-            {Object.entries(habits).map(([k, v]) => {
+            {Object.entries(habitSummary).map(([k, v]) => {
               const pct = Math.min(100, v * 10);
               return (
                 <div key={k}>
