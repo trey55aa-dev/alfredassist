@@ -73,17 +73,22 @@ export default function Dashboard() {
     [brain]
   );
 
-  const tasksDone = useMemo(
-    () => DAILY.filter((d) => checklist.daily?.[d]).length,
-    [checklist]
+  const dailyHabits = useMemo(
+    () => habits.filter((h) => h.cadence === "daily" && !h.archived),
+    [habits]
   );
-  const tasksTotal = DAILY.length;
-  const dailyPct = Math.round((tasksDone / tasksTotal) * 100);
+  const tasksDone = useMemo(
+    () => dailyHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
+    [dailyHabits, habitLogs]
+  );
+  const tasksTotal = dailyHabits.length;
+  const dailyPct = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
   // Streak — keep in sync if user lands here without visiting Checklist
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   useEffect(() => {
-    const next = reconcileToday(streak, tasksDone === tasksTotal);
+    const isComplete = tasksTotal > 0 && tasksDone === tasksTotal;
+    const next = reconcileToday(streak, isComplete);
     if (next !== streak) setStreak(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksDone, tasksTotal]);
@@ -92,8 +97,13 @@ export default function Dashboard() {
   const longest = Math.max(longestStreak(streak), current);
   const week = last7Days(streak);
 
-  // Habit summary: last 7 days of brain dumps + journal entries by category
-  const habits = useMemo(() => {
+  const recoveries = useMemo(
+    () => habitsAtRisk(habits, habitLogs),
+    [habits, habitLogs]
+  );
+
+  // Habit summary: brain dumps by category
+  const habitSummary = useMemo(() => {
     const cats = ["career", "body", "money", "skill", "life"] as const;
     const out: Record<string, number> = {};
     cats.forEach((c) => {
