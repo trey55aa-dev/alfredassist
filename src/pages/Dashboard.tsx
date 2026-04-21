@@ -229,6 +229,26 @@ export default function Dashboard() {
         </Card>
       </section>
 
+      {/* Habits at risk */}
+      {recoveries.length > 0 && (
+        <section className="space-y-2">
+          <RecoveryPanel
+            recoveries={recoveries}
+            onMarkDone={() => {}}
+            compact
+            limit={3}
+          />
+          <div className="text-right">
+            <Link
+              to="/checklist"
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.25em] text-gold hover:text-gold-soft"
+            >
+              Open recovery plan <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </section>
+      )}
+
       {/* 2026 Goals widget */}
       <section>
         <Card className="p-6 bg-gradient-card border-border">
