@@ -30,6 +30,7 @@ import {
   toggleHabitForToday,
 } from "@/lib/habits";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
+import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { useAuth } from "@/hooks/useAuth";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
@@ -256,6 +257,11 @@ export default function Dashboard() {
           </div>
         </section>
       )}
+
+      {/* Today's agenda */}
+      <section>
+        <TodayAgendaCard />
+      </section>
 
       {/* 2026 Goals widget */}
       <section>

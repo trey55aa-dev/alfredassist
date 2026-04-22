@@ -14,6 +14,7 @@ import Planner from "./pages/Planner";
 import Guide from "./pages/Guide";
 import Journal from "./pages/Journal";
 import Goals2026 from "./pages/Goals2026";
+import Agenda from "./pages/Agenda";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/guide" element={<Guide />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/goals-2026" element={<Goals2026 />} />
+              <Route path="/agenda" element={<Agenda />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

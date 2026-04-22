@@ -29,6 +29,7 @@ const items = [
   { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
   { title: "Focus Timer", url: "/focus", icon: Timer },
   { title: "Brain Dump", url: "/brain-dump", icon: Brain },
+  { title: "Agenda", url: "/agenda", icon: CalendarDays },
   { title: "Weekly Planner", url: "/planner", icon: CalendarDays },
   { title: "2026 Goals", url: "/goals-2026", icon: Target },
   { title: "Feature Guide", url: "/guide", icon: BookOpen },
