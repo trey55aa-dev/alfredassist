@@ -35,6 +35,8 @@ import { useAuth } from "@/hooks/useAuth";
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
 export default function Dashboard() {
+  const { profile, user } = useAuth();
+  const userName = profile?.display_name?.trim() || user?.email?.split("@")[0] || "sir";
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -129,7 +131,7 @@ export default function Dashboard() {
         </div>
         <h1 className="font-display text-5xl sm:text-6xl leading-[1.05]">
           {greeting(now)},
-          <span className="block italic text-gold">sir.</span>
+          <span className="block italic text-gold">{userName}.</span>
         </h1>
         <p className="text-muted-foreground max-w-xl">
           Your daily protocol awaits. The agenda is set, the timer primed, the journal open.
