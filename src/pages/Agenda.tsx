@@ -44,9 +44,9 @@ export default function Agenda() {
   return (
     <div className="space-y-8">
       <PageHeader
+        eyebrow={formatLongDate(now)}
         title="Agenda"
-        subtitle={formatLongDate(now)}
-        icon={CalendarDays}
+        description="Today's engagements at a glance — Alfred will plan focus blocks around them."
       />
 
       {/* Hero — current / next */}
