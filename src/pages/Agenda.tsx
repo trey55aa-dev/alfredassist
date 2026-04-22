@@ -187,30 +187,21 @@ export default function Agenda() {
 
 function EmptyState() {
   return (
-    <div className="rounded-md border border-dashed border-border/60 p-8 text-center space-y-4">
+    <div className="rounded-md border border-dashed border-border/60 p-8 text-center space-y-3">
       <div className="mx-auto h-12 w-12 rounded-full bg-muted/40 flex items-center justify-center">
         <Plug className="h-5 w-5 text-gold" />
       </div>
       <div>
         <p className="font-display italic text-foreground">
-          "No calendar is connected, sir."
+          "A perfectly empty diary, sir."
         </p>
         <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-          Once your Google Calendar is linked, today's engagements will appear
-          here — and Alfred can suggest focus blocks around them.
+          Add an event with Quick Add above, or connect Google Calendar to
+          import your existing engagements.
         </p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="border-gold/40 text-gold hover:text-gold hover:bg-muted/40"
-        disabled
-        title="Coming next — OAuth wiring in progress"
-      >
-        Connect Google Calendar
-      </Button>
       <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/60">
-        Coming next
+        Google Calendar sync · coming next
       </p>
     </div>
   );
