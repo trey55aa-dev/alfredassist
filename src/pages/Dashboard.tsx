@@ -30,6 +30,7 @@ import {
   toggleHabitForToday,
 } from "@/lib/habits";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
+import { useAuth } from "@/hooks/useAuth";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
