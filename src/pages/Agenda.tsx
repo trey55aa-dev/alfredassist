@@ -86,6 +86,9 @@ export default function Agenda() {
         </Card>
       )}
 
+      {/* Quick add */}
+      <QuickAddEvent />
+
       {/* Day timeline */}
       <Card className="p-6 bg-gradient-card border-border">
         <div className="flex items-center justify-between mb-5">
@@ -135,9 +138,28 @@ export default function Agenda() {
                           </div>
                         )}
                       </div>
-                      <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
-                        {formatEventTime(e)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
+                          {formatEventTime(e)}
+                        </span>
+                        {e.source === "manual" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeLocalEvent(e.id);
+                              toast({
+                                title: "Event removed",
+                                description: e.title,
+                              });
+                            }}
+                            className="text-muted-foreground/60 hover:text-destructive transition-colors p-1"
+                            aria-label={`Remove ${e.title}`}
+                            title="Remove event"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {(e.location || e.description) && (
                       <div className="mt-2 space-y-1 text-xs text-muted-foreground">
