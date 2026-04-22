@@ -8,7 +8,10 @@ import {
   BookOpen,
   Mic,
   Target,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -36,6 +39,9 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { profile, user, signOut } = useAuth();
+  const initial =
+    (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -103,14 +109,47 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {!collapsed && (
-          <div className="mt-auto p-4">
-            <div className="divider-gold mb-4" />
-            <p className="font-display italic text-sm text-muted-foreground leading-snug">
-              "At your service, sir.<br />Let us begin the day."
-            </p>
+        <div className="mt-auto p-3 space-y-3">
+          <div className="divider-gold mx-1" />
+
+          {/* Profile chip */}
+          <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar className="h-8 w-8 border border-gold/30">
+                <AvatarImage src={profile?.avatar_url ?? undefined} alt="" />
+                <AvatarFallback className="bg-muted text-gold font-display text-sm">
+                  {initial}
+                </AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-foreground truncate">
+                    {profile?.display_name ?? user?.email?.split("@")[0] ?? "Sir"}
+                  </div>
+                  <div className="font-mono text-[9px] tracking-[0.15em] uppercase text-muted-foreground truncate">
+                    {user?.email}
+                  </div>
+                </div>
+              )}
+            </div>
+            {!collapsed && (
+              <button
+                onClick={() => signOut()}
+                className="text-muted-foreground/60 hover:text-gold transition-colors p-1"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        )}
+
+          {!collapsed && (
+            <p className="font-display italic text-xs text-muted-foreground/80 leading-snug">
+              "At your service.<br />Let us begin the day."
+            </p>
+          )}
+        </div>
       </SidebarContent>
     </Sidebar>
   );
