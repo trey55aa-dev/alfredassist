@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Clock, MapPin, Plug } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Clock, MapPin, Plug, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QuickAddEvent } from "@/components/QuickAddEvent";
+import { useToast } from "@/hooks/use-toast";
 import {
   AgendaEvent,
   currentEvent,
@@ -12,21 +14,28 @@ import {
   nextEvent,
   sortByStart,
 } from "@/lib/agenda";
+import { LOCAL_EVENTS_CHANGED, removeLocalEvent } from "@/lib/agendaStore";
 import { formatLongDate } from "@/lib/alfred";
 
 export default function Agenda() {
+  const { toast } = useToast();
   const [events, setEvents] = useState<AgendaEvent[] | null>(null);
   const [now, setNow] = useState(new Date());
 
-  useEffect(() => {
-    let alive = true;
-    getTodayEvents().then((data) => {
-      if (alive) setEvents(data);
-    });
-    return () => {
-      alive = false;
-    };
+  const refresh = useCallback(() => {
+    getTodayEvents().then(setEvents);
   }, []);
+
+  useEffect(() => {
+    refresh();
+    const onChange = () => refresh();
+    window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
