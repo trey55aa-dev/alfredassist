@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Clock, MapPin, Plug } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Clock, MapPin, Plug, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QuickAddEvent } from "@/components/QuickAddEvent";
+import { useToast } from "@/hooks/use-toast";
 import {
   AgendaEvent,
   currentEvent,
@@ -12,21 +14,28 @@ import {
   nextEvent,
   sortByStart,
 } from "@/lib/agenda";
+import { LOCAL_EVENTS_CHANGED, removeLocalEvent } from "@/lib/agendaStore";
 import { formatLongDate } from "@/lib/alfred";
 
 export default function Agenda() {
+  const { toast } = useToast();
   const [events, setEvents] = useState<AgendaEvent[] | null>(null);
   const [now, setNow] = useState(new Date());
 
-  useEffect(() => {
-    let alive = true;
-    getTodayEvents().then((data) => {
-      if (alive) setEvents(data);
-    });
-    return () => {
-      alive = false;
-    };
+  const refresh = useCallback(() => {
+    getTodayEvents().then(setEvents);
   }, []);
+
+  useEffect(() => {
+    refresh();
+    const onChange = () => refresh();
+    window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -77,6 +86,9 @@ export default function Agenda() {
         </Card>
       )}
 
+      {/* Quick add */}
+      <QuickAddEvent />
+
       {/* Day timeline */}
       <Card className="p-6 bg-gradient-card border-border">
         <div className="flex items-center justify-between mb-5">
@@ -126,9 +138,28 @@ export default function Agenda() {
                           </div>
                         )}
                       </div>
-                      <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
-                        {formatEventTime(e)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
+                          {formatEventTime(e)}
+                        </span>
+                        {e.source === "manual" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeLocalEvent(e.id);
+                              toast({
+                                title: "Event removed",
+                                description: e.title,
+                              });
+                            }}
+                            className="text-muted-foreground/60 hover:text-destructive transition-colors p-1"
+                            aria-label={`Remove ${e.title}`}
+                            title="Remove event"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {(e.location || e.description) && (
                       <div className="mt-2 space-y-1 text-xs text-muted-foreground">
@@ -156,30 +187,21 @@ export default function Agenda() {
 
 function EmptyState() {
   return (
-    <div className="rounded-md border border-dashed border-border/60 p-8 text-center space-y-4">
+    <div className="rounded-md border border-dashed border-border/60 p-8 text-center space-y-3">
       <div className="mx-auto h-12 w-12 rounded-full bg-muted/40 flex items-center justify-center">
         <Plug className="h-5 w-5 text-gold" />
       </div>
       <div>
         <p className="font-display italic text-foreground">
-          "No calendar is connected, sir."
+          "A perfectly empty diary, sir."
         </p>
         <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-          Once your Google Calendar is linked, today's engagements will appear
-          here — and Alfred can suggest focus blocks around them.
+          Add an event with Quick Add above, or connect Google Calendar to
+          import your existing engagements.
         </p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="border-gold/40 text-gold hover:text-gold hover:bg-muted/40"
-        disabled
-        title="Coming next — OAuth wiring in progress"
-      >
-        Connect Google Calendar
-      </Button>
       <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/60">
-        Coming next
+        Google Calendar sync · coming next
       </p>
     </div>
   );

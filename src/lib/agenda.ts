@@ -83,10 +83,11 @@ export function currentEvent(events: AgendaEvent[], now = new Date()): AgendaEve
 }
 
 /**
- * Today's events. For now returns an empty list — the UI handles the
- * "calendar not connected" case gracefully. Replace with a live fetch
- * once the Google Calendar OAuth flow is in place.
+ * Today's events. Merges any locally-stored events (created via Quick Add)
+ * with remote calendars. Once Google Calendar OAuth is wired, push the
+ * fetched events into this list.
  */
 export async function getTodayEvents(): Promise<AgendaEvent[]> {
-  return [];
+  const { loadLocalEvents } = await import("./agendaStore");
+  return loadLocalEvents();
 }
