@@ -11,6 +11,7 @@ import {
   nextEvent,
   sortByStart,
 } from "@/lib/agenda";
+import { LOCAL_EVENTS_CHANGED } from "@/lib/agendaStore";
 
 interface Props {
   /** Optional pre-loaded events; otherwise the card fetches on mount. */
@@ -26,11 +27,19 @@ export function TodayAgendaCard({ events: initial, limit = 3 }: Props) {
   useEffect(() => {
     if (initial) return;
     let alive = true;
-    getTodayEvents().then((data) => {
-      if (alive) setEvents(data);
-    });
+    const load = () => {
+      getTodayEvents().then((data) => {
+        if (alive) setEvents(data);
+      });
+    };
+    load();
+    const onChange = () => load();
+    window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
+    window.addEventListener("storage", onChange);
     return () => {
       alive = false;
+      window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
+      window.removeEventListener("storage", onChange);
     };
   }, [initial]);
 
