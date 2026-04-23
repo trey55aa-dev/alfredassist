@@ -206,6 +206,42 @@ export function AppSidebar() {
             </Popover>
           )}
 
+          {/* Ambient Pattern Controls */}
+          {!collapsed && (
+            <div className="mt-3 px-2 space-y-3">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="font-mono tracking-wider uppercase">Ambient</span>
+                </div>
+                <Switch
+                  checked={ambient.enabled}
+                  onCheckedChange={setAmbientEnabled}
+                  className="data-[state=checked]:bg-gold h-4 w-7"
+                />
+              </div>
+
+              {/* Intensity Slider */}
+              {ambient.enabled && (
+                <div className="space-y-2 pl-5">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground/70">
+                    <span>Subtle</span>
+                    <span>Bold</span>
+                  </div>
+                  <Slider
+                    value={[ambient.intensity]}
+                    onValueChange={([val]) => setAmbientIntensity(val)}
+                    min={10}
+                    max={100}
+                    step={5}
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {!collapsed && (
             <p className="font-display italic text-xs text-muted-foreground/80 leading-snug mt-3">
               "At your service.<br />Let us begin the day."
