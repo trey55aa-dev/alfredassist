@@ -174,7 +174,7 @@ export function AppSidebar() {
                   <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
                     Ambience
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
                     {presets.map((preset) => (
                       <button
                         key={preset.name}
@@ -189,7 +189,7 @@ export function AppSidebar() {
                           className="h-6 w-6 rounded-full border border-gold/20"
                           style={{ background: `hsl(${preset.background})` }}
                         />
-                        <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wide leading-tight text-center">
                           {preset.name}
                         </span>
                       </button>
