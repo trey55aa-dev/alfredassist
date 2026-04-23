@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock, MapPin, Plug, Trash2 } from "lucide-react";
+import { CheckCircle2, Circle, Clock, MapPin, Pencil, Plug, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { QuickAddEvent } from "@/components/QuickAddEvent";
+import { EditEventForm } from "@/components/EditEventForm";
 import { useToast } from "@/hooks/use-toast";
 import {
   AgendaEvent,
@@ -14,13 +14,18 @@ import {
   nextEvent,
   sortByStart,
 } from "@/lib/agenda";
-import { LOCAL_EVENTS_CHANGED, removeLocalEvent } from "@/lib/agendaStore";
+import {
+  LOCAL_EVENTS_CHANGED,
+  removeLocalEvent,
+  toggleEventCompleted,
+} from "@/lib/agendaStore";
 import { formatLongDate } from "@/lib/alfred";
 
 export default function Agenda() {
   const { toast } = useToast();
   const [events, setEvents] = useState<AgendaEvent[] | null>(null);
   const [now, setNow] = useState(new Date());
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     getTodayEvents().then(setEvents);
@@ -49,6 +54,7 @@ export default function Agenda() {
   const ongoing = useMemo(() => currentEvent(today, now), [today, now]);
   const upcoming = useMemo(() => nextEvent(today, now), [today, now]);
   const loading = events === null;
+  const completedCount = today.filter((e) => e.completed).length;
 
   return (
     <div className="space-y-8">
@@ -94,7 +100,9 @@ export default function Agenda() {
         <div className="flex items-center justify-between mb-5">
           <h3 className="font-display text-2xl">Today</h3>
           <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
-            {loading ? "Loading" : `${today.length} event${today.length === 1 ? "" : "s"}`}
+            {loading
+              ? "Loading"
+              : `${completedCount}/${today.length} complete`}
           </span>
         </div>
 
@@ -110,71 +118,128 @@ export default function Agenda() {
           <ol className="relative border-l border-border/60 pl-5 space-y-4">
             {today.map((e) => {
               const isNow = ongoing?.id === e.id;
+              const isEditing = editingId === e.id;
+              const isManual = e.source === "manual";
               return (
                 <li key={e.id} className="relative">
                   <span
                     className={`absolute -left-[27px] top-2 h-3 w-3 rounded-full border-2 ${
-                      isNow
-                        ? "bg-gold border-gold shadow-gold animate-pulse"
-                        : "bg-background border-border"
+                      e.completed
+                        ? "bg-gold/70 border-gold/70"
+                        : isNow
+                          ? "bg-gold border-gold shadow-gold animate-pulse"
+                          : "bg-background border-border"
                     }`}
                     aria-hidden
                   />
-                  <div
-                    className={`rounded-md border p-4 transition-all ${
-                      isNow
-                        ? "border-gold/50 bg-background/60"
-                        : "border-border/60 bg-background/40 hover:border-gold/30"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div className="min-w-0">
-                        <div className="font-display text-lg text-foreground line-clamp-1">
-                          {e.title}
-                        </div>
-                        {e.calendarName && (
-                          <div className="mt-0.5 font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/70">
-                            {e.calendarName}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
-                          {formatEventTime(e)}
-                        </span>
-                        {e.source === "manual" && (
+
+                  {isEditing ? (
+                    <EditEventForm
+                      event={e}
+                      onClose={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <div
+                      className={`rounded-md border p-4 transition-all ${
+                        isNow
+                          ? "border-gold/50 bg-background/60"
+                          : e.completed
+                            ? "border-border/40 bg-background/30 opacity-70"
+                            : "border-border/60 bg-background/40 hover:border-gold/30"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex items-start gap-3">
                           <button
                             type="button"
                             onClick={() => {
-                              removeLocalEvent(e.id);
-                              toast({
-                                title: "Event removed",
-                                description: e.title,
-                              });
+                              const updated = toggleEventCompleted(e.id);
+                              if (updated?.completed) {
+                                toast({
+                                  title: "Marked complete",
+                                  description: e.title,
+                                });
+                              }
                             }}
-                            className="text-muted-foreground/60 hover:text-destructive transition-colors p-1"
-                            aria-label={`Remove ${e.title}`}
-                            title="Remove event"
+                            className="mt-0.5 text-muted-foreground/60 hover:text-gold transition-colors"
+                            aria-label={
+                              e.completed
+                                ? `Mark ${e.title} incomplete`
+                                : `Mark ${e.title} complete`
+                            }
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {e.completed ? (
+                              <CheckCircle2 className="h-4 w-4 text-gold" />
+                            ) : (
+                              <Circle className="h-4 w-4" />
+                            )}
                           </button>
-                        )}
-                      </div>
-                    </div>
-                    {(e.location || e.description) && (
-                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {e.location && (
-                          <div className="inline-flex items-center gap-1.5">
-                            <MapPin className="h-3 w-3" />
-                            {e.location}
+                          <div className="min-w-0">
+                            <div
+                              className={`font-display text-lg line-clamp-1 ${
+                                e.completed
+                                  ? "text-muted-foreground line-through"
+                                  : "text-foreground"
+                              }`}
+                            >
+                              {e.title}
+                            </div>
+                            {e.calendarName && (
+                              <div className="mt-0.5 font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/70">
+                                {e.calendarName}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {e.description && (
-                          <p className="line-clamp-2">{e.description}</p>
-                        )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] tracking-wider text-gold whitespace-nowrap">
+                            {formatEventTime(e)}
+                          </span>
+                          {isManual && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(e.id)}
+                                className="text-muted-foreground/60 hover:text-gold transition-colors p-1"
+                                aria-label={`Edit ${e.title}`}
+                                title="Edit event"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  removeLocalEvent(e.id);
+                                  toast({
+                                    title: "Event removed",
+                                    description: e.title,
+                                  });
+                                }}
+                                className="text-muted-foreground/60 hover:text-destructive transition-colors p-1"
+                                aria-label={`Remove ${e.title}`}
+                                title="Remove event"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
+                      {(e.location || e.description) && (
+                        <div className="mt-2 ml-7 space-y-1 text-xs text-muted-foreground">
+                          {e.location && (
+                            <div className="inline-flex items-center gap-1.5">
+                              <MapPin className="h-3 w-3" />
+                              {e.location}
+                            </div>
+                          )}
+                          {e.description && (
+                            <p className="line-clamp-2">{e.description}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
