@@ -3,8 +3,20 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AmbientPattern } from "@/components/AmbientPattern";
 import { formatLongDate } from "@/lib/alfred";
+import { useEffect } from "react";
+import { PRESET_THEMES } from "@/hooks/useThemeColor";
 
 export default function AppLayout() {
+  // Initialize saved theme on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("alfred-theme-color");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const theme = PRESET_THEMES.find((t) => t.name === parsed.name) || PRESET_THEMES[0];
+      document.documentElement.style.setProperty("--background", theme.background);
+      document.documentElement.style.setProperty("--foreground", theme.foreground);
+    }
+  }, []);
   return (
     <SidebarProvider>
       <div className="relative min-h-screen flex w-full bg-background">
