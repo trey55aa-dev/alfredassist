@@ -18,6 +18,18 @@ export const PRESET_THEMES: ThemeColor[] = [
   { name: "Forest", background: "150 30% 8%", foreground: "100 30% 85%" },
   { name: "Burgundy", background: "340 25% 12%", foreground: "40 40% 88%" },
   { name: "Slate", background: "215 28% 17%", foreground: "210 40% 96%" },
+  { name: "Onyx", background: "0 0% 4%", foreground: "0 0% 92%" },
+  { name: "Navy", background: "225 60% 12%", foreground: "210 50% 95%" },
+  { name: "Royal Purple", background: "270 45% 15%", foreground: "280 60% 90%" },
+  { name: "Graphite", background: "220 10% 22%", foreground: "220 15% 85%" },
+  { name: "Rose", background: "340 50% 12%", foreground: "350 60% 90%" },
+  { name: "Crimson", background: "350 60% 10%", foreground: "25 80% 88%" },
+  { name: "Emerald", background: "160 40% 8%", foreground: "140 50% 85%" },
+  { name: "Amber", background: "30 60% 10%", foreground: "45 90% 88%" },
+  { name: "Sapphire", background: "210 70% 15%", foreground: "200 80% 90%" },
+  { name: "Violet", background: "260 50% 12%", foreground: "270 70% 88%" },
+  { name: "Obsidian", background: "240 10% 8%", foreground: "220 20% 90%" },
+  { name: "Moss", background: "120 25% 10%", foreground: "100 40% 82%" },
 ];
 
 const THEME_STORAGE_KEY = "alfred-theme-color";
