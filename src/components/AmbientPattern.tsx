@@ -1,25 +1,47 @@
 import { useEffect, useState } from "react";
 import { countCompletedToday, LOCAL_EVENTS_CHANGED } from "@/lib/agendaStore";
 
+interface AmbientSettings {
+  enabled: boolean;
+  intensity: number;
+}
+
+const STORAGE_KEY = "alfred-ambient-settings";
+const DEFAULT_SETTINGS: AmbientSettings = { enabled: true, intensity: 50 };
+
+function loadSettings(): AmbientSettings {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+}
+
 /**
  * Fixed background overlay whose pattern density grows as more events are
  * completed today. Layered SVG patterns + gradient washes — purely decorative.
  */
 export function AmbientPattern() {
   const [count, setCount] = useState(0);
+  const [settings, setSettings] = useState<AmbientSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
-    const refresh = () => setCount(countCompletedToday());
+    const refresh = () => {
+      setCount(countCompletedToday());
+      setSettings(loadSettings());
+    };
     refresh();
     window.addEventListener(LOCAL_EVENTS_CHANGED, refresh);
     window.addEventListener("storage", refresh);
-    const t = setInterval(refresh, 60_000);
+    const t = setInterval(refresh, 1000);
     return () => {
       window.removeEventListener(LOCAL_EVENTS_CHANGED, refresh);
       window.removeEventListener("storage", refresh);
       clearInterval(t);
     };
   }, []);
+
+  if (!settings.enabled) return null;
+
+  // Intensity multiplier: 0.2 at 10% to 1.5 at 100%
+  const intensityMult = 0.2 + (settings.intensity / 100) * 1.3;
 
   // Tiered intensity. Each tier layers a new motif on top.
   const tier = Math.min(count, 6);
