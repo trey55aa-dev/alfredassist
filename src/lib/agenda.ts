@@ -17,6 +17,8 @@ export interface AgendaEvent {
   /** Optional hex/HSL accent for the calendar it came from. */
   calendarColor?: string;
   calendarName?: string;
+  /** Marked complete by the user — drives the ambient pattern intensity. */
+  completed?: boolean;
 }
 
 const sameDay = (a: Date, b: Date) =>

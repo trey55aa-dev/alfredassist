@@ -1,15 +1,17 @@
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AmbientPattern } from "@/components/AmbientPattern";
 import { formatLongDate } from "@/lib/alfred";
 
 export default function AppLayout() {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="relative min-h-screen flex w-full bg-background">
+        <AmbientPattern />
         <AppSidebar />
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="relative z-10 flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-md sticky top-0 z-30">
             <div className="flex items-center gap-3 px-3">
               <SidebarTrigger className="text-muted-foreground hover:text-gold" />
