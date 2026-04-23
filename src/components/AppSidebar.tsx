@@ -9,8 +9,10 @@ import {
   Mic,
   Target,
   LogOut,
+  Palette,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useThemeColor } from "@/hooks/useThemeColor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -23,6 +25,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
