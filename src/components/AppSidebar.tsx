@@ -153,8 +153,58 @@ export function AppSidebar() {
             )}
           </div>
 
+          {/* Theme Color Picker */}
           {!collapsed && (
-            <p className="font-display italic text-xs text-muted-foreground/80 leading-snug">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-2 w-full mt-3 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
+                  <Palette className="h-3.5 w-3.5" />
+                  <span className="font-mono tracking-wider uppercase">Theme Color</span>
+                  <div
+                    className="ml-auto h-3 w-3 rounded-full border border-gold/30"
+                    style={{ background: `hsl(${theme.background})` }}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" align="start" className="w-56 bg-popover border-border">
+                <div className="space-y-3">
+                  <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+                    Ambience
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {presets.map((preset) => (
+                      <button
+                        key={preset.name}
+                        onClick={() => applyTheme(preset)}
+                        className={`flex flex-col items-center gap-1.5 p-2 rounded-md transition-all ${
+                          theme.name === preset.name
+                            ? "bg-sidebar-accent ring-1 ring-gold/50"
+                            : "hover:bg-sidebar-accent/50"
+                        }`}
+                      >
+                        <div
+                          className="h-6 w-6 rounded-full border border-gold/20"
+                          style={{ background: `hsl(${preset.background})` }}
+                        />
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+                          {preset.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={resetTheme}
+                    className="w-full py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-gold transition-colors"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {!collapsed && (
+            <p className="font-display italic text-xs text-muted-foreground/80 leading-snug mt-3">
               "At your service.<br />Let us begin the day."
             </p>
           )}
