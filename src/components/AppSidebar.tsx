@@ -10,6 +10,7 @@ import {
   Target,
   LogOut,
   Palette,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useThemeColor } from "@/hooks/useThemeColor";
@@ -30,6 +31,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -48,7 +51,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, user, signOut } = useAuth();
-  const { theme, applyTheme, resetTheme, presets } = useThemeColor();
+  const { theme, applyTheme, resetTheme, ambient, setAmbientEnabled, setAmbientIntensity, presets } = useThemeColor();
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
