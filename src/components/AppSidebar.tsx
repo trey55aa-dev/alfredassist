@@ -48,6 +48,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, user, signOut } = useAuth();
+  const { theme, applyTheme, resetTheme, presets } = useThemeColor();
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
