@@ -6,6 +6,11 @@ type ThemeColor = {
   foreground: string;
 };
 
+type AmbientSettings = {
+  enabled: boolean;
+  intensity: number; // 0-100
+};
+
 export const PRESET_THEMES: ThemeColor[] = [
   { name: "Midnight", background: "220 35% 6%", foreground: "42 38% 88%" },
   { name: "Deep Navy", background: "222 47% 11%", foreground: "210 40% 98%" },
@@ -15,24 +20,35 @@ export const PRESET_THEMES: ThemeColor[] = [
   { name: "Slate", background: "215 28% 17%", foreground: "210 40% 96%" },
 ];
 
-const STORAGE_KEY = "alfred-theme-color";
+const THEME_STORAGE_KEY = "alfred-theme-color";
+const AMBIENT_STORAGE_KEY = "alfred-ambient-settings";
+
+const DEFAULT_AMBIENT: AmbientSettings = {
+  enabled: true,
+  intensity: 50,
+};
 
 export function useThemeColor() {
   const [theme, setTheme] = useState<ThemeColor>(PRESET_THEMES[0]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [ambient, setAmbient] = useState<AmbientSettings>(DEFAULT_AMBIENT);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme) {
+      const parsed = JSON.parse(savedTheme);
       const found = PRESET_THEMES.find((t) => t.name === parsed.name);
       if (found) setTheme(found);
+    }
+
+    const savedAmbient = localStorage.getItem(AMBIENT_STORAGE_KEY);
+    if (savedAmbient) {
+      setAmbient(JSON.parse(savedAmbient));
     }
   }, []);
 
   const applyTheme = (newTheme: ThemeColor) => {
     setTheme(newTheme);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newTheme));
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(newTheme));
     document.documentElement.style.setProperty("--background", newTheme.background);
     document.documentElement.style.setProperty("--foreground", newTheme.foreground);
   };
@@ -42,12 +58,25 @@ export function useThemeColor() {
     applyTheme(defaultTheme);
   };
 
+  const setAmbientEnabled = (enabled: boolean) => {
+    const newAmbient = { ...ambient, enabled };
+    setAmbient(newAmbient);
+    localStorage.setItem(AMBIENT_STORAGE_KEY, JSON.stringify(newAmbient));
+  };
+
+  const setAmbientIntensity = (intensity: number) => {
+    const newAmbient = { ...ambient, intensity };
+    setAmbient(newAmbient);
+    localStorage.setItem(AMBIENT_STORAGE_KEY, JSON.stringify(newAmbient));
+  };
+
   return {
     theme,
     applyTheme,
     resetTheme,
-    isOpen,
-    setIsOpen,
+    ambient,
+    setAmbientEnabled,
+    setAmbientIntensity,
     presets: PRESET_THEMES,
   };
 }
