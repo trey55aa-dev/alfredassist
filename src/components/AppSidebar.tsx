@@ -10,6 +10,7 @@ import {
   Target,
   LogOut,
   Palette,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useThemeColor } from "@/hooks/useThemeColor";
@@ -30,6 +31,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -48,7 +51,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, user, signOut } = useAuth();
-  const { theme, applyTheme, resetTheme, presets } = useThemeColor();
+  const { theme, applyTheme, resetTheme, ambient, setAmbientEnabled, setAmbientIntensity, presets } = useThemeColor();
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
@@ -201,6 +204,42 @@ export function AppSidebar() {
                 </div>
               </PopoverContent>
             </Popover>
+          )}
+
+          {/* Ambient Pattern Controls */}
+          {!collapsed && (
+            <div className="mt-3 px-2 space-y-3">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="font-mono tracking-wider uppercase">Ambient</span>
+                </div>
+                <Switch
+                  checked={ambient.enabled}
+                  onCheckedChange={setAmbientEnabled}
+                  className="data-[state=checked]:bg-gold h-4 w-7"
+                />
+              </div>
+
+              {/* Intensity Slider */}
+              {ambient.enabled && (
+                <div className="space-y-2 pl-5">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground/70">
+                    <span>Subtle</span>
+                    <span>Bold</span>
+                  </div>
+                  <Slider
+                    value={[ambient.intensity]}
+                    onValueChange={([val]) => setAmbientIntensity(val)}
+                    min={10}
+                    max={100}
+                    step={5}
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {!collapsed && (
