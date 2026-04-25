@@ -744,10 +744,15 @@ function AIBreakdown({
           detail: s.detail,
           durationWeeks: s.durationWeeks,
           done: false,
+          status: "pending" as SubStepStatus,
         }),
       );
 
-      onChange({ subSteps: newSteps, planSummary: data.summary });
+      onChange({
+        subSteps: newSteps,
+        planSummary: data.summary,
+        planStartDate: goal.planStartDate ?? new Date().toISOString(),
+      });
       setOpen(true);
       toast.success("Plan ready, sir.");
     } catch (e) {
@@ -758,17 +763,30 @@ function AIBreakdown({
     }
   };
 
-  const toggleStep = (id: string) => {
+  const patchStep = (id: string, patch: Partial<GoalSubStep>) => {
     onChange({
-      subSteps: subSteps.map((s) =>
-        s.id === id ? { ...s, done: !s.done } : s,
-      ),
+      subSteps: subSteps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    });
+  };
+
+  const toggleStep = (id: string) => {
+    const target = subSteps.find((s) => s.id === id);
+    if (!target) return;
+    const nowDone = !target.done;
+    patchStep(id, {
+      done: nowDone,
+      status: nowDone ? "done" : "pending",
+      completedAt: nowDone ? new Date().toISOString() : undefined,
     });
   };
 
   const removePlan = () => {
     if (!confirm("Discard the AI plan?")) return;
-    onChange({ subSteps: undefined, planSummary: undefined });
+    onChange({
+      subSteps: undefined,
+      planSummary: undefined,
+      planStartDate: undefined,
+    });
   };
 
   return (
