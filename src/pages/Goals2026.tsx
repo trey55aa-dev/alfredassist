@@ -842,97 +842,17 @@ function AIBreakdown({
           </Button>
         </>
       ) : (
-        <>
-          {goal.planSummary && (
-            <p className="font-display italic text-xs text-muted-foreground leading-snug">
-              "{goal.planSummary}"
-            </p>
-          )}
-
-          {/* Overall progress */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
-              <span>Overall</span>
-              <span className="text-gold">{overallPct}%</span>
-            </div>
-            <div className="h-1 bg-background/50 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-gold transition-all duration-700"
-                style={{ width: `${overallPct}%` }}
-              />
-            </div>
-          </div>
-
-          {/* View toggle */}
-          <div className="flex items-center gap-1 rounded-md bg-background/40 p-0.5">
-            <button
-              onClick={() => setMode("list")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
-                mode === "list"
-                  ? "bg-gold/20 text-gold"
-                  : "text-muted-foreground hover:text-gold",
-              )}
-            >
-              <List className="h-3 w-3" /> List
-            </button>
-            <button
-              onClick={() => setMode("timeline")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
-                mode === "timeline"
-                  ? "bg-gold/20 text-gold"
-                  : "text-muted-foreground hover:text-gold",
-              )}
-            >
-              <GanttChartSquare className="h-3 w-3" /> Timeline
-            </button>
-          </div>
-
-          {mode === "list" ? (
-            <ol className="space-y-1.5">
-              {subSteps.map((s, i) => (
-                <li key={s.id} className="flex items-start gap-2">
-                  <Checkbox
-                    checked={s.done}
-                    onCheckedChange={() => toggleStep(s.id)}
-                    className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground h-3.5 w-3.5"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="font-mono text-[9px] text-gold/70">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-xs font-medium leading-snug",
-                          s.done && "line-through text-muted-foreground",
-                        )}
-                      >
-                        {s.title}
-                      </span>
-                      {s.durationWeeks != null && (
-                        <span className="font-mono text-[9px] text-muted-foreground/70 ml-auto whitespace-nowrap">
-                          ~{s.durationWeeks}w
-                        </span>
-                      )}
-                    </div>
-                    {s.detail && (
-                      <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                        {s.detail}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <PlanTimeline
-              steps={subSteps}
-              deadline={goal.deadline}
-              onToggle={toggleStep}
-            />
-          )}
+        <PlanBody
+          goal={goal}
+          subSteps={subSteps}
+          completed={completed}
+          overallPct={overallPct}
+          mode={mode}
+          setMode={setMode}
+          toggleStep={toggleStep}
+          patchStep={patchStep}
+        />
+      )}
 
           <Button
             onClick={generate}
