@@ -17,6 +17,9 @@ import {
   Loader2,
   List,
   GanttChartSquare,
+  AlertTriangle,
+  TrendingUp,
+  Clock,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
