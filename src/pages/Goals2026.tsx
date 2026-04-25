@@ -686,8 +686,12 @@ function AIBreakdown({
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"list" | "timeline">("list");
   const subSteps = goal.subSteps ?? [];
   const completed = subSteps.filter((s) => s.done).length;
+  const overallPct = subSteps.length
+    ? Math.round((completed / subSteps.length) * 100)
+    : 0;
 
   const generate = async () => {
     setLoading(true);
@@ -821,42 +825,92 @@ function AIBreakdown({
               "{goal.planSummary}"
             </p>
           )}
-          <ol className="space-y-1.5">
-            {subSteps.map((s, i) => (
-              <li key={s.id} className="flex items-start gap-2">
-                <Checkbox
-                  checked={s.done}
-                  onCheckedChange={() => toggleStep(s.id)}
-                  className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground h-3.5 w-3.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-mono text-[9px] text-gold/70">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-xs font-medium leading-snug",
-                        s.done && "line-through text-muted-foreground",
-                      )}
-                    >
-                      {s.title}
-                    </span>
-                    {s.durationWeeks != null && (
-                      <span className="font-mono text-[9px] text-muted-foreground/70 ml-auto whitespace-nowrap">
-                        ~{s.durationWeeks}w
+
+          {/* Overall progress */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
+              <span>Overall</span>
+              <span className="text-gold">{overallPct}%</span>
+            </div>
+            <div className="h-1 bg-background/50 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-gold transition-all duration-700"
+                style={{ width: `${overallPct}%` }}
+              />
+            </div>
+          </div>
+
+          {/* View toggle */}
+          <div className="flex items-center gap-1 rounded-md bg-background/40 p-0.5">
+            <button
+              onClick={() => setMode("list")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
+                mode === "list"
+                  ? "bg-gold/20 text-gold"
+                  : "text-muted-foreground hover:text-gold",
+              )}
+            >
+              <List className="h-3 w-3" /> List
+            </button>
+            <button
+              onClick={() => setMode("timeline")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
+                mode === "timeline"
+                  ? "bg-gold/20 text-gold"
+                  : "text-muted-foreground hover:text-gold",
+              )}
+            >
+              <GanttChartSquare className="h-3 w-3" /> Timeline
+            </button>
+          </div>
+
+          {mode === "list" ? (
+            <ol className="space-y-1.5">
+              {subSteps.map((s, i) => (
+                <li key={s.id} className="flex items-start gap-2">
+                  <Checkbox
+                    checked={s.done}
+                    onCheckedChange={() => toggleStep(s.id)}
+                    className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground h-3.5 w-3.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-[9px] text-gold/70">
+                        {String(i + 1).padStart(2, "0")}
                       </span>
+                      <span
+                        className={cn(
+                          "text-xs font-medium leading-snug",
+                          s.done && "line-through text-muted-foreground",
+                        )}
+                      >
+                        {s.title}
+                      </span>
+                      {s.durationWeeks != null && (
+                        <span className="font-mono text-[9px] text-muted-foreground/70 ml-auto whitespace-nowrap">
+                          ~{s.durationWeeks}w
+                        </span>
+                      )}
+                    </div>
+                    {s.detail && (
+                      <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                        {s.detail}
+                      </p>
                     )}
                   </div>
-                  {s.detail && (
-                    <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                      {s.detail}
-                    </p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <PlanTimeline
+              steps={subSteps}
+              deadline={goal.deadline}
+              onToggle={toggleStep}
+            />
+          )}
+
           <Button
             onClick={generate}
             disabled={loading}
@@ -874,6 +928,133 @@ function AIBreakdown({
           </Button>
         </>
       )}
+    </div>
+  );
+}
+
+/* ---------- Timeline (Gantt) ---------- */
+
+function PlanTimeline({
+  steps,
+  deadline,
+  onToggle,
+}: {
+  steps: GoalSubStep[];
+  deadline?: string;
+  onToggle: (id: string) => void;
+}) {
+  // Compute cumulative week ranges for each step
+  const ranges = useMemo(() => {
+    let cursor = 0;
+    return steps.map((s) => {
+      const dur = Math.max(1, Math.round(s.durationWeeks ?? 1));
+      const start = cursor;
+      const end = cursor + dur;
+      cursor = end;
+      return { start, end, dur };
+    });
+  }, [steps]);
+
+  const totalWeeks = ranges[ranges.length - 1]?.end ?? 1;
+
+  // Current week relative to today (assuming plan started on goal.createdAt or now)
+  const now = new Date();
+  const start = new Date(); // plan kicks off today as a visual anchor
+  const elapsedWeeks = Math.max(
+    0,
+    Math.min(
+      totalWeeks,
+      (now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000),
+    ),
+  );
+
+  // Week tick labels — show every Nth to avoid clutter
+  const tickEvery = totalWeeks > 16 ? 4 : totalWeeks > 8 ? 2 : 1;
+  const ticks = Array.from({ length: totalWeeks + 1 }, (_, i) => i).filter(
+    (i) => i % tickEvery === 0,
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Week scale */}
+      <div className="relative h-4 border-b border-border/50">
+        {ticks.map((w) => (
+          <div
+            key={w}
+            className="absolute top-0 bottom-0 flex flex-col items-center"
+            style={{ left: `${(w / totalWeeks) * 100}%` }}
+          >
+            <div className="h-1.5 w-px bg-border/60" />
+            <span className="font-mono text-[8px] text-muted-foreground/70 mt-0.5">
+              {w === 0 ? "Now" : `W${w}`}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Bars */}
+      <div className="relative space-y-1.5 pt-1">
+        {/* "Today" indicator */}
+        {elapsedWeeks > 0 && elapsedWeeks < totalWeeks && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-teal/60 z-10 pointer-events-none"
+            style={{ left: `${(elapsedWeeks / totalWeeks) * 100}%` }}
+            aria-hidden
+          >
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-teal" />
+          </div>
+        )}
+
+        {steps.map((s, i) => {
+          const r = ranges[i];
+          const leftPct = (r.start / totalWeeks) * 100;
+          const widthPct = (r.dur / totalWeeks) * 100;
+          return (
+            <div key={s.id} className="flex items-center gap-2">
+              <span className="font-mono text-[9px] text-gold/70 w-5 shrink-0">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="relative flex-1 h-5 bg-background/40 rounded-sm overflow-hidden">
+                <button
+                  onClick={() => onToggle(s.id)}
+                  title={`${s.title}${
+                    s.detail ? " — " + s.detail : ""
+                  } (~${r.dur}w)`}
+                  className={cn(
+                    "absolute top-0 bottom-0 rounded-sm px-1.5 flex items-center transition-all border",
+                    s.done
+                      ? "bg-gold/30 border-gold/50 text-gold"
+                      : "bg-gradient-to-r from-gold/20 to-gold/5 border-gold/30 text-foreground hover:from-gold/30 hover:to-gold/10",
+                  )}
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${Math.max(widthPct, 4)}%`,
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium truncate",
+                      s.done && "line-through opacity-70",
+                    )}
+                  >
+                    {s.title}
+                  </span>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer meta */}
+      <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.15em] uppercase text-muted-foreground/70 pt-1">
+        <span>{totalWeeks}-week campaign</span>
+        {deadline && (
+          <span>
+            Deadline · {format(new Date(deadline), "MMM d, yyyy")}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
