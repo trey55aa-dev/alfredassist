@@ -13,8 +13,12 @@ import {
   BookOpen,
   Heart,
   Brain,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,6 +41,7 @@ import {
   Goal,
   GoalCategory,
   GoalQuarter,
+  GoalSubStep,
   GoalTimeframe,
   QUARTERS,
   QUARTER_RANGES,
