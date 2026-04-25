@@ -13,8 +13,12 @@ import {
   BookOpen,
   Heart,
   Brain,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,6 +41,7 @@ import {
   Goal,
   GoalCategory,
   GoalQuarter,
+  GoalSubStep,
   GoalTimeframe,
   QUARTERS,
   QUARTER_RANGES,
@@ -605,6 +610,8 @@ function GoalRow({
                 placeholder="Notes, plan of attack…"
                 className="bg-background/40 border-border text-xs min-h-[60px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
               />
+
+              <AIBreakdown goal={goal} onChange={onChange} />
               {linked.length > 0 && (
                 <div className="space-y-1">
                   <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
@@ -662,5 +669,209 @@ function Badge({
     >
       {children}
     </span>
+  );
+}
+
+/* ---------- AI Breakdown ---------- */
+
+function AIBreakdown({
+  goal,
+  onChange,
+}: {
+  goal: Goal;
+  onChange: (patch: Partial<Goal>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [context, setContext] = useState("");
+  const [loading, setLoading] = useState(false);
+  const subSteps = goal.subSteps ?? [];
+  const completed = subSteps.filter((s) => s.done).length;
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "breakdown-goal",
+        {
+          body: {
+            goal: {
+              title: goal.title,
+              category: goal.category,
+              timeframe: goal.timeframe,
+              quarter: goal.quarter,
+              deadline: goal.deadline,
+              target: goal.target,
+              current: goal.current,
+              unit: goal.unit,
+            },
+            context,
+          },
+        },
+      );
+
+      if (error) {
+        const status = (error as { context?: { status?: number } })?.context?.status;
+        if (status === 429) {
+          toast.error("Rate limit reached. Try again in a moment.");
+        } else if (status === 402) {
+          toast.error("AI credits depleted. Add credits in Workspace → Usage.");
+        } else {
+          toast.error(error.message || "Could not generate plan");
+        }
+        return;
+      }
+
+      if (!data?.steps?.length) {
+        toast.error("Alfred returned no steps. Try adding more context.");
+        return;
+      }
+
+      const newSteps: GoalSubStep[] = data.steps.map(
+        (s: { title: string; detail?: string; durationWeeks?: number }) => ({
+          id: crypto.randomUUID(),
+          title: s.title,
+          detail: s.detail,
+          durationWeeks: s.durationWeeks,
+          done: false,
+        }),
+      );
+
+      onChange({ subSteps: newSteps, planSummary: data.summary });
+      setOpen(true);
+      toast.success("Plan ready, sir.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleStep = (id: string) => {
+    onChange({
+      subSteps: subSteps.map((s) =>
+        s.id === id ? { ...s, done: !s.done } : s,
+      ),
+    });
+  };
+
+  const removePlan = () => {
+    if (!confirm("Discard the AI plan?")) return;
+    onChange({ subSteps: undefined, planSummary: undefined });
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-gold/20 bg-gold/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Wand2 className="h-3.5 w-3.5 text-gold" />
+          <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
+            Alfred's Plan
+          </span>
+          {subSteps.length > 0 && (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              · {completed}/{subSteps.length}
+            </span>
+          )}
+        </div>
+        {subSteps.length > 0 && (
+          <button
+            onClick={removePlan}
+            className="text-muted-foreground/50 hover:text-destructive transition-colors"
+            aria-label="Discard plan"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {subSteps.length === 0 ? (
+        <>
+          <Textarea
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="Your schedule & current routine — e.g. '9-5 desk job, gym 3x/week, can do 20 push-ups now'"
+            className="bg-background/50 border-border text-xs min-h-[56px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
+          />
+          <Button
+            onClick={generate}
+            disabled={loading}
+            size="sm"
+            className="w-full bg-gold text-primary-foreground hover:bg-gold-soft h-8"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Devising plan…
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                Break it down for me
+              </>
+            )}
+          </Button>
+        </>
+      ) : (
+        <>
+          {goal.planSummary && (
+            <p className="font-display italic text-xs text-muted-foreground leading-snug">
+              "{goal.planSummary}"
+            </p>
+          )}
+          <ol className="space-y-1.5">
+            {subSteps.map((s, i) => (
+              <li key={s.id} className="flex items-start gap-2">
+                <Checkbox
+                  checked={s.done}
+                  onCheckedChange={() => toggleStep(s.id)}
+                  className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground h-3.5 w-3.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-mono text-[9px] text-gold/70">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs font-medium leading-snug",
+                        s.done && "line-through text-muted-foreground",
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                    {s.durationWeeks != null && (
+                      <span className="font-mono text-[9px] text-muted-foreground/70 ml-auto whitespace-nowrap">
+                        ~{s.durationWeeks}w
+                      </span>
+                    )}
+                  </div>
+                  {s.detail && (
+                    <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                      {s.detail}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+          <Button
+            onClick={generate}
+            disabled={loading}
+            variant="outline"
+            size="sm"
+            className="w-full border-gold/30 text-gold hover:bg-gold/10 h-7 text-[10px] tracking-[0.2em] uppercase font-mono"
+          >
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <>
+                <RotateCcw className="h-3 w-3 mr-1" /> Regenerate
+              </>
+            )}
+          </Button>
+        </>
+      )}
+    </div>
   );
 }

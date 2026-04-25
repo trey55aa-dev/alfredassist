@@ -1,1 +1,4 @@
 project_id = "tgpddgcsadysidvxbvhc"
+
+[functions.breakdown-goal]
+verify_jwt = false
