@@ -2,12 +2,25 @@ export type GoalCategory = "Body" | "Career" | "Money" | "Skills" | "Life";
 export type GoalTimeframe = "daily" | "monthly" | "quarterly" | "annual";
 export type GoalQuarter = "Q1" | "Q2" | "Q3" | "Q4" | null;
 
+export type SubStepStatus = "pending" | "in_progress" | "done" | "at_risk" | "blocked";
+
 export interface GoalSubStep {
   id: string;
   title: string;
   detail?: string;
+  /** Estimated duration in weeks (user-editable). */
   durationWeeks?: number;
+  /**
+   * Manual override: which week (0-indexed from plan start) this step begins.
+   * If undefined, the timeline derives it from the previous step's end.
+   */
+  startWeek?: number;
   done: boolean;
+  status?: SubStepStatus;
+  /** ISO timestamp when marked done — used for "actual vs planned" review. */
+  completedAt?: string;
+  /** Free-form review note ("hurt knee, slipped a week"). */
+  reviewNote?: string;
 }
 
 export interface Goal {
@@ -27,6 +40,8 @@ export interface Goal {
   subSteps?: GoalSubStep[];
   /** Butler-style summary that accompanied the plan. */
   planSummary?: string;
+  /** ISO date the plan officially kicked off (defaults to plan generation time). */
+  planStartDate?: string;
 }
 
 export const CATEGORIES: GoalCategory[] = ["Body", "Career", "Money", "Skills", "Life"];
