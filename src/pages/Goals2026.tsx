@@ -610,6 +610,8 @@ function GoalRow({
                 placeholder="Notes, plan of attack…"
                 className="bg-background/40 border-border text-xs min-h-[60px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
               />
+
+              <AIBreakdown goal={goal} onChange={onChange} />
               {linked.length > 0 && (
                 <div className="space-y-1">
                   <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
