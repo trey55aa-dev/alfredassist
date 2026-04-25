@@ -51,10 +51,12 @@ import {
   QUARTERS,
   QUARTER_RANGES,
   SEED_GOALS,
+  SubStepStatus,
   TIMEFRAMES,
   daysUntil,
   progressPct,
 } from "@/lib/goals";
+import { buildSchedule, STATUS_META } from "@/lib/planSchedule";
 import type { BrainEntry } from "./BrainDump";
 import { cn } from "@/lib/utils";
 
