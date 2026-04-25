@@ -851,25 +851,9 @@ function AIBreakdown({
           setMode={setMode}
           toggleStep={toggleStep}
           patchStep={patchStep}
+          onRegenerate={generate}
+          regenerating={loading}
         />
-      )}
-
-          <Button
-            onClick={generate}
-            disabled={loading}
-            variant="outline"
-            size="sm"
-            className="w-full border-gold/30 text-gold hover:bg-gold/10 h-7 text-[10px] tracking-[0.2em] uppercase font-mono"
-          >
-            {loading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <>
-                <RotateCcw className="h-3 w-3 mr-1" /> Regenerate
-              </>
-            )}
-          </Button>
-        </>
       )}
     </div>
   );
