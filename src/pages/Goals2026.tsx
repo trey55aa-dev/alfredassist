@@ -859,47 +859,349 @@ function AIBreakdown({
   );
 }
 
+/* ---------- Plan body (projection + list/timeline) ---------- */
+
+const STATUS_OPTIONS: SubStepStatus[] = [
+  "pending",
+  "in_progress",
+  "done",
+  "at_risk",
+  "blocked",
+];
+
+function PlanBody({
+  goal,
+  subSteps,
+  completed,
+  overallPct,
+  mode,
+  setMode,
+  toggleStep,
+  patchStep,
+  onRegenerate,
+  regenerating,
+}: {
+  goal: Goal;
+  subSteps: GoalSubStep[];
+  completed: number;
+  overallPct: number;
+  mode: "list" | "timeline";
+  setMode: (m: "list" | "timeline") => void;
+  toggleStep: (id: string) => void;
+  patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
+  const schedule = useMemo(() => buildSchedule(goal), [goal]);
+
+  return (
+    <>
+      {goal.planSummary && (
+        <p className="font-display italic text-xs text-muted-foreground leading-snug">
+          "{goal.planSummary}"
+        </p>
+      )}
+
+      {/* Overall progress */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
+          <span>Overall</span>
+          <span className="text-gold">
+            {completed}/{subSteps.length} · {overallPct}%
+          </span>
+        </div>
+        <div className="h-1 bg-background/50 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-gold transition-all duration-700"
+            style={{ width: `${overallPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Projection banner */}
+      <ProjectionBanner schedule={schedule} deadline={goal.deadline} />
+
+      {/* View toggle */}
+      <div className="flex items-center gap-1 rounded-md bg-background/40 p-0.5">
+        <button
+          onClick={() => setMode("list")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
+            mode === "list"
+              ? "bg-gold/20 text-gold"
+              : "text-muted-foreground hover:text-gold",
+          )}
+        >
+          <List className="h-3 w-3" /> List
+        </button>
+        <button
+          onClick={() => setMode("timeline")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[9px] tracking-[0.2em] uppercase transition-colors",
+            mode === "timeline"
+              ? "bg-gold/20 text-gold"
+              : "text-muted-foreground hover:text-gold",
+          )}
+        >
+          <GanttChartSquare className="h-3 w-3" /> Timeline
+        </button>
+      </div>
+
+      {mode === "list" ? (
+        <PlanList
+          schedule={schedule}
+          toggleStep={toggleStep}
+          patchStep={patchStep}
+        />
+      ) : (
+        <PlanTimeline
+          schedule={schedule}
+          deadline={goal.deadline}
+          toggleStep={toggleStep}
+          patchStep={patchStep}
+        />
+      )}
+
+      <Button
+        onClick={onRegenerate}
+        disabled={regenerating}
+        variant="outline"
+        size="sm"
+        className="w-full border-gold/30 text-gold hover:bg-gold/10 h-7 text-[10px] tracking-[0.2em] uppercase font-mono"
+      >
+        {regenerating ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <>
+            <RotateCcw className="h-3 w-3 mr-1" /> Regenerate
+          </>
+        )}
+      </Button>
+    </>
+  );
+}
+
+function ProjectionBanner({
+  schedule,
+  deadline,
+}: {
+  schedule: ReturnType<typeof buildSchedule>;
+  deadline?: string;
+}) {
+  const { projectedEndDate, isLate, daysVsDeadline, actualPace, plannedPace } =
+    schedule;
+  const paceRatio = actualPace ? actualPace / plannedPace : null;
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-2 space-y-1",
+        isLate
+          ? "border-destructive/40 bg-destructive/10"
+          : "border-teal/30 bg-teal/5",
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        {isLate ? (
+          <AlertTriangle className="h-3 w-3 text-destructive" />
+        ) : (
+          <TrendingUp className="h-3 w-3 text-teal" />
+        )}
+        <span
+          className={cn(
+            "font-mono text-[9px] tracking-[0.2em] uppercase",
+            isLate ? "text-destructive" : "text-teal",
+          )}
+        >
+          Projected finish · {format(projectedEndDate, "MMM d, yyyy")}
+        </span>
+      </div>
+      <div className="flex items-center justify-between font-mono text-[9px] text-muted-foreground/80">
+        {deadline ? (
+          <span>
+            {daysVsDeadline === null
+              ? ""
+              : daysVsDeadline === 0
+                ? "On the wire"
+                : daysVsDeadline > 0
+                  ? `${daysVsDeadline}d past deadline`
+                  : `${Math.abs(daysVsDeadline)}d ahead of deadline`}
+          </span>
+        ) : (
+          <span>No deadline set</span>
+        )}
+        {paceRatio !== null && (
+          <span className="flex items-center gap-1">
+            <Clock className="h-2.5 w-2.5" />
+            {paceRatio > 1.05
+              ? `${Math.round((paceRatio - 1) * 100)}% slower than planned`
+              : paceRatio < 0.95
+                ? `${Math.round((1 - paceRatio) * 100)}% faster than planned`
+                : "On pace"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanList({
+  schedule,
+  toggleStep,
+  patchStep,
+}: {
+  schedule: ReturnType<typeof buildSchedule>;
+  toggleStep: (id: string) => void;
+  patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+}) {
+  return (
+    <ol className="space-y-1.5">
+      {schedule.steps.map(({ step: s, index: i, status, slip, startWeek, duration }) => {
+        const meta = STATUS_META[status];
+        return (
+          <li
+            key={s.id}
+            className="rounded-md border border-border/50 bg-background/30 p-2 space-y-1.5"
+          >
+            <div className="flex items-start gap-2">
+              <Checkbox
+                checked={s.done}
+                onCheckedChange={() => toggleStep(s.id)}
+                className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground h-3.5 w-3.5"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[9px] text-gold/70">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs font-medium leading-snug flex-1",
+                      s.done && "line-through text-muted-foreground",
+                    )}
+                  >
+                    {s.title}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-mono text-[8px] tracking-wider uppercase px-1 rounded",
+                      meta.tint,
+                    )}
+                  >
+                    {meta.label}
+                  </span>
+                </div>
+                {s.detail && (
+                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                    {s.detail}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <StepEditor
+              step={s}
+              startWeek={startWeek}
+              duration={duration}
+              slip={slip}
+              status={status}
+              onPatch={(p) => patchStep(s.id, p)}
+            />
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function StepEditor({
+  step,
+  startWeek,
+  duration,
+  slip,
+  status,
+  onPatch,
+}: {
+  step: GoalSubStep;
+  startWeek: number;
+  duration: number;
+  slip: number;
+  status: SubStepStatus;
+  onPatch: (patch: Partial<GoalSubStep>) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 pl-6">
+      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <span className="font-mono uppercase tracking-wider">Start W</span>
+        <Input
+          type="number"
+          min={0}
+          step={0.5}
+          value={step.startWeek ?? Math.round(startWeek * 10) / 10}
+          onChange={(e) => {
+            const v = e.target.value;
+            onPatch({ startWeek: v === "" ? undefined : Number(v) });
+          }}
+          className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+        />
+      </label>
+      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <span className="font-mono uppercase tracking-wider">Dur W</span>
+        <Input
+          type="number"
+          min={0.5}
+          step={0.5}
+          value={step.durationWeeks ?? duration}
+          onChange={(e) =>
+            onPatch({ durationWeeks: Number(e.target.value) || 1 })
+          }
+          className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+        />
+      </label>
+      <select
+        value={status}
+        onChange={(e) =>
+          onPatch({ status: e.target.value as SubStepStatus })
+        }
+        className="bg-background/50 border border-border rounded h-6 px-1 text-[10px] font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-1 focus:ring-gold/40"
+      >
+        {STATUS_OPTIONS.map((o) => (
+          <option key={o} value={o}>
+            {STATUS_META[o].label}
+          </option>
+        ))}
+      </select>
+      <Input
+        value={step.reviewNote ?? ""}
+        onChange={(e) => onPatch({ reviewNote: e.target.value })}
+        placeholder={slip > 0 ? `Why ${slip.toFixed(1)}w late?` : "Review note"}
+        className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+      />
+    </div>
+  );
+}
+
 /* ---------- Timeline (Gantt) ---------- */
 
 function PlanTimeline({
-  steps,
+  schedule,
   deadline,
-  onToggle,
+  toggleStep,
+  patchStep,
 }: {
-  steps: GoalSubStep[];
+  schedule: ReturnType<typeof buildSchedule>;
   deadline?: string;
-  onToggle: (id: string) => void;
+  toggleStep: (id: string) => void;
+  patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
 }) {
-  // Compute cumulative week ranges for each step
-  const ranges = useMemo(() => {
-    let cursor = 0;
-    return steps.map((s) => {
-      const dur = Math.max(1, Math.round(s.durationWeeks ?? 1));
-      const start = cursor;
-      const end = cursor + dur;
-      cursor = end;
-      return { start, end, dur };
-    });
-  }, [steps]);
+  const { steps, totalWeeks, elapsedWeeks } = schedule;
 
-  const totalWeeks = ranges[ranges.length - 1]?.end ?? 1;
-
-  // Current week relative to today (assuming plan started on goal.createdAt or now)
-  const now = new Date();
-  const start = new Date(); // plan kicks off today as a visual anchor
-  const elapsedWeeks = Math.max(
-    0,
-    Math.min(
-      totalWeeks,
-      (now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000),
-    ),
-  );
-
-  // Week tick labels — show every Nth to avoid clutter
+  // Tick spacing
   const tickEvery = totalWeeks > 16 ? 4 : totalWeeks > 8 ? 2 : 1;
-  const ticks = Array.from({ length: totalWeeks + 1 }, (_, i) => i).filter(
-    (i) => i % tickEvery === 0,
-  );
+  const ticks = Array.from(
+    { length: Math.ceil(totalWeeks) + 1 },
+    (_, i) => i,
+  ).filter((i) => i % tickEvery === 0);
 
   return (
     <div className="space-y-2">
@@ -913,7 +1215,7 @@ function PlanTimeline({
           >
             <div className="h-1.5 w-px bg-border/60" />
             <span className="font-mono text-[8px] text-muted-foreground/70 mt-0.5">
-              {w === 0 ? "Now" : `W${w}`}
+              {w === 0 ? "Start" : `W${w}`}
             </span>
           </div>
         ))}
@@ -924,7 +1226,7 @@ function PlanTimeline({
         {/* "Today" indicator */}
         {elapsedWeeks > 0 && elapsedWeeks < totalWeeks && (
           <div
-            className="absolute top-0 bottom-0 w-px bg-teal/60 z-10 pointer-events-none"
+            className="absolute top-0 bottom-0 w-px bg-teal/70 z-10 pointer-events-none"
             style={{ left: `${(elapsedWeeks / totalWeeks) * 100}%` }}
             aria-hidden
           >
@@ -932,26 +1234,23 @@ function PlanTimeline({
           </div>
         )}
 
-        {steps.map((s, i) => {
-          const r = ranges[i];
-          const leftPct = (r.start / totalWeeks) * 100;
-          const widthPct = (r.dur / totalWeeks) * 100;
+        {steps.map(({ step: s, index: i, startWeek, endWeek, duration, status, slip }) => {
+          const leftPct = (startWeek / totalWeeks) * 100;
+          const widthPct = ((endWeek - startWeek) / totalWeeks) * 100;
+          const meta = STATUS_META[status];
           return (
             <div key={s.id} className="flex items-center gap-2">
               <span className="font-mono text-[9px] text-gold/70 w-5 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <div className="relative flex-1 h-5 bg-background/40 rounded-sm overflow-hidden">
+              <div className="relative flex-1 h-6 bg-background/40 rounded-sm overflow-hidden">
                 <button
-                  onClick={() => onToggle(s.id)}
-                  title={`${s.title}${
-                    s.detail ? " — " + s.detail : ""
-                  } (~${r.dur}w)`}
+                  onClick={() => toggleStep(s.id)}
+                  title={`${s.title}${s.detail ? " — " + s.detail : ""}\nW${startWeek.toFixed(1)} → W${endWeek.toFixed(1)} (~${duration}w)${slip > 0 ? `\nSlip: +${slip.toFixed(1)}w` : ""}`}
                   className={cn(
                     "absolute top-0 bottom-0 rounded-sm px-1.5 flex items-center transition-all border",
-                    s.done
-                      ? "bg-gold/30 border-gold/50 text-gold"
-                      : "bg-gradient-to-r from-gold/20 to-gold/5 border-gold/30 text-foreground hover:from-gold/30 hover:to-gold/10",
+                    meta.barClass,
+                    s.done && "opacity-90",
                   )}
                   style={{
                     left: `${leftPct}%`,
@@ -967,6 +1266,33 @@ function PlanTimeline({
                     {s.title}
                   </span>
                 </button>
+                {/* Slip overlay */}
+                {slip > 0 && !s.done && (
+                  <div
+                    className="absolute top-0 bottom-0 bg-destructive/30 border-r border-destructive/60 pointer-events-none"
+                    style={{
+                      left: `${((endWeek - slip) / totalWeeks) * 100}%`,
+                      width: `${(slip / totalWeeks) * 100}%`,
+                    }}
+                    title={`Slip: +${slip.toFixed(1)}w`}
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <Input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={s.durationWeeks ?? duration}
+                  onChange={(e) =>
+                    patchStep(s.id, {
+                      durationWeeks: Number(e.target.value) || 1,
+                    })
+                  }
+                  className="h-5 w-10 px-1 text-[10px] bg-background/50 border-border"
+                  title="Duration in weeks"
+                />
+                <span className="font-mono text-[8px] text-muted-foreground/70">w</span>
               </div>
             </div>
           );
@@ -975,11 +1301,9 @@ function PlanTimeline({
 
       {/* Footer meta */}
       <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.15em] uppercase text-muted-foreground/70 pt-1">
-        <span>{totalWeeks}-week campaign</span>
+        <span>{totalWeeks.toFixed(1)}-week campaign</span>
         {deadline && (
-          <span>
-            Deadline · {format(new Date(deadline), "MMM d, yyyy")}
-          </span>
+          <span>Deadline · {format(new Date(deadline), "MMM d, yyyy")}</span>
         )}
       </div>
     </div>
