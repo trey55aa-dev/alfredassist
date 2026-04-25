@@ -15,6 +15,7 @@ import Guide from "./pages/Guide";
 import Journal from "./pages/Journal";
 import Goals2026 from "./pages/Goals2026";
 import Agenda from "./pages/Agenda";
+import CustomLists from "./pages/CustomLists";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="/journal" element={<Journal />} />
               <Route path="/goals-2026" element={<Goals2026 />} />
               <Route path="/agenda" element={<Agenda />} />
+              <Route path="/lists" element={<CustomLists />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

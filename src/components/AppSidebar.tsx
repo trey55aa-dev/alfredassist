@@ -8,6 +8,7 @@ import {
   BookOpen,
   Mic,
   Target,
+  ListChecks,
   LogOut,
   Palette,
   Sparkles,
@@ -37,6 +38,7 @@ import { Slider } from "@/components/ui/slider";
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
+  { title: "Custom Lists", url: "/lists", icon: ListChecks },
   { title: "Focus Timer", url: "/focus", icon: Timer },
   { title: "Brain Dump", url: "/brain-dump", icon: Brain },
   { title: "Agenda", url: "/agenda", icon: CalendarDays },
