@@ -2,6 +2,14 @@ export type GoalCategory = "Body" | "Career" | "Money" | "Skills" | "Life";
 export type GoalTimeframe = "daily" | "monthly" | "quarterly" | "annual";
 export type GoalQuarter = "Q1" | "Q2" | "Q3" | "Q4" | null;
 
+export interface GoalSubStep {
+  id: string;
+  title: string;
+  detail?: string;
+  durationWeeks?: number;
+  done: boolean;
+}
+
 export interface Goal {
   id: string;
   title: string;
@@ -15,6 +23,10 @@ export interface Goal {
   done: boolean;
   note?: string;
   createdAt: number;
+  /** AI-generated phased plan. */
+  subSteps?: GoalSubStep[];
+  /** Butler-style summary that accompanied the plan. */
+  planSummary?: string;
 }
 
 export const CATEGORIES: GoalCategory[] = ["Body", "Career", "Money", "Skills", "Life"];
