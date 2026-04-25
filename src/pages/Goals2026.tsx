@@ -15,6 +15,8 @@ import {
   Brain,
   Wand2,
   Loader2,
+  List,
+  GanttChartSquare,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
