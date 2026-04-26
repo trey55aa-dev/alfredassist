@@ -1073,10 +1073,12 @@ function PlanList({
   schedule,
   toggleStep,
   patchStep,
+  setStepStatus,
 }: {
   schedule: ReturnType<typeof buildSchedule>;
   toggleStep: (id: string) => void;
   patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+  setStepStatus: (id: string, status: SubStepStatus, note?: string) => void;
 }) {
   return (
     <ol className="space-y-1.5">
@@ -1130,7 +1132,10 @@ function PlanList({
               slip={slip}
               status={status}
               onPatch={(p) => patchStep(s.id, p)}
+              onStatusChange={(next) => setStepStatus(s.id, next)}
             />
+
+            <StatusHistory step={s} />
           </li>
         );
       })}
