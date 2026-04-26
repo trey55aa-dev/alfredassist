@@ -83,8 +83,8 @@ export function AppSidebar() {
             {!collapsed && (
               <div className="leading-tight">
                 <div className="font-display text-lg text-gold">Alfred</div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Command Center
+                <div className="text-[10px] uppercase tracking-[0.2em] text-primary">
+                  Personal AI asstiant 
                 </div>
               </div>
             )}
@@ -124,7 +124,7 @@ export function AppSidebar() {
                           }`}
                         />
                         {!collapsed && (
-                          <span className="font-mono text-[12px] tracking-wider uppercase">
+                          <span className="font-mono text-[12px] tracking-wider uppercase text-teal-50">
                             {item.title}
                           </span>
                         )}
@@ -178,7 +178,7 @@ export function AppSidebar() {
               <PopoverTrigger asChild>
                 <button className="flex items-center gap-2 w-full mt-3 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
                   <Palette className="h-3.5 w-3.5" />
-                  <span className="font-mono tracking-wider uppercase">Theme Color</span>
+                  <span className="font-mono tracking-wider uppercase text-primary">Theme Color</span>
                   <div
                     className="ml-auto h-3 w-3 rounded-full border border-gold/30"
                     style={{ background: `hsl(${theme.background})` }}
