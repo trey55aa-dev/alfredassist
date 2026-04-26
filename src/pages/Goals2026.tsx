@@ -871,6 +871,7 @@ function AIBreakdown({
           setMode={setMode}
           toggleStep={toggleStep}
           patchStep={patchStep}
+          setStepStatus={setStepStatus}
           onRegenerate={generate}
           regenerating={loading}
         />
