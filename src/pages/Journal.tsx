@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
+import { Trash2, Play, Pause } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { AudioRecorder } from "@/components/AudioRecorder";
 import { toast } from "sonner";
 
 const MOODS = ["radiant", "steady", "tired", "anxious", "reflective", "fired-up"] as const;
@@ -22,57 +23,19 @@ export interface JournalEntry {
 
 export default function Journal() {
   const [entries, setEntries] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [mood, setMood] = useState<Mood>("steady");
   const [pendingAudio, setPendingAudio] = useState<string | undefined>();
   const [pendingDuration, setPendingDuration] = useState(0);
 
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const tickRef = useRef<number | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     return () => {
-      if (tickRef.current) window.clearInterval(tickRef.current);
-      mediaRef.current?.stream.getTracks().forEach((t) => t.stop());
+      audioRef.current?.pause();
     };
   }, []);
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => setPendingAudio(reader.result as string);
-        reader.readAsDataURL(blob);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      mr.start();
-      mediaRef.current = mr;
-      setRecording(true);
-      setElapsed(0);
-      tickRef.current = window.setInterval(() => setElapsed((e) => e + 1), 1000);
-    } catch {
-      toast.error("Microphone unavailable", {
-        description: "Permissions denied. You may type a transcript instead.",
-      });
-    }
-  };
-
-  const stopRecording = () => {
-    mediaRef.current?.stop();
-    setRecording(false);
-    setPendingDuration(elapsed);
-    if (tickRef.current) window.clearInterval(tickRef.current);
-  };
 
   const generateSummary = (text: string): string => {
     if (!text.trim()) return "A quiet entry, sir. The silence speaks volumes.";
@@ -100,7 +63,6 @@ export default function Journal() {
     setTranscript("");
     setPendingAudio(undefined);
     setPendingDuration(0);
-    setElapsed(0);
     toast.success("Journal saved", { description: "Until tomorrow, sir." });
   };
 
@@ -126,44 +88,39 @@ export default function Journal() {
       <PageHeader
         eyebrow="Reflection"
         title="Audio Journal"
-        description="Speak the day. Or write it. The butler listens either way."
+        description="Speak the day. Or write it. The butler listens and transcribes."
       />
 
       <Card className="p-6 bg-gradient-card border-border">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="font-display text-2xl">Tonight's Entry</h3>
-            <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
-              {recording ? "Recording…" : pendingAudio ? "Audio captured" : "Ready"}
-            </div>
+        <div className="mb-5">
+          <h3 className="font-display text-2xl">Tonight's Entry</h3>
+          <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
+            {pendingAudio ? "Audio captured · review and save" : "Speak freely — transcript appears live"}
           </div>
-          <div className="flex items-center gap-3">
-            {recording && (
-              <span className="font-mono text-sm text-gold tabular-nums">
-                {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
-                {String(elapsed % 60).padStart(2, "0")}
-              </span>
-            )}
-            {!recording ? (
-              <Button
-                onClick={startRecording}
-                className="bg-gradient-gold text-primary-foreground hover:opacity-90 shadow-gold"
-              >
-                <Mic className="h-4 w-4 mr-2" /> Record
-              </Button>
-            ) : (
-              <Button onClick={stopRecording} variant="destructive">
-                <Square className="h-4 w-4 mr-2" /> Stop
-              </Button>
-            )}
-          </div>
+        </div>
+
+        <div className="mb-4">
+          <AudioRecorder
+            liveTranscript={transcript}
+            onLiveTranscriptChange={setTranscript}
+            onComplete={({ audioDataUrl, duration, transcript: finalTranscript }) => {
+              setPendingAudio(audioDataUrl);
+              setPendingDuration(duration);
+              if (finalTranscript && finalTranscript.trim()) {
+                setTranscript(finalTranscript);
+              }
+              toast.success("Recording saved", {
+                description: "Edit the transcript below if you'd like.",
+              });
+            }}
+          />
         </div>
 
         <Textarea
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
-          placeholder="Type your transcript here, or speak — and add notes after."
-          className="bg-background/50 border-border min-h-[120px] resize-none mb-4"
+          placeholder="Your transcript will appear here as you speak. Edit freely."
+          className="bg-background/50 border-border min-h-[140px] resize-none mb-4"
         />
 
         <div className="flex flex-wrap gap-2 mb-4">
