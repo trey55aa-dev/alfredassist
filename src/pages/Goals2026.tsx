@@ -53,6 +53,7 @@ import {
   SEED_GOALS,
   SubStepStatus,
   TIMEFRAMES,
+  appendStatusEvent,
   daysUntil,
   progressPct,
 } from "@/lib/goals";
@@ -737,6 +738,7 @@ function AIBreakdown({
         return;
       }
 
+      const nowIso = new Date().toISOString();
       const newSteps: GoalSubStep[] = data.steps.map(
         (s: { title: string; detail?: string; durationWeeks?: number }) => ({
           id: crypto.randomUUID(),
@@ -745,6 +747,7 @@ function AIBreakdown({
           durationWeeks: s.durationWeeks,
           done: false,
           status: "pending" as SubStepStatus,
+          statusHistory: [{ status: "pending" as SubStepStatus, at: nowIso }],
         }),
       );
 
@@ -769,15 +772,32 @@ function AIBreakdown({
     });
   };
 
+  const setStepStatus = (id: string, status: SubStepStatus, note?: string) => {
+    onChange({
+      subSteps: subSteps.map((s) => {
+        if (s.id !== id) return s;
+        if (s.status === status && (status !== "done" || s.done)) return s;
+        const history = appendStatusEvent(s, status, note);
+        return {
+          ...s,
+          status,
+          done: status === "done",
+          completedAt:
+            status === "done"
+              ? s.completedAt ?? new Date().toISOString()
+              : status === "pending" || status === "in_progress"
+                ? undefined
+                : s.completedAt,
+          statusHistory: history,
+        };
+      }),
+    });
+  };
+
   const toggleStep = (id: string) => {
     const target = subSteps.find((s) => s.id === id);
     if (!target) return;
-    const nowDone = !target.done;
-    patchStep(id, {
-      done: nowDone,
-      status: nowDone ? "done" : "pending",
-      completedAt: nowDone ? new Date().toISOString() : undefined,
-    });
+    setStepStatus(id, target.done ? "pending" : "done");
   };
 
   const removePlan = () => {
@@ -851,6 +871,7 @@ function AIBreakdown({
           setMode={setMode}
           toggleStep={toggleStep}
           patchStep={patchStep}
+          setStepStatus={setStepStatus}
           onRegenerate={generate}
           regenerating={loading}
         />
@@ -878,6 +899,7 @@ function PlanBody({
   setMode,
   toggleStep,
   patchStep,
+  setStepStatus,
   onRegenerate,
   regenerating,
 }: {
@@ -889,6 +911,7 @@ function PlanBody({
   setMode: (m: "list" | "timeline") => void;
   toggleStep: (id: string) => void;
   patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+  setStepStatus: (id: string, status: SubStepStatus, note?: string) => void;
   onRegenerate: () => void;
   regenerating: boolean;
 }) {
@@ -952,6 +975,7 @@ function PlanBody({
           schedule={schedule}
           toggleStep={toggleStep}
           patchStep={patchStep}
+          setStepStatus={setStepStatus}
         />
       ) : (
         <PlanTimeline
@@ -1049,10 +1073,12 @@ function PlanList({
   schedule,
   toggleStep,
   patchStep,
+  setStepStatus,
 }: {
   schedule: ReturnType<typeof buildSchedule>;
   toggleStep: (id: string) => void;
   patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+  setStepStatus: (id: string, status: SubStepStatus, note?: string) => void;
 }) {
   return (
     <ol className="space-y-1.5">
@@ -1106,7 +1132,10 @@ function PlanList({
               slip={slip}
               status={status}
               onPatch={(p) => patchStep(s.id, p)}
+              onStatusChange={(next) => setStepStatus(s.id, next)}
             />
+
+            <StatusHistory step={s} />
           </li>
         );
       })}
@@ -1121,6 +1150,7 @@ function StepEditor({
   slip,
   status,
   onPatch,
+  onStatusChange,
 }: {
   step: GoalSubStep;
   startWeek: number;
@@ -1128,6 +1158,7 @@ function StepEditor({
   slip: number;
   status: SubStepStatus;
   onPatch: (patch: Partial<GoalSubStep>) => void;
+  onStatusChange: (next: SubStepStatus) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-1.5 pl-6">
@@ -1160,9 +1191,7 @@ function StepEditor({
       </label>
       <select
         value={status}
-        onChange={(e) =>
-          onPatch({ status: e.target.value as SubStepStatus })
-        }
+        onChange={(e) => onStatusChange(e.target.value as SubStepStatus)}
         className="bg-background/50 border border-border rounded h-6 px-1 text-[10px] font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-1 focus:ring-gold/40"
       >
         {STATUS_OPTIONS.map((o) => (
@@ -1177,6 +1206,75 @@ function StepEditor({
         placeholder={slip > 0 ? `Why ${slip.toFixed(1)}w late?` : "Review note"}
         className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
       />
+    </div>
+  );
+}
+
+/* ---------- Status history timeline ---------- */
+
+function StatusHistory({ step }: { step: GoalSubStep }) {
+  const [open, setOpen] = useState(false);
+  const history = step.statusHistory ?? [];
+  if (history.length === 0) return null;
+
+  const latest = history[history.length - 1];
+  const visible = open ? history : history.slice(-3);
+  const hidden = history.length - visible.length;
+
+  return (
+    <div className="pl-6 pt-1">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground/70 hover:text-gold transition-colors"
+        aria-expanded={open}
+      >
+        <Clock className="h-2.5 w-2.5" />
+        Status log · {history.length}
+        <span className="text-muted-foreground/40">
+          {open ? "− hide" : hidden > 0 ? `+${hidden} more` : "expand"}
+        </span>
+      </button>
+
+      <ol className="mt-1 space-y-1 border-l border-border/50 pl-2.5 ml-1">
+        {visible.map((evt, idx) => {
+          const meta = STATUS_META[evt.status];
+          const isLatest = evt === latest;
+          return (
+            <li key={`${evt.at}-${idx}`} className="relative">
+              <span
+                className={cn(
+                  "absolute -left-[14px] top-1 h-1.5 w-1.5 rounded-full ring-2 ring-background",
+                  evt.status === "done" && "bg-gold",
+                  evt.status === "in_progress" && "bg-teal",
+                  evt.status === "at_risk" && "bg-destructive",
+                  evt.status === "blocked" && "bg-destructive",
+                  evt.status === "pending" && "bg-muted-foreground/50",
+                )}
+                aria-hidden
+              />
+              <div className="flex items-baseline justify-between gap-2">
+                <span
+                  className={cn(
+                    "font-mono text-[9px] tracking-wider uppercase",
+                    meta.tint,
+                    isLatest && "font-semibold",
+                  )}
+                >
+                  {meta.label}
+                </span>
+                <span className="font-mono text-[9px] text-muted-foreground/60">
+                  {format(new Date(evt.at), "MMM d · HH:mm")}
+                </span>
+              </div>
+              {evt.note && (
+                <p className="text-[10px] text-muted-foreground/80 leading-snug mt-0.5">
+                  {evt.note}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
