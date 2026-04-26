@@ -738,6 +738,7 @@ function AIBreakdown({
         return;
       }
 
+      const nowIso = new Date().toISOString();
       const newSteps: GoalSubStep[] = data.steps.map(
         (s: { title: string; detail?: string; durationWeeks?: number }) => ({
           id: crypto.randomUUID(),
@@ -746,6 +747,7 @@ function AIBreakdown({
           durationWeeks: s.durationWeeks,
           done: false,
           status: "pending" as SubStepStatus,
+          statusHistory: [{ status: "pending" as SubStepStatus, at: nowIso }],
         }),
       );
 
@@ -770,15 +772,32 @@ function AIBreakdown({
     });
   };
 
+  const setStepStatus = (id: string, status: SubStepStatus, note?: string) => {
+    onChange({
+      subSteps: subSteps.map((s) => {
+        if (s.id !== id) return s;
+        if (s.status === status && (status !== "done" || s.done)) return s;
+        const history = appendStatusEvent(s, status, note);
+        return {
+          ...s,
+          status,
+          done: status === "done",
+          completedAt:
+            status === "done"
+              ? s.completedAt ?? new Date().toISOString()
+              : status === "pending" || status === "in_progress"
+                ? undefined
+                : s.completedAt,
+          statusHistory: history,
+        };
+      }),
+    });
+  };
+
   const toggleStep = (id: string) => {
     const target = subSteps.find((s) => s.id === id);
     if (!target) return;
-    const nowDone = !target.done;
-    patchStep(id, {
-      done: nowDone,
-      status: nowDone ? "done" : "pending",
-      completedAt: nowDone ? new Date().toISOString() : undefined,
-    });
+    setStepStatus(id, target.done ? "pending" : "done");
   };
 
   const removePlan = () => {
