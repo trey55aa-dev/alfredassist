@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -53,7 +53,21 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, user, signOut } = useAuth();
-  const { theme, applyTheme, resetTheme, ambient, setAmbientEnabled, setAmbientIntensity, presets } = useThemeColor();
+  const {
+    theme,
+    applyTheme,
+    resetTheme,
+    accent,
+    applyAccent,
+    applyAccentHex,
+    resetAccent,
+    accentPresets,
+    ambient,
+    setAmbientEnabled,
+    setAmbientIntensity,
+    presets,
+  } = useThemeColor();
+  const accentHex = hslToHex(accent.hsl);
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
@@ -208,7 +222,66 @@ export function AppSidebar() {
             </Popover>
           )}
 
-          {/* Ambient Pattern Controls */}
+          {/* Accent Color Picker */}
+          {!collapsed && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-2 w-full mt-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
+                  <Palette className="h-3.5 w-3.5" />
+                  <span className="font-mono tracking-wider uppercase">Accent</span>
+                  <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                    {accent.name}
+                  </span>
+                  <div
+                    className="h-3 w-3 rounded-full border border-border"
+                    style={{ background: `hsl(${accent.hsl})` }}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" align="start" className="w-60 bg-popover border-border">
+                <div className="space-y-3">
+                  <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+                    Accent Color
+                  </div>
+                  <div className="grid grid-cols-6 gap-1.5 max-h-44 overflow-y-auto pr-1 scrollbar-thin">
+                    {accentPresets.map((preset) => {
+                      const active = accent.hsl === preset.hsl;
+                      return (
+                        <button
+                          key={preset.name}
+                          onClick={() => applyAccent(preset)}
+                          title={preset.name}
+                          className={`h-7 w-7 rounded-full border transition-all ${
+                            active
+                              ? "ring-2 ring-offset-2 ring-offset-popover ring-foreground/60 border-transparent"
+                              : "border-border/60 hover:scale-110"
+                          }`}
+                          style={{ background: `hsl(${preset.hsl})` }}
+                          aria-label={preset.name}
+                        />
+                      );
+                    })}
+                  </div>
+                  <label className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <span>Custom</span>
+                    <input
+                      type="color"
+                      value={accentHex}
+                      onChange={(e) => applyAccentHex(e.target.value)}
+                      className="h-7 w-12 rounded cursor-pointer bg-transparent border border-border"
+                      aria-label="Pick a custom accent color"
+                    />
+                  </label>
+                  <button
+                    onClick={resetAccent}
+                    className="w-full py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-gold transition-colors"
+                  >
+                    Reset to Gold
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
           {!collapsed && (
             <div className="mt-3 px-2 space-y-3">
               {/* Toggle */}
