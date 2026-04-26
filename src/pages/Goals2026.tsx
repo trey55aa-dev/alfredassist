@@ -975,6 +975,7 @@ function PlanBody({
           schedule={schedule}
           toggleStep={toggleStep}
           patchStep={patchStep}
+          setStepStatus={setStepStatus}
         />
       ) : (
         <PlanTimeline
