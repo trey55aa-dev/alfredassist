@@ -67,15 +67,7 @@ export function AppSidebar() {
     setAmbientIntensity,
     presets,
   } = useThemeColor();
-  const accentHex = (() => {
-    // Lazy import to avoid circular; use the helper from the hook module.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require("@/hooks/useThemeColor").hslToHex(accent.hsl);
-    } catch {
-      return "#d4a857";
-    }
-  })();
+  const accentHex = hslToHex(accent.hsl);
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
