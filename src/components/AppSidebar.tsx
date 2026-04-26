@@ -53,7 +53,29 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, user, signOut } = useAuth();
-  const { theme, applyTheme, resetTheme, ambient, setAmbientEnabled, setAmbientIntensity, presets } = useThemeColor();
+  const {
+    theme,
+    applyTheme,
+    resetTheme,
+    accent,
+    applyAccent,
+    applyAccentHex,
+    resetAccent,
+    accentPresets,
+    ambient,
+    setAmbientEnabled,
+    setAmbientIntensity,
+    presets,
+  } = useThemeColor();
+  const accentHex = (() => {
+    // Lazy import to avoid circular; use the helper from the hook module.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require("@/hooks/useThemeColor").hslToHex(accent.hsl);
+    } catch {
+      return "#d4a857";
+    }
+  })();
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
