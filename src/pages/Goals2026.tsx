@@ -899,6 +899,7 @@ function PlanBody({
   setMode,
   toggleStep,
   patchStep,
+  setStepStatus,
   onRegenerate,
   regenerating,
 }: {
@@ -910,6 +911,7 @@ function PlanBody({
   setMode: (m: "list" | "timeline") => void;
   toggleStep: (id: string) => void;
   patchStep: (id: string, patch: Partial<GoalSubStep>) => void;
+  setStepStatus: (id: string, status: SubStepStatus, note?: string) => void;
   onRegenerate: () => void;
   regenerating: boolean;
 }) {
