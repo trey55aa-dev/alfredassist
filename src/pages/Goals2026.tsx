@@ -53,6 +53,7 @@ import {
   SEED_GOALS,
   SubStepStatus,
   TIMEFRAMES,
+  appendStatusEvent,
   daysUntil,
   progressPct,
 } from "@/lib/goals";
