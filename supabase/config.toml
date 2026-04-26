@@ -2,3 +2,6 @@ project_id = "tgpddgcsadysidvxbvhc"
 
 [functions.breakdown-goal]
 verify_jwt = false
+
+[functions.transcribe-audio]
+verify_jwt = false
