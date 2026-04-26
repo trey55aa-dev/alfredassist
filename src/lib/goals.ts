@@ -4,6 +4,14 @@ export type GoalQuarter = "Q1" | "Q2" | "Q3" | "Q4" | null;
 
 export type SubStepStatus = "pending" | "in_progress" | "done" | "at_risk" | "blocked";
 
+export interface StatusEvent {
+  status: SubStepStatus;
+  /** ISO timestamp when this transition happened. */
+  at: string;
+  /** Optional note captured at the moment of change. */
+  note?: string;
+}
+
 export interface GoalSubStep {
   id: string;
   title: string;
@@ -21,6 +29,20 @@ export interface GoalSubStep {
   completedAt?: string;
   /** Free-form review note ("hurt knee, slipped a week"). */
   reviewNote?: string;
+  /** Ordered log of every status transition. */
+  statusHistory?: StatusEvent[];
+}
+
+/** Append a status transition if it differs from the most recent one. */
+export function appendStatusEvent(
+  step: GoalSubStep,
+  status: SubStepStatus,
+  note?: string,
+): StatusEvent[] {
+  const history = step.statusHistory ?? [];
+  const last = history[history.length - 1];
+  if (last && last.status === status) return history;
+  return [...history, { status, at: new Date().toISOString(), note }];
 }
 
 export interface Goal {
