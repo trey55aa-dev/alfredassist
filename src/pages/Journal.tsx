@@ -279,6 +279,19 @@ export default function Journal() {
                 </div>
               </div>
               <p className="text-sm text-foreground/90 mb-3 whitespace-pre-wrap">{e.transcript}</p>
+              {e.health && (
+                <div className="flex flex-wrap gap-3 mb-3 font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
+                  {e.health.steps !== undefined && (
+                    <span className="flex items-center gap-1"><Footprints className="h-3 w-3 text-gold" /> {e.health.steps.toLocaleString()} steps</span>
+                  )}
+                  {e.health.sleepHours !== undefined && (
+                    <span className="flex items-center gap-1"><Moon className="h-3 w-3 text-gold" /> {e.health.sleepHours}h sleep</span>
+                  )}
+                  {e.health.restingHeartRate != null && (
+                    <span className="flex items-center gap-1"><Heart className="h-3 w-3 text-gold" /> {e.health.restingHeartRate} bpm</span>
+                  )}
+                </div>
+              )}
               <div className="bg-background/50 rounded-md p-3 border-l-2 border-gold">
                 <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-1">
                   Summary
