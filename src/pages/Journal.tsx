@@ -159,11 +159,56 @@ export default function Journal() {
           className="bg-background/50 border-border min-h-[140px] resize-none mb-4"
         />
 
+        {(analyzing || aiSummary) && (
+          <div className="mb-4 bg-background/50 rounded-md p-3 border-l-2 border-primary">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.25em] uppercase text-primary">
+                {analyzing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
+                Alfred's Reflection
+              </div>
+              {!analyzing && transcript.trim() && (
+                <button
+                  onClick={() => void analyzeTranscript(transcript)}
+                  className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground hover:text-primary"
+                >
+                  Re-analyze
+                </button>
+              )}
+            </div>
+            {analyzing ? (
+              <p className="font-display italic text-sm text-muted-foreground">
+                Reading the day's tone…
+              </p>
+            ) : (
+              <p className="font-display italic text-sm text-foreground/80">{aiSummary}</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+            Mood {moodAutoSuggested && !analyzing && (
+              <span className="text-primary normal-case tracking-normal ml-1">· suggested by Alfred</span>
+            )}
+          </div>
+          {!analyzing && transcript.trim() && !aiSummary && (
+            <button
+              onClick={() => void analyzeTranscript(transcript)}
+              className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.2em] text-primary hover:opacity-80"
+            >
+              <Sparkles className="h-3 w-3" /> Suggest mood & summary
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2 mb-4">
           {MOODS.map((m) => (
             <button
               key={m}
-              onClick={() => setMood(m)}
+              onClick={() => { setMood(m); setMoodAutoSuggested(false); }}
               className={`px-3 py-1 rounded-full border text-[10px] font-mono uppercase tracking-[0.2em] transition-all ${
                 mood === m
                   ? "bg-gold text-primary-foreground border-gold"
@@ -175,8 +220,8 @@ export default function Journal() {
           ))}
         </div>
 
-        <Button onClick={save} className="w-full bg-secondary text-secondary-foreground hover:opacity-90">
-          Save Entry
+        <Button onClick={save} disabled={analyzing} className="w-full bg-secondary text-secondary-foreground hover:opacity-90">
+          {analyzing ? "Reflecting…" : "Save Entry"}
         </Button>
       </Card>
 
