@@ -12,6 +12,7 @@ import {
   LogOut,
   Palette,
   Sparkles,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
@@ -46,6 +47,7 @@ const items = [
   { title: "2026 Goals", url: "/goals-2026", icon: Target },
   { title: "Feature Guide", url: "/guide", icon: BookOpen },
   { title: "Audio Journal", url: "/journal", icon: Mic },
+  { title: "Health", url: "/health", icon: Activity },
 ];
 
 export function AppSidebar() {
