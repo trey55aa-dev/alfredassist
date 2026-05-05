@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2, Play, Pause, Sparkles, Loader2 } from "lucide-react";
+import { Trash2, Play, Pause, Sparkles, Loader2, Activity, Moon, Footprints, Heart } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { AudioRecorder } from "@/components/AudioRecorder";
+import { useHealth } from "@/hooks/useHealth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -20,6 +21,11 @@ export interface JournalEntry {
   transcript: string;
   summary: string;
   mood: Mood;
+  health?: {
+    steps?: number;
+    sleepHours?: number;
+    restingHeartRate?: number | null;
+  };
 }
 
 export default function Journal() {
