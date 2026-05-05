@@ -28,6 +28,9 @@ export default function Journal() {
   const [mood, setMood] = useState<Mood>("steady");
   const [pendingAudio, setPendingAudio] = useState<string | undefined>();
   const [pendingDuration, setPendingDuration] = useState(0);
+  const [aiSummary, setAiSummary] = useState<string>("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [moodAutoSuggested, setMoodAutoSuggested] = useState(false);
 
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -37,6 +40,34 @@ export default function Journal() {
       audioRef.current?.pause();
     };
   }, []);
+
+  const analyzeTranscript = async (finalTranscript: string) => {
+    if (!finalTranscript.trim()) return;
+    setAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-journal", {
+        body: { transcript: finalTranscript, moods: MOODS },
+      });
+      if (error) throw error;
+      const result = data as { mood?: Mood; summary?: string; error?: string };
+      if (result.error) throw new Error(result.error);
+      if (result.mood && (MOODS as readonly string[]).includes(result.mood)) {
+        setMood(result.mood);
+        setMoodAutoSuggested(true);
+      }
+      if (result.summary) setAiSummary(result.summary);
+      toast.success("Alfred has reflected", {
+        description: "Mood and summary suggested. Edit if you'd like.",
+      });
+    } catch (err) {
+      console.error("analyze-journal failed:", err);
+      toast.error("Could not analyze entry", {
+        description: err instanceof Error ? err.message : "Try again shortly.",
+      });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const generateSummary = (text: string): string => {
     if (!text.trim()) return "A quiet entry, sir. The silence speaks volumes.";
