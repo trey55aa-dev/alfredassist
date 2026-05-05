@@ -37,6 +37,7 @@ export default function Journal() {
   const [aiSummary, setAiSummary] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   const [moodAutoSuggested, setMoodAutoSuggested] = useState(false);
+  const { snapshot: health } = useHealth();
 
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
