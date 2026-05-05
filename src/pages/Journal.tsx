@@ -145,6 +145,17 @@ export default function Journal() {
           <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
             {pendingAudio ? "Audio captured · review and save" : "Speak freely — transcript appears live"}
           </div>
+          {health && (
+            <div className="flex flex-wrap gap-3 mt-3 font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
+              <Activity className="h-3 w-3 text-gold" />
+              <span className="flex items-center gap-1"><Footprints className="h-3 w-3 text-gold" /> {health.steps.toLocaleString()}</span>
+              <span className="flex items-center gap-1"><Moon className="h-3 w-3 text-gold" /> {health.sleepHours}h</span>
+              {health.restingHeartRate != null && (
+                <span className="flex items-center gap-1"><Heart className="h-3 w-3 text-gold" /> {health.restingHeartRate}</span>
+              )}
+              <span className="text-muted-foreground/60">· will attach to entry</span>
+            </div>
+          )}
         </div>
 
         <div className="mb-4">
