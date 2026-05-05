@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2, Play, Pause } from "lucide-react";
+import { Trash2, Play, Pause, Sparkles, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { AudioRecorder } from "@/components/AudioRecorder";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const MOODS = ["radiant", "steady", "tired", "anxious", "reflective", "fired-up"] as const;
