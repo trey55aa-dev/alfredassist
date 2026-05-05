@@ -88,13 +88,15 @@ export default function Journal() {
       duration: pendingDuration,
       audioDataUrl: pendingAudio,
       transcript: transcript.trim() || "[audio entry — transcript not provided]",
-      summary: generateSummary(transcript),
+      summary: aiSummary.trim() || generateSummary(transcript),
       mood,
     };
     setEntries([entry, ...entries]);
     setTranscript("");
     setPendingAudio(undefined);
     setPendingDuration(0);
+    setAiSummary("");
+    setMoodAutoSuggested(false);
     toast.success("Journal saved", { description: "Until tomorrow, sir." });
   };
 
