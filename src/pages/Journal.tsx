@@ -140,12 +140,14 @@ export default function Journal() {
             onComplete={({ audioDataUrl, duration, transcript: finalTranscript }) => {
               setPendingAudio(audioDataUrl);
               setPendingDuration(duration);
+              const text = (finalTranscript && finalTranscript.trim()) || transcript;
               if (finalTranscript && finalTranscript.trim()) {
                 setTranscript(finalTranscript);
               }
               toast.success("Recording saved", {
-                description: "Edit the transcript below if you'd like.",
+                description: "Alfred is reflecting on your entry…",
               });
+              void analyzeTranscript(text);
             }}
           />
         </div>
