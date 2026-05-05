@@ -97,6 +97,13 @@ export default function Journal() {
       transcript: transcript.trim() || "[audio entry — transcript not provided]",
       summary: aiSummary.trim() || generateSummary(transcript),
       mood,
+      health: health
+        ? {
+            steps: health.steps,
+            sleepHours: health.sleepHours,
+            restingHeartRate: health.restingHeartRate,
+          }
+        : undefined,
     };
     setEntries([entry, ...entries]);
     setTranscript("");
