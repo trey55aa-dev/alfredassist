@@ -31,6 +31,7 @@ import {
 } from "@/lib/habits";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
+import { HealthSummaryCard } from "@/components/HealthSummaryCard";
 import { useAuth } from "@/hooks/useAuth";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
@@ -261,6 +262,11 @@ export default function Dashboard() {
       {/* Today's agenda */}
       <section>
         <TodayAgendaCard />
+      </section>
+
+      {/* Health summary */}
+      <section>
+        <HealthSummaryCard />
       </section>
 
       {/* 2026 Goals widget */}

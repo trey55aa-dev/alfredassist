@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Trash2, Play, Pause, Sparkles, Loader2 } from "lucide-react";
+import { Trash2, Play, Pause, Sparkles, Loader2, Activity, Moon, Footprints, Heart } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { AudioRecorder } from "@/components/AudioRecorder";
+import { useHealth } from "@/hooks/useHealth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -20,6 +21,11 @@ export interface JournalEntry {
   transcript: string;
   summary: string;
   mood: Mood;
+  health?: {
+    steps?: number;
+    sleepHours?: number;
+    restingHeartRate?: number | null;
+  };
 }
 
 export default function Journal() {
@@ -31,6 +37,7 @@ export default function Journal() {
   const [aiSummary, setAiSummary] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   const [moodAutoSuggested, setMoodAutoSuggested] = useState(false);
+  const { snapshot: health } = useHealth();
 
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -90,6 +97,13 @@ export default function Journal() {
       transcript: transcript.trim() || "[audio entry — transcript not provided]",
       summary: aiSummary.trim() || generateSummary(transcript),
       mood,
+      health: health
+        ? {
+            steps: health.steps,
+            sleepHours: health.sleepHours,
+            restingHeartRate: health.restingHeartRate,
+          }
+        : undefined,
     };
     setEntries([entry, ...entries]);
     setTranscript("");
@@ -131,6 +145,17 @@ export default function Journal() {
           <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
             {pendingAudio ? "Audio captured · review and save" : "Speak freely — transcript appears live"}
           </div>
+          {health && (
+            <div className="flex flex-wrap gap-3 mt-3 font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
+              <Activity className="h-3 w-3 text-gold" />
+              <span className="flex items-center gap-1"><Footprints className="h-3 w-3 text-gold" /> {health.steps.toLocaleString()}</span>
+              <span className="flex items-center gap-1"><Moon className="h-3 w-3 text-gold" /> {health.sleepHours}h</span>
+              {health.restingHeartRate != null && (
+                <span className="flex items-center gap-1"><Heart className="h-3 w-3 text-gold" /> {health.restingHeartRate}</span>
+              )}
+              <span className="text-muted-foreground/60">· will attach to entry</span>
+            </div>
+          )}
         </div>
 
         <div className="mb-4">
@@ -265,6 +290,19 @@ export default function Journal() {
                 </div>
               </div>
               <p className="text-sm text-foreground/90 mb-3 whitespace-pre-wrap">{e.transcript}</p>
+              {e.health && (
+                <div className="flex flex-wrap gap-3 mb-3 font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
+                  {e.health.steps !== undefined && (
+                    <span className="flex items-center gap-1"><Footprints className="h-3 w-3 text-gold" /> {e.health.steps.toLocaleString()} steps</span>
+                  )}
+                  {e.health.sleepHours !== undefined && (
+                    <span className="flex items-center gap-1"><Moon className="h-3 w-3 text-gold" /> {e.health.sleepHours}h sleep</span>
+                  )}
+                  {e.health.restingHeartRate != null && (
+                    <span className="flex items-center gap-1"><Heart className="h-3 w-3 text-gold" /> {e.health.restingHeartRate} bpm</span>
+                  )}
+                </div>
+              )}
               <div className="bg-background/50 rounded-md p-3 border-l-2 border-gold">
                 <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-1">
                   Summary

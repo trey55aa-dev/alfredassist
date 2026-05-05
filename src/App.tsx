@@ -17,6 +17,7 @@ import Goals2026 from "./pages/Goals2026";
 import Agenda from "./pages/Agenda";
 import CustomLists from "./pages/CustomLists";
 import Auth from "./pages/Auth";
+import Health from "./pages/Health";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/goals-2026" element={<Goals2026 />} />
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/lists" element={<CustomLists />} />
+              <Route path="/health" element={<Health />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
