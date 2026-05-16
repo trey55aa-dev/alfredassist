@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { AgendaEvent } from "@/lib/agenda";
+import { AgendaEvent, EVENT_COLORS, EVENT_EMOJIS } from "@/lib/agenda";
 import { updateLocalEvent } from "@/lib/agendaStore";
+import { updateGoogleEvent } from "@/lib/googleCalendar";
 
 interface Props {
   event: AgendaEvent;
@@ -43,6 +44,12 @@ export function EditEventForm({ event, onClose }: Props) {
   const [allDay, setAllDay] = useState(!!event.allDay);
   const [location, setLocation] = useState(event.location ?? "");
   const [description, setDescription] = useState(event.description ?? "");
+  const [emoji, setEmoji] = useState<string | undefined>(event.emoji);
+  const initialColorHsl = (() => {
+    const m = event.calendarColor?.match(/hsl\(([^)]+)\)/);
+    return m ? m[1].trim() : EVENT_COLORS[0].hsl;
+  })();
+  const [colorHsl, setColorHsl] = useState<string>(initialColorHsl);
   const [submitting, setSubmitting] = useState(false);
 
   const error = useMemo(() => {
@@ -56,7 +63,7 @@ export function EditEventForm({ event, onClose }: Props) {
     return null;
   }, [title, date, start, end, allDay]);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (error) return;
     setSubmitting(true);
@@ -68,21 +75,37 @@ export function EditEventForm({ event, onClose }: Props) {
       ? combine(date, "23:59").toISOString()
       : combine(date, end).toISOString();
 
-    updateLocalEvent(event.id, {
+    const patch = {
       title: title.trim(),
       start: startISO,
       end: endISO,
       allDay,
       location: location.trim() || undefined,
       description: description.trim() || undefined,
-    });
+      emoji,
+      calendarColor: `hsl(${colorHsl})`,
+    };
 
-    toast({
-      title: "Engagement updated",
-      description: title.trim(),
-    });
-    setSubmitting(false);
-    onClose();
+    try {
+      if (event.source === "google") {
+        await updateGoogleEvent(event.id, patch);
+      } else {
+        updateLocalEvent(event.id, patch);
+      }
+      toast({
+        title: "Engagement updated",
+        description: title.trim(),
+      });
+      onClose();
+    } catch (err) {
+      toast({
+        title: "Update failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -202,6 +225,63 @@ export function EditEventForm({ event, onClose }: Props) {
           onChange={(ev) => setLocation(ev.target.value)}
           placeholder="The drawing room"
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+            Emoji <span className="text-muted-foreground/50 normal-case">(optional)</span>
+          </Label>
+          <div className="flex flex-wrap gap-1 rounded-md border border-border/60 bg-background/40 p-2 max-h-24 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setEmoji(undefined)}
+              className={`h-7 w-7 rounded text-[10px] font-mono uppercase transition-all ${
+                emoji === undefined
+                  ? "bg-gold/20 text-gold ring-1 ring-gold/40"
+                  : "text-muted-foreground hover:bg-muted/40"
+              }`}
+              title="None"
+            >
+              —
+            </button>
+            {EVENT_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setEmoji(e)}
+                className={`h-7 w-7 rounded text-base transition-all ${
+                  emoji === e
+                    ? "bg-gold/20 ring-1 ring-gold/40"
+                    : "hover:bg-muted/40"
+                }`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+            Color
+          </Label>
+          <div className="flex flex-wrap gap-1.5 rounded-md border border-border/60 bg-background/40 p-2">
+            {EVENT_COLORS.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => setColorHsl(c.hsl)}
+                className={`h-7 w-7 rounded-full transition-all ${
+                  colorHsl === c.hsl
+                    ? "ring-2 ring-offset-2 ring-offset-background ring-foreground/60 scale-110"
+                    : "hover:scale-110"
+                }`}
+                style={{ background: `hsl(${c.hsl})` }}
+                title={c.name}
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">

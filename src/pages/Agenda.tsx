@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Circle, Clock, MapPin, Pencil, Plug, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Circle,
+  Clock,
+  LayoutList,
+  MapPin,
+  Pencil,
+  Plug,
+  Trash2,
+} from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { QuickAddEvent } from "@/components/QuickAddEvent";
 import { EditEventForm } from "@/components/EditEventForm";
+import { DayTimeline } from "@/components/DayTimeline";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import {
   AgendaEvent,
   currentEvent,
@@ -19,26 +32,122 @@ import {
   removeLocalEvent,
   toggleEventCompleted,
 } from "@/lib/agendaStore";
+import {
+  deleteGoogleEvent,
+  GOOGLE_CONNECTED_CHANGED,
+  updateGoogleEvent,
+} from "@/lib/googleCalendar";
+import { runCarryOver } from "@/lib/carryOver";
+import { processForFollowUps } from "@/lib/followUps";
+import {
+  notifyCarryOver,
+  scheduleUpcomingReminders,
+} from "@/lib/notifications";
+import { RecoveryPanel } from "@/components/RecoveryPanel";
+import { NotificationToggle } from "@/components/NotificationToggle";
+import {
+  Habit,
+  HabitLog,
+  HABITS_KEY,
+  HABIT_LOGS_KEY,
+  SEED_HABITS,
+  habitsAtRisk,
+  toggleHabitForToday,
+} from "@/lib/habits";
 import { formatLongDate } from "@/lib/alfred";
+
+type ViewMode = "timeline" | "list";
 
 export default function Agenda() {
   const { toast } = useToast();
   const [events, setEvents] = useState<AgendaEvent[] | null>(null);
   const [now, setNow] = useState(new Date());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [view, setView] = useLocalStorage<ViewMode>(
+    "alfred.agenda.view",
+    "timeline",
+  );
+  const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
+  const [habitLogs, setHabitLogs] = useLocalStorage<HabitLog[]>(
+    HABIT_LOGS_KEY,
+    [],
+  );
+  const recoveries = useMemo(
+    () => habitsAtRisk(habits, habitLogs, now),
+    [habits, habitLogs, now],
+  );
 
   const refresh = useCallback(() => {
     getTodayEvents().then(setEvents);
   }, []);
 
+  // Day-rollover carry-over — runs once per local day, idempotent.
+  useEffect(() => {
+    let alive = true;
+    runCarryOver().then((result) => {
+      if (!alive) return;
+      if (result.carried.length > 0) {
+        toast({
+          title: `${result.carried.length} item${result.carried.length === 1 ? "" : "s"} carried over`,
+          description: "Pulled forward from previous days. Some are starting to pile up.",
+        });
+        notifyCarryOver(result.carried.length);
+        refresh();
+      }
+      if (result.failed.length > 0) {
+        toast({
+          title: `Could not carry ${result.failed.length} Google event${result.failed.length === 1 ? "" : "s"}`,
+          description: "They'll stay on their original day until you reschedule.",
+          variant: "destructive",
+        });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Schedule reminders for upcoming timed events.
+  useEffect(() => {
+    if (!events) return;
+    scheduleUpcomingReminders(events, now);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
+  // Auto-generate follow-up tasks for interview-shaped events.
+  useEffect(() => {
+    if (!events) return;
+    const result = processForFollowUps(events);
+    if (result.created.length > 0) {
+      toast({
+        title: `${result.created.length} follow-up${result.created.length === 1 ? "" : "s"} added`,
+        description: result.created
+          .slice(0, 3)
+          .map((e) => e.title)
+          .join(" · "),
+      });
+      refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
   useEffect(() => {
     refresh();
     const onChange = () => refresh();
+    const onFocus = () => refresh();
     window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
+    window.addEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
     window.addEventListener("storage", onChange);
+    window.addEventListener("focus", onFocus);
+    // Periodic Google poll (5 min). Local-only sessions skip the network in getTodayEvents.
+    const poll = setInterval(refresh, 5 * 60_000);
     return () => {
       window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
+      window.removeEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
       window.removeEventListener("storage", onChange);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(poll);
     };
   }, [refresh]);
 
@@ -56,12 +165,89 @@ export default function Agenda() {
   const loading = events === null;
   const completedCount = today.filter((e) => e.completed).length;
 
+  const handleToggle = async (id: string) => {
+    const ev = today.find((e) => e.id === id);
+    if (!ev) return;
+    if (ev.source === "google") {
+      const nextCompleted = !ev.completed;
+      // Optimistic UI
+      setEvents((prev) =>
+        prev
+          ? prev.map((e) => (e.id === id ? { ...e, completed: nextCompleted } : e))
+          : prev,
+      );
+      try {
+        await updateGoogleEvent(id, { completed: nextCompleted });
+        if (nextCompleted) {
+          toast({ title: "Marked complete", description: ev.title });
+        }
+      } catch (err) {
+        // Revert
+        setEvents((prev) =>
+          prev
+            ? prev.map((e) => (e.id === id ? { ...e, completed: ev.completed } : e))
+            : prev,
+        );
+        toast({
+          title: "Could not update Google event",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+    const updated = toggleEventCompleted(id);
+    if (updated?.completed) {
+      toast({ title: "Marked complete", description: updated.title });
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    const ev = today.find((e) => e.id === id);
+    if (!ev) return;
+    if (ev.source === "google") {
+      // Optimistic remove
+      setEvents((prev) => (prev ? prev.filter((e) => e.id !== id) : prev));
+      try {
+        await deleteGoogleEvent(id);
+        toast({ title: "Event removed", description: ev.title });
+      } catch (err) {
+        // Re-add on failure
+        refresh();
+        toast({
+          title: "Could not delete Google event",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+    removeLocalEvent(id);
+    toast({ title: "Event removed", description: ev.title });
+  };
+
+  const handleHabitMarkDone = (habitId: string) => {
+    const habit = habits.find((h) => h.id === habitId);
+    if (!habit) return;
+    const result = toggleHabitForToday(habit, habitLogs, now);
+    setHabitLogs(result.logs);
+    if (result.nowComplete) {
+      toast({ title: "Back on track", description: habit.title });
+    }
+  };
+
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow={formatLongDate(now)}
         title="Agenda"
         description="Today's engagements at a glance — Alfred will plan focus blocks around them."
+        actions={
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <NotificationToggle />
+            <GoogleCalendarConnect onSynced={refresh} />
+          </div>
+        }
       />
 
       {/* Hero — current / next */}
@@ -72,8 +258,11 @@ export default function Agenda() {
               <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gold mb-1">
                 {ongoing ? "Happening now" : "Up next"}
               </div>
-              <h2 className="font-display text-3xl text-foreground line-clamp-2">
-                {(ongoing ?? upcoming)!.title}
+              <h2 className="font-display text-3xl text-foreground line-clamp-2 flex items-center gap-3">
+                {(ongoing ?? upcoming)!.emoji && (
+                  <span aria-hidden>{(ongoing ?? upcoming)!.emoji}</span>
+                )}
+                <span>{(ongoing ?? upcoming)!.title}</span>
               </h2>
               <div className="mt-2 flex items-center gap-4 text-xs font-mono text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -92,18 +281,64 @@ export default function Agenda() {
         </Card>
       )}
 
+      {/* Habits at risk — escalating priority */}
+      {recoveries.length > 0 && (
+        <RecoveryPanel
+          recoveries={recoveries}
+          onMarkDone={handleHabitMarkDone}
+          compact
+          limit={5}
+        />
+      )}
+
       {/* Quick add */}
       <QuickAddEvent />
 
-      {/* Day timeline */}
+      {/* Day view */}
       <Card className="p-6 bg-gradient-card border-border">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="font-display text-2xl">Today</h3>
-          <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
-            {loading
-              ? "Loading"
-              : `${completedCount}/${today.length} complete`}
-          </span>
+        <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
+          <div>
+            <h3 className="font-display text-2xl">Today</h3>
+            <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+              {loading
+                ? "Loading"
+                : `${completedCount}/${today.length} complete`}
+            </span>
+          </div>
+          <div
+            className="inline-flex rounded-md border border-border/60 bg-background/40 p-0.5"
+            role="tablist"
+            aria-label="View mode"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "timeline"}
+              onClick={() => setView("timeline")}
+              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 font-mono text-[10px] tracking-[0.2em] uppercase transition-all ${
+                view === "timeline"
+                  ? "bg-gold/20 text-gold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Timeline
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "list"}
+              onClick={() => setView("list")}
+              className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 font-mono text-[10px] tracking-[0.2em] uppercase transition-all ${
+                view === "list"
+                  ? "bg-gold/20 text-gold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              List
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -114,12 +349,20 @@ export default function Agenda() {
           </div>
         ) : today.length === 0 ? (
           <EmptyState />
+        ) : view === "timeline" ? (
+          <DayTimeline
+            events={today}
+            now={now}
+            onToggleComplete={handleToggle}
+            onEdit={(id) => setEditingId(id)}
+            onRemove={handleRemove}
+          />
         ) : (
           <ol className="relative border-l border-border/60 pl-5 space-y-4">
             {today.map((e) => {
               const isNow = ongoing?.id === e.id;
               const isEditing = editingId === e.id;
-              const isManual = e.source === "manual";
+              const isManual = e.source === "manual" || e.source === "google";
               return (
                 <li key={e.id} className="relative">
                   <span
@@ -152,15 +395,7 @@ export default function Agenda() {
                         <div className="min-w-0 flex items-start gap-3">
                           <button
                             type="button"
-                            onClick={() => {
-                              const updated = toggleEventCompleted(e.id);
-                              if (updated?.completed) {
-                                toast({
-                                  title: "Marked complete",
-                                  description: e.title,
-                                });
-                              }
-                            }}
+                            onClick={() => handleToggle(e.id)}
                             className="mt-0.5 text-muted-foreground/60 hover:text-gold transition-colors"
                             aria-label={
                               e.completed
@@ -176,13 +411,14 @@ export default function Agenda() {
                           </button>
                           <div className="min-w-0">
                             <div
-                              className={`font-display text-lg line-clamp-1 ${
+                              className={`font-display text-lg line-clamp-1 flex items-center gap-2 ${
                                 e.completed
                                   ? "text-muted-foreground line-through"
                                   : "text-foreground"
                               }`}
                             >
-                              {e.title}
+                              {e.emoji && <span aria-hidden>{e.emoji}</span>}
+                              <span>{e.title}</span>
                             </div>
                             {e.calendarName && (
                               <div className="mt-0.5 font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/70">
@@ -208,13 +444,7 @@ export default function Agenda() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  removeLocalEvent(e.id);
-                                  toast({
-                                    title: "Event removed",
-                                    description: e.title,
-                                  });
-                                }}
+                                onClick={() => handleRemove(e.id)}
                                 className="text-muted-foreground/60 hover:text-destructive transition-colors p-1"
                                 aria-label={`Remove ${e.title}`}
                                 title="Remove event"
@@ -244,6 +474,22 @@ export default function Agenda() {
               );
             })}
           </ol>
+        )}
+
+        {/* Inline edit panel for timeline view */}
+        {view === "timeline" && editingId && (
+          (() => {
+            const ev = today.find((e) => e.id === editingId);
+            if (!ev) return null;
+            return (
+              <div className="mt-4">
+                <EditEventForm
+                  event={ev}
+                  onClose={() => setEditingId(null)}
+                />
+              </div>
+            );
+          })()
         )}
       </Card>
     </div>

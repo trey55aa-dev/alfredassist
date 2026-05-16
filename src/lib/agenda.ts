@@ -17,9 +17,37 @@ export interface AgendaEvent {
   /** Optional hex/HSL accent for the calendar it came from. */
   calendarColor?: string;
   calendarName?: string;
+  /** Optional single emoji for visual scanning in the timeline view. */
+  emoji?: string;
   /** Marked complete by the user — drives the ambient pattern intensity. */
   completed?: boolean;
+  /** ISO date (YYYY-MM-DD) the event was originally scheduled for, if it has been carried over. */
+  originalDate?: string;
+  /** How many times this event has been carried forward (0 if never). */
+  carryCount?: number;
+  /** Estimated minutes to complete (overrides scheduled duration as the "how long will this take" guess). */
+  estimatedMinutes?: number;
+  /** Accumulated minutes actually spent on this task across timer sessions. */
+  actualMinutes?: number;
 }
+
+/** Curated palette + emojis for the Tiimo-style timeline. */
+export const EVENT_COLORS: { name: string; hsl: string }[] = [
+  { name: "Gold", hsl: "45 80% 55%" },
+  { name: "Teal", hsl: "175 55% 45%" },
+  { name: "Rose", hsl: "350 70% 60%" },
+  { name: "Sky", hsl: "200 70% 60%" },
+  { name: "Sage", hsl: "150 40% 55%" },
+  { name: "Amber", hsl: "30 85% 60%" },
+  { name: "Violet", hsl: "270 55% 65%" },
+  { name: "Slate", hsl: "220 15% 55%" },
+];
+
+export const EVENT_EMOJIS = [
+  "🎯", "💪", "📚", "🧠", "💼", "☕", "🍳", "🏃",
+  "🧘", "🎨", "🛠️", "💰", "📞", "✈️", "❤️", "🌿",
+  "📝", "🔥", "🎵", "💻",
+];
 
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
@@ -85,11 +113,38 @@ export function currentEvent(events: AgendaEvent[], now = new Date()): AgendaEve
 }
 
 /**
- * Today's events. Merges any locally-stored events (created via Quick Add)
- * with remote calendars. Once Google Calendar OAuth is wired, push the
- * fetched events into this list.
+ * Today's events. Merges locally-stored manual events with Google Calendar
+ * events when connected. Google failures are swallowed (logged) so a flaky
+ * network never blocks the local timeline.
  */
-export async function getTodayEvents(): Promise<AgendaEvent[]> {
+export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
   const { loadLocalEvents } = await import("./agendaStore");
-  return loadLocalEvents();
+  const local = loadLocalEvents();
+
+  const { isGoogleConnected, listGoogleEventsForDay } = await import(
+    "./googleCalendar"
+  );
+  if (!isGoogleConnected()) return local;
+
+  try {
+    const remote = await listGoogleEventsForDay(day);
+    // Local events with source !== "google" win on id collision (shouldn't happen
+    // since Google ids are prefixed "gcal:"). Otherwise we trust Google's copy
+    // for `gcal:*` ids and the local cache for everything else.
+    const byId = new Map<string, AgendaEvent>();
+    for (const e of remote) byId.set(e.id, e);
+    for (const e of local) {
+      if (e.source === "google" && byId.has(e.id)) {
+        // Preserve any local-only completed flag we cached.
+        const remoteCopy = byId.get(e.id)!;
+        byId.set(e.id, { ...remoteCopy, completed: e.completed ?? remoteCopy.completed });
+      } else {
+        byId.set(e.id, e);
+      }
+    }
+    return Array.from(byId.values());
+  } catch (err) {
+    console.warn("[alfred] Google Calendar fetch failed:", err);
+    return local;
+  }
 }

@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AmbientPattern } from "@/components/AmbientPattern";
+import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -38,11 +39,13 @@ export default function AppLayout() {
           </header>
 
           <main className="flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 fade-in">
+            <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 pb-32 fade-in">
               <Outlet />
             </div>
           </main>
         </div>
+
+        <ActiveTimerBar />
       </div>
     </SidebarProvider>
   );

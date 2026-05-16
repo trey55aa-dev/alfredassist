@@ -31,6 +31,16 @@ export interface GoalSubStep {
   reviewNote?: string;
   /** Ordered log of every status transition. */
   statusHistory?: StatusEvent[];
+  /** Quantitative milestone target (e.g. 30 pushups straight). */
+  targetMetric?: number;
+  /** Current quantitative progress toward `targetMetric`. */
+  currentMetric?: number;
+  /** Unit label, e.g. "reps", "miles", "wpm", "books". */
+  metricUnit?: string;
+  /** Free-form structured notes — muscles to train, key principles, anything. */
+  notes?: string;
+  /** Sub-step-level tags (cross-cuts the goal's tags). */
+  tags?: string[];
 }
 
 /** Append a status transition if it differs from the most recent one. */
@@ -64,6 +74,56 @@ export interface Goal {
   planSummary?: string;
   /** ISO date the plan officially kicked off (defaults to plan generation time). */
   planStartDate?: string;
+  /** Free-form tags. Cross-cuts categories ("morning", "outdoor", "high-energy"). */
+  tags?: string[];
+}
+
+/* ---------- Pace / position helpers ---------- */
+
+export type PaceStatus = "ahead" | "on_track" | "behind" | "no_data";
+
+/**
+ * Compare a sub-step's quantitative progress against the share of time elapsed.
+ * - "ahead"     → current/target > elapsed/total + 10%
+ * - "on_track"  → within ±10%
+ * - "behind"    → current/target < elapsed/total - 10%
+ *
+ * Useful for the "where do I stand?" badge — independent of the binary done/at_risk state.
+ */
+export function paceStatus(
+  step: GoalSubStep,
+  elapsedFraction: number,
+): PaceStatus {
+  if (step.targetMetric == null || step.targetMetric <= 0) return "no_data";
+  if (step.currentMetric == null) return "no_data";
+  const progress = step.currentMetric / step.targetMetric;
+  const expected = Math.min(1, Math.max(0, elapsedFraction));
+  const diff = progress - expected;
+  if (diff > 0.1) return "ahead";
+  if (diff < -0.1) return "behind";
+  return "on_track";
+}
+
+export const PACE_META: Record<
+  PaceStatus,
+  { label: string; tone: string }
+> = {
+  ahead: { label: "Ahead of pace", tone: "text-gold" },
+  on_track: { label: "On track", tone: "text-teal" },
+  behind: { label: "Falling behind", tone: "text-destructive" },
+  no_data: { label: "No metric set", tone: "text-muted-foreground" },
+};
+
+/** All unique tags across the goal list — sorted for chip display. */
+export function collectTags(goals: Goal[]): string[] {
+  const set = new Set<string>();
+  for (const g of goals) {
+    for (const t of g.tags ?? []) set.add(t);
+    for (const s of g.subSteps ?? []) {
+      for (const t of s.tags ?? []) set.add(t);
+    }
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
 }
 
 export const CATEGORIES: GoalCategory[] = ["Body", "Career", "Money", "Skills", "Life"];

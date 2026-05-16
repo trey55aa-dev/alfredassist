@@ -48,13 +48,16 @@ import {
   GoalQuarter,
   GoalSubStep,
   GoalTimeframe,
+  PACE_META,
   QUARTERS,
   QUARTER_RANGES,
   SEED_GOALS,
   SubStepStatus,
   TIMEFRAMES,
   appendStatusEvent,
+  collectTags,
   daysUntil,
+  paceStatus,
   progressPct,
 } from "@/lib/goals";
 import { buildSchedule, STATUS_META } from "@/lib/planSchedule";
@@ -80,6 +83,7 @@ export default function Goals2026() {
   const [goals, setGoals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [view, setView] = useState<"all" | "quarters" | "timeframe">("all");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
 
   // Migrate older goals missing new fields
   const safeGoals = useMemo(
@@ -93,9 +97,20 @@ export default function Goals2026() {
     [goals]
   );
 
-  const totalDone = safeGoals.filter((g) => g.done).length;
-  const overallPct = safeGoals.length
-    ? Math.round((totalDone / safeGoals.length) * 100)
+  const allTags = useMemo(() => collectTags(safeGoals), [safeGoals]);
+  const filteredGoals = useMemo(() => {
+    if (activeTags.length === 0) return safeGoals;
+    return safeGoals.filter((g) => {
+      const goalTags = new Set(g.tags ?? []);
+      const subTags = (g.subSteps ?? []).flatMap((s) => s.tags ?? []);
+      const all = new Set([...goalTags, ...subTags]);
+      return activeTags.every((t) => all.has(t));
+    });
+  }, [safeGoals, activeTags]);
+
+  const totalDone = filteredGoals.filter((g) => g.done).length;
+  const overallPct = filteredGoals.length
+    ? Math.round((totalDone / filteredGoals.length) * 100)
     : 0;
 
   const update = (id: string, patch: Partial<Goal>) =>
@@ -140,7 +155,7 @@ export default function Goals2026() {
           <div>
             <h3 className="font-display text-2xl">Campaign Progress</h3>
             <p className="font-mono text-[11px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
-              {totalDone} of {safeGoals.length} conquered
+              {totalDone} of {filteredGoals.length} conquered{activeTags.length > 0 ? " (filtered)" : ""}
             </p>
           </div>
           <div className="text-right">
@@ -155,6 +170,49 @@ export default function Goals2026() {
 
       {/* Add new goal */}
       <AddGoalForm onAdd={addGoal} />
+
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <div className="rounded-md border border-border/60 bg-background/30 p-3">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+              Filter by tag
+            </span>
+            {activeTags.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTags([])}
+                className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-gold"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {allTags.map((t) => {
+              const on = activeTags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    setActiveTags((prev) =>
+                      on ? prev.filter((x) => x !== t) : [...prev, t],
+                    )
+                  }
+                  className={`px-2 py-0.5 rounded-full border text-[10px] font-mono uppercase tracking-[0.15em] transition-all ${
+                    on
+                      ? "bg-gold/20 text-gold border-gold/40"
+                      : "bg-muted/30 text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  #{t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* View tabs */}
       <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
@@ -173,7 +231,7 @@ export default function Goals2026() {
         <TabsContent value="all" className="mt-6">
           <div className="grid lg:grid-cols-2 gap-6">
             {CATEGORIES.map((cat) => {
-              const items = safeGoals.filter((g) => g.category === cat);
+              const items = filteredGoals.filter((g) => g.category === cat);
               if (items.length === 0) return null;
               return (
                 <GroupCard
@@ -195,7 +253,7 @@ export default function Goals2026() {
         <TabsContent value="quarters" className="mt-6">
           <div className="grid lg:grid-cols-2 gap-6">
             {QUARTERS.map((q) => {
-              const items = safeGoals.filter((g) => g.quarter === q);
+              const items = filteredGoals.filter((g) => g.quarter === q);
               return (
                 <QuarterCard
                   key={q}
@@ -209,10 +267,10 @@ export default function Goals2026() {
               );
             })}
             {/* Unassigned */}
-            {safeGoals.some((g) => !g.quarter) && (
+            {filteredGoals.some((g) => !g.quarter) && (
               <QuarterCard
                 quarter={null}
-                items={safeGoals.filter((g) => !g.quarter)}
+                items={filteredGoals.filter((g) => !g.quarter)}
                 brain={brain}
                 onToggle={toggle}
                 onUpdate={update}
@@ -225,7 +283,7 @@ export default function Goals2026() {
         <TabsContent value="timeframe" className="mt-6">
           <div className="grid lg:grid-cols-2 gap-6">
             {TIMEFRAMES.map((tf) => {
-              const items = safeGoals.filter((g) => g.timeframe === tf);
+              const items = filteredGoals.filter((g) => g.timeframe === tf);
               if (items.length === 0) return null;
               return (
                 <GroupCard
@@ -544,6 +602,11 @@ function GoalRow({
                   {linked.length}
                 </Badge>
               )}
+              {(goal.tags ?? []).map((t) => (
+                <Badge key={t} variant="gold">
+                  #{t}
+                </Badge>
+              ))}
             </div>
             {measurable && (
               <div className="mt-2 flex items-center gap-2">
@@ -619,6 +682,11 @@ function GoalRow({
                 className="bg-background/40 border-border text-xs min-h-[60px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
               />
 
+              <TagsField
+                value={goal.tags ?? []}
+                onChange={(next) => onChange({ tags: next })}
+              />
+
               <AIBreakdown goal={goal} onChange={onChange} />
               {linked.length > 0 && (
                 <div className="space-y-1">
@@ -655,6 +723,67 @@ function GoalRow({
         </button>
       </div>
     </li>
+  );
+}
+
+function TagsField({
+  value,
+  onChange,
+  label = "Tags",
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  label?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const tags = value ?? [];
+  const add = () => {
+    const t = draft.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!t) return;
+    if (tags.includes(t)) {
+      setDraft("");
+      return;
+    }
+    onChange([...tags, t]);
+    setDraft("");
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {tags.map((t) => (
+          <span
+            key={t}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-gold/30 bg-gold/10 text-gold text-[10px] font-mono uppercase tracking-[0.15em]"
+          >
+            #{t}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((x) => x !== t))}
+              className="text-gold/70 hover:text-destructive"
+              aria-label={`Remove ${t}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          onBlur={add}
+          placeholder="add tag…"
+          className="h-6 px-2 text-[11px] bg-background/50 border-border w-28"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -1084,6 +1213,10 @@ function PlanList({
     <ol className="space-y-1.5">
       {schedule.steps.map(({ step: s, index: i, status, slip, startWeek, duration }) => {
         const meta = STATUS_META[status];
+        const elapsedFraction = Math.min(
+          1,
+          Math.max(0, (schedule.elapsedWeeks - startWeek) / Math.max(0.5, duration)),
+        );
         return (
           <li
             key={s.id}
@@ -1131,6 +1264,7 @@ function PlanList({
               duration={duration}
               slip={slip}
               status={status}
+              elapsedFraction={elapsedFraction}
               onPatch={(p) => patchStep(s.id, p)}
               onStatusChange={(next) => setStepStatus(s.id, next)}
             />
@@ -1149,6 +1283,7 @@ function StepEditor({
   duration,
   slip,
   status,
+  elapsedFraction,
   onPatch,
   onStatusChange,
 }: {
@@ -1157,54 +1292,161 @@ function StepEditor({
   duration: number;
   slip: number;
   status: SubStepStatus;
+  /** 0..1 share of this step's window already elapsed — drives pace badge. */
+  elapsedFraction: number;
   onPatch: (patch: Partial<GoalSubStep>) => void;
   onStatusChange: (next: SubStepStatus) => void;
 }) {
+  const pace = paceStatus(step, elapsedFraction);
+  const meta = PACE_META[pace];
+
   return (
-    <div className="grid grid-cols-2 gap-1.5 pl-6">
-      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="font-mono uppercase tracking-wider">Start W</span>
+    <div className="space-y-2 pl-6">
+      <div className="grid grid-cols-2 gap-1.5">
+        <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="font-mono uppercase tracking-wider">Start W</span>
+          <Input
+            type="number"
+            min={0}
+            step={0.5}
+            value={step.startWeek ?? Math.round(startWeek * 10) / 10}
+            onChange={(e) => {
+              const v = e.target.value;
+              onPatch({ startWeek: v === "" ? undefined : Number(v) });
+            }}
+            className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="font-mono uppercase tracking-wider">Dur W</span>
+          <Input
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={step.durationWeeks ?? duration}
+            onChange={(e) =>
+              onPatch({ durationWeeks: Number(e.target.value) || 1 })
+            }
+            className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+          />
+        </label>
+        <select
+          value={status}
+          onChange={(e) => onStatusChange(e.target.value as SubStepStatus)}
+          className="bg-background/50 border border-border rounded h-6 px-1 text-[10px] font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-1 focus:ring-gold/40"
+        >
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {STATUS_META[o].label}
+            </option>
+          ))}
+        </select>
         <Input
-          type="number"
-          min={0}
-          step={0.5}
-          value={step.startWeek ?? Math.round(startWeek * 10) / 10}
-          onChange={(e) => {
-            const v = e.target.value;
-            onPatch({ startWeek: v === "" ? undefined : Number(v) });
-          }}
+          value={step.reviewNote ?? ""}
+          onChange={(e) => onPatch({ reviewNote: e.target.value })}
+          placeholder={slip > 0 ? `Why ${slip.toFixed(1)}w late?` : "Review note"}
           className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
         />
-      </label>
-      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="font-mono uppercase tracking-wider">Dur W</span>
-        <Input
-          type="number"
-          min={0.5}
-          step={0.5}
-          value={step.durationWeeks ?? duration}
-          onChange={(e) =>
-            onPatch({ durationWeeks: Number(e.target.value) || 1 })
-          }
-          className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
-        />
-      </label>
-      <select
-        value={status}
-        onChange={(e) => onStatusChange(e.target.value as SubStepStatus)}
-        className="bg-background/50 border border-border rounded h-6 px-1 text-[10px] font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-1 focus:ring-gold/40"
-      >
-        {STATUS_OPTIONS.map((o) => (
-          <option key={o} value={o}>
-            {STATUS_META[o].label}
-          </option>
-        ))}
-      </select>
-      <Input
-        value={step.reviewNote ?? ""}
-        onChange={(e) => onPatch({ reviewNote: e.target.value })}
-        placeholder={slip > 0 ? `Why ${slip.toFixed(1)}w late?` : "Review note"}
-        className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+      </div>
+
+      {/* Metric tracker — "where do I stand" */}
+      <div className="rounded-md border border-border/40 bg-background/30 p-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground">
+            Milestone
+          </span>
+          <span
+            className={`font-mono text-[9px] tracking-[0.2em] uppercase ${meta.tone}`}
+          >
+            {meta.label}
+            {pace !== "no_data" &&
+              step.targetMetric != null &&
+              step.currentMetric != null && (
+                <>
+                  {" "}
+                  · {step.currentMetric}/{step.targetMetric}
+                  {step.metricUnit ? ` ${step.metricUnit}` : ""}
+                </>
+              )}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <label className="text-[10px] text-muted-foreground">
+            <span className="font-mono uppercase tracking-wider block mb-0.5">
+              Current
+            </span>
+            <Input
+              type="number"
+              value={step.currentMetric ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onPatch({
+                  currentMetric: v === "" ? undefined : Number(v),
+                });
+              }}
+              placeholder="0"
+              className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+            />
+          </label>
+          <label className="text-[10px] text-muted-foreground">
+            <span className="font-mono uppercase tracking-wider block mb-0.5">
+              Target
+            </span>
+            <Input
+              type="number"
+              value={step.targetMetric ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                onPatch({
+                  targetMetric: v === "" ? undefined : Number(v),
+                });
+              }}
+              placeholder="100"
+              className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+            />
+          </label>
+          <label className="text-[10px] text-muted-foreground">
+            <span className="font-mono uppercase tracking-wider block mb-0.5">
+              Unit
+            </span>
+            <Input
+              value={step.metricUnit ?? ""}
+              onChange={(e) => onPatch({ metricUnit: e.target.value })}
+              placeholder="reps"
+              className="h-6 px-1.5 text-[11px] bg-background/50 border-border"
+            />
+          </label>
+        </div>
+        {step.targetMetric != null && step.targetMetric > 0 && (
+          <div className="h-1 bg-muted/40 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-700 ${
+                pace === "ahead"
+                  ? "bg-gold"
+                  : pace === "behind"
+                    ? "bg-destructive"
+                    : "bg-teal"
+              }`}
+              style={{
+                width: `${Math.min(100, ((step.currentMetric ?? 0) / step.targetMetric) * 100)}%`,
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Free-form notes — muscles to train, key principles, anything */}
+      <Textarea
+        value={step.notes ?? ""}
+        onChange={(e) => onPatch({ notes: e.target.value })}
+        placeholder="Muscles to train, principles, references…"
+        className="bg-background/40 border-border text-[11px] min-h-[48px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
+      />
+
+      <TagsField
+        value={step.tags ?? []}
+        onChange={(next) => onPatch({ tags: next })}
+        label="Sub-step tags"
       />
     </div>
   );

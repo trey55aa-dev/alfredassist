@@ -7,8 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { AgendaEvent } from "@/lib/agenda";
+import { AgendaEvent, EVENT_COLORS, EVENT_EMOJIS } from "@/lib/agenda";
 import { addLocalEvent } from "@/lib/agendaStore";
+import {
+  createGoogleEvent,
+  isGoogleConnected,
+  GOOGLE_CONNECTED_CHANGED,
+} from "@/lib/googleCalendar";
 import { todayKey } from "@/lib/alfred";
 
 interface Props {
@@ -52,7 +57,17 @@ export function QuickAddEvent({
   const [allDay, setAllDay] = useState(false);
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
+  const [emoji, setEmoji] = useState<string | undefined>(undefined);
+  const [colorHsl, setColorHsl] = useState<string>(EVENT_COLORS[0].hsl);
   const [submitting, setSubmitting] = useState(false);
+  const [gConnected, setGConnected] = useState(() => isGoogleConnected());
+  const [pushToGoogle, setPushToGoogle] = useState(true);
+
+  useEffect(() => {
+    const sync = () => setGConnected(isGoogleConnected());
+    window.addEventListener(GOOGLE_CONNECTED_CHANGED, sync);
+    return () => window.removeEventListener(GOOGLE_CONNECTED_CHANGED, sync);
+  }, []);
 
   // When the parent passes new pre-fill props (e.g. clicking a slot), sync them.
   useEffect(() => {
@@ -83,17 +98,14 @@ export function QuickAddEvent({
     setAllDay(false);
     setLocation("");
     setDescription("");
+    setEmoji(undefined);
+    setColorHsl(EVENT_COLORS[0].hsl);
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (error) return;
     setSubmitting(true);
-
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     let startISO: string;
     let endISO: string;
@@ -107,30 +119,50 @@ export function QuickAddEvent({
       endISO = combine(date, end).toISOString();
     }
 
-    const event: AgendaEvent = {
-      id,
+    const draft: Omit<AgendaEvent, "id" | "source"> = {
       title: title.trim(),
       start: startISO,
       end: endISO,
       allDay,
       location: location.trim() || undefined,
       description: description.trim() || undefined,
-      source: "manual",
-      calendarName: "Local",
-      calendarColor: "hsl(var(--primary))",
+      calendarName: gConnected && pushToGoogle ? "Google Calendar" : "Local",
+      calendarColor: `hsl(${colorHsl})`,
+      emoji,
     };
 
-    addLocalEvent(event);
-    toast({
-      title: "Event added",
-      description: allDay
-        ? `${event.title} · all day`
-        : `${event.title} · ${start}–${end}`,
-    });
-    onCreated?.(event);
-    reset();
-    setOpen(false);
-    setSubmitting(false);
+    try {
+      let event: AgendaEvent;
+      if (gConnected && pushToGoogle) {
+        const created = await createGoogleEvent(draft);
+        // Re-apply Alfred-side cosmetic fields the API doesn't echo (color picked locally).
+        event = { ...created, calendarColor: draft.calendarColor };
+      } else {
+        const id =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        event = { ...draft, id, source: "manual" };
+        addLocalEvent(event);
+      }
+      toast({
+        title: gConnected && pushToGoogle ? "Added to Google Calendar" : "Event added",
+        description: allDay
+          ? `${event.title} · all day`
+          : `${event.title} · ${start}–${end}`,
+      });
+      onCreated?.(event);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      toast({
+        title: "Could not add event",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!open) {
@@ -154,7 +186,11 @@ export function QuickAddEvent({
           <div>
             <h3 className="font-display text-xl">Add to the diary</h3>
             <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
-              Saves locally · syncs to Google when connected
+              {gConnected
+                ? pushToGoogle
+                  ? "Will save to Google Calendar"
+                  : "Will save locally (Google off for this event)"
+                : "Saves locally · connect Google to sync"}
             </p>
           </div>
           <button
@@ -253,6 +289,66 @@ export function QuickAddEvent({
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Emoji <span className="text-muted-foreground/50 normal-case">(optional)</span>
+            </Label>
+            <div className="flex flex-wrap gap-1 rounded-md border border-border/60 bg-background/40 p-2 max-h-24 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => setEmoji(undefined)}
+                className={`h-7 w-7 rounded text-[10px] font-mono uppercase transition-all ${
+                  emoji === undefined
+                    ? "bg-gold/20 text-gold ring-1 ring-gold/40"
+                    : "text-muted-foreground hover:bg-muted/40"
+                }`}
+                aria-label="No emoji"
+                title="None"
+              >
+                —
+              </button>
+              {EVENT_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setEmoji(e)}
+                  className={`h-7 w-7 rounded text-base transition-all ${
+                    emoji === e
+                      ? "bg-gold/20 ring-1 ring-gold/40"
+                      : "hover:bg-muted/40"
+                  }`}
+                  aria-label={`Emoji ${e}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Color
+            </Label>
+            <div className="flex flex-wrap gap-1.5 rounded-md border border-border/60 bg-background/40 p-2">
+              {EVENT_COLORS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => setColorHsl(c.hsl)}
+                  className={`h-7 w-7 rounded-full transition-all ${
+                    colorHsl === c.hsl
+                      ? "ring-2 ring-offset-2 ring-offset-background ring-foreground/60 scale-110"
+                      : "hover:scale-110"
+                  }`}
+                  style={{ background: `hsl(${c.hsl})` }}
+                  title={c.name}
+                  aria-label={c.name}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="qa-desc" className="text-xs uppercase tracking-wider text-muted-foreground">
             Notes <span className="text-muted-foreground/50 normal-case">(optional)</span>
@@ -265,6 +361,15 @@ export function QuickAddEvent({
             rows={2}
           />
         </div>
+
+        {gConnected && (
+          <label className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/40 px-3 py-2 text-xs">
+            <span className="font-mono uppercase tracking-wider text-muted-foreground">
+              Save to Google Calendar
+            </span>
+            <Switch checked={pushToGoogle} onCheckedChange={setPushToGoogle} />
+          </label>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 text-xs text-destructive">
