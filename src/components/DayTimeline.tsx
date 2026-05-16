@@ -466,7 +466,9 @@ export function DayTimeline({
                       </div>
                     </div>
 
-                    {(p.event.source === "manual" || p.event.source === "google") && (
+                    {(p.event.source === "manual" ||
+                      p.event.source === "google" ||
+                      p.event.source === "outlook") && (
                       <div className="mt-1 flex items-center gap-2 border-t border-border/40 pt-2">
                         <button
                           type="button"

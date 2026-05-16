@@ -37,6 +37,12 @@ import {
   GOOGLE_CONNECTED_CHANGED,
   updateGoogleEvent,
 } from "@/lib/googleCalendar";
+import {
+  deleteOutlookEvent,
+  OUTLOOK_CONNECTED_CHANGED,
+  updateOutlookEvent,
+} from "@/lib/outlookCalendar";
+import { OutlookCalendarConnect } from "@/components/OutlookCalendarConnect";
 import { runCarryOver } from "@/lib/carryOver";
 import { processForFollowUps } from "@/lib/followUps";
 import {
@@ -96,7 +102,7 @@ export default function Agenda() {
       }
       if (result.failed.length > 0) {
         toast({
-          title: `Could not carry ${result.failed.length} Google event${result.failed.length === 1 ? "" : "s"}`,
+          title: `Could not carry ${result.failed.length} calendar event${result.failed.length === 1 ? "" : "s"}`,
           description: "They'll stay on their original day until you reschedule.",
           variant: "destructive",
         });
@@ -138,13 +144,15 @@ export default function Agenda() {
     const onFocus = () => refresh();
     window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
     window.addEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
+    window.addEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
     window.addEventListener("storage", onChange);
     window.addEventListener("focus", onFocus);
-    // Periodic Google poll (5 min). Local-only sessions skip the network in getTodayEvents.
+    // Periodic poll (5 min). Local-only sessions skip the network in getTodayEvents.
     const poll = setInterval(refresh, 5 * 60_000);
     return () => {
       window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
       window.removeEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
+      window.removeEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
       window.removeEventListener("storage", onChange);
       window.removeEventListener("focus", onFocus);
       clearInterval(poll);
@@ -168,7 +176,11 @@ export default function Agenda() {
   const handleToggle = async (id: string) => {
     const ev = today.find((e) => e.id === id);
     if (!ev) return;
-    if (ev.source === "google") {
+    const isRemote = ev.source === "google" || ev.source === "outlook";
+    if (isRemote) {
+      const provider = ev.source === "google" ? "Google" : "Outlook";
+      const remoteUpdate =
+        ev.source === "google" ? updateGoogleEvent : updateOutlookEvent;
       const nextCompleted = !ev.completed;
       // Optimistic UI
       setEvents((prev) =>
@@ -177,7 +189,7 @@ export default function Agenda() {
           : prev,
       );
       try {
-        await updateGoogleEvent(id, { completed: nextCompleted });
+        await remoteUpdate(id, { completed: nextCompleted });
         if (nextCompleted) {
           toast({ title: "Marked complete", description: ev.title });
         }
@@ -189,7 +201,7 @@ export default function Agenda() {
             : prev,
         );
         toast({
-          title: "Could not update Google event",
+          title: `Could not update ${provider} event`,
           description: err instanceof Error ? err.message : String(err),
           variant: "destructive",
         });
@@ -205,17 +217,21 @@ export default function Agenda() {
   const handleRemove = async (id: string) => {
     const ev = today.find((e) => e.id === id);
     if (!ev) return;
-    if (ev.source === "google") {
+    const isRemote = ev.source === "google" || ev.source === "outlook";
+    if (isRemote) {
+      const provider = ev.source === "google" ? "Google" : "Outlook";
+      const remoteDelete =
+        ev.source === "google" ? deleteGoogleEvent : deleteOutlookEvent;
       // Optimistic remove
       setEvents((prev) => (prev ? prev.filter((e) => e.id !== id) : prev));
       try {
-        await deleteGoogleEvent(id);
+        await remoteDelete(id);
         toast({ title: "Event removed", description: ev.title });
       } catch (err) {
-        // Re-add on failure
+        // Re-fetch on failure
         refresh();
         toast({
-          title: "Could not delete Google event",
+          title: `Could not delete ${provider} event`,
           description: err instanceof Error ? err.message : String(err),
           variant: "destructive",
         });
@@ -246,6 +262,7 @@ export default function Agenda() {
           <div className="flex items-center gap-3 flex-wrap justify-end">
             <NotificationToggle />
             <GoogleCalendarConnect onSynced={refresh} />
+            <OutlookCalendarConnect onSynced={refresh} />
           </div>
         }
       />
@@ -362,7 +379,10 @@ export default function Agenda() {
             {today.map((e) => {
               const isNow = ongoing?.id === e.id;
               const isEditing = editingId === e.id;
-              const isManual = e.source === "manual" || e.source === "google";
+              const isManual =
+                e.source === "manual" ||
+                e.source === "google" ||
+                e.source === "outlook";
               return (
                 <li key={e.id} className="relative">
                   <span

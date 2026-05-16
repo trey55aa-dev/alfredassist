@@ -133,6 +133,43 @@ export async function runCarryOver(now = new Date()): Promise<CarryResult> {
     console.warn("[alfred] carry-over: Google module load failed", err);
   }
 
+  /* ---- Outlook events ---- */
+  try {
+    const { isOutlookConnected, listOutlookEventsForDay, updateOutlookEvent } =
+      await import("./outlookCalendar");
+    if (isOutlookConnected()) {
+      for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+        const day = new Date(now);
+        day.setDate(day.getDate() - dayOffset);
+        let dayEvents: AgendaEvent[] = [];
+        try {
+          dayEvents = await listOutlookEventsForDay(day);
+        } catch (err) {
+          console.warn("[alfred] carry-over: failed to list Outlook events", err);
+          break;
+        }
+        for (const e of dayEvents) {
+          if (!eventIsCarryable(e, now)) continue;
+          const carried = carryEvent(e, now);
+          try {
+            await updateOutlookEvent(e.id, {
+              start: carried.start,
+              end: carried.end,
+            });
+            result.carried.push(carried);
+          } catch (err) {
+            result.failed.push({
+              event: e,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[alfred] carry-over: Outlook module load failed", err);
+  }
+
   if (typeof window !== "undefined") {
     localStorage.setItem(LAST_CARRY_KEY, today);
   }

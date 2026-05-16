@@ -1,7 +1,7 @@
 // Agenda / calendar event types and helpers.
 // Once Google Calendar OAuth is wired, swap `getTodayEvents` to fetch from the edge function.
 
-export type EventSource = "google" | "apple" | "manual";
+export type EventSource = "google" | "outlook" | "apple" | "manual";
 
 export interface AgendaEvent {
   id: string;
@@ -114,8 +114,8 @@ export function currentEvent(events: AgendaEvent[], now = new Date()): AgendaEve
 
 /**
  * Today's events. Merges locally-stored manual events with Google Calendar
- * events when connected. Google failures are swallowed (logged) so a flaky
- * network never blocks the local timeline.
+ * and Outlook events when connected. Remote failures are swallowed (logged)
+ * so a flaky network never blocks the local timeline.
  */
 export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
   const { loadLocalEvents } = await import("./agendaStore");
@@ -124,27 +124,43 @@ export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
   const { isGoogleConnected, listGoogleEventsForDay } = await import(
     "./googleCalendar"
   );
-  if (!isGoogleConnected()) return local;
+  const { isOutlookConnected, listOutlookEventsForDay } = await import(
+    "./outlookCalendar"
+  );
 
-  try {
-    const remote = await listGoogleEventsForDay(day);
-    // Local events with source !== "google" win on id collision (shouldn't happen
-    // since Google ids are prefixed "gcal:"). Otherwise we trust Google's copy
-    // for `gcal:*` ids and the local cache for everything else.
-    const byId = new Map<string, AgendaEvent>();
-    for (const e of remote) byId.set(e.id, e);
-    for (const e of local) {
-      if (e.source === "google" && byId.has(e.id)) {
-        // Preserve any local-only completed flag we cached.
-        const remoteCopy = byId.get(e.id)!;
-        byId.set(e.id, { ...remoteCopy, completed: e.completed ?? remoteCopy.completed });
-      } else {
-        byId.set(e.id, e);
-      }
+  const googleOn = isGoogleConnected();
+  const outlookOn = isOutlookConnected();
+  if (!googleOn && !outlookOn) return local;
+
+  const byId = new Map<string, AgendaEvent>();
+
+  if (googleOn) {
+    try {
+      for (const e of await listGoogleEventsForDay(day)) byId.set(e.id, e);
+    } catch (err) {
+      console.warn("[alfred] Google Calendar fetch failed:", err);
     }
-    return Array.from(byId.values());
-  } catch (err) {
-    console.warn("[alfred] Google Calendar fetch failed:", err);
-    return local;
   }
+  if (outlookOn) {
+    try {
+      for (const e of await listOutlookEventsForDay(day)) byId.set(e.id, e);
+    } catch (err) {
+      console.warn("[alfred] Outlook Calendar fetch failed:", err);
+    }
+  }
+
+  // Local copies: a remote-sourced local entry preserves its cached completed
+  // flag; everything else (manual events) is added as-is.
+  for (const e of local) {
+    if ((e.source === "google" || e.source === "outlook") && byId.has(e.id)) {
+      const remoteCopy = byId.get(e.id)!;
+      byId.set(e.id, {
+        ...remoteCopy,
+        completed: e.completed ?? remoteCopy.completed,
+      });
+    } else {
+      byId.set(e.id, e);
+    }
+  }
+  return Array.from(byId.values());
 }

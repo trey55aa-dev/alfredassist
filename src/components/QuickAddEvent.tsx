@@ -14,7 +14,20 @@ import {
   isGoogleConnected,
   GOOGLE_CONNECTED_CHANGED,
 } from "@/lib/googleCalendar";
+import {
+  createOutlookEvent,
+  isOutlookConnected,
+  OUTLOOK_CONNECTED_CHANGED,
+} from "@/lib/outlookCalendar";
 import { todayKey } from "@/lib/alfred";
+
+type Destination = "local" | "google" | "outlook";
+
+const DEST_LABEL: Record<Destination, string> = {
+  local: "Local",
+  google: "Google Calendar",
+  outlook: "Outlook",
+};
 
 interface Props {
   /** Optional pre-filled date (YYYY-MM-DD) and times (HH:mm). */
@@ -61,13 +74,38 @@ export function QuickAddEvent({
   const [colorHsl, setColorHsl] = useState<string>(EVENT_COLORS[0].hsl);
   const [submitting, setSubmitting] = useState(false);
   const [gConnected, setGConnected] = useState(() => isGoogleConnected());
-  const [pushToGoogle, setPushToGoogle] = useState(true);
+  const [oConnected, setOConnected] = useState(() => isOutlookConnected());
+  const [destination, setDestination] = useState<Destination>("local");
 
   useEffect(() => {
-    const sync = () => setGConnected(isGoogleConnected());
+    const sync = () => {
+      const g = isGoogleConnected();
+      const o = isOutlookConnected();
+      setGConnected(g);
+      setOConnected(o);
+      // Default destination: prefer Google, then Outlook, else local.
+      setDestination((prev) => {
+        if (prev === "google" && g) return prev;
+        if (prev === "outlook" && o) return prev;
+        if (g) return "google";
+        if (o) return "outlook";
+        return "local";
+      });
+    };
+    sync();
     window.addEventListener(GOOGLE_CONNECTED_CHANGED, sync);
-    return () => window.removeEventListener(GOOGLE_CONNECTED_CHANGED, sync);
+    window.addEventListener(OUTLOOK_CONNECTED_CHANGED, sync);
+    return () => {
+      window.removeEventListener(GOOGLE_CONNECTED_CHANGED, sync);
+      window.removeEventListener(OUTLOOK_CONNECTED_CHANGED, sync);
+    };
   }, []);
+
+  const destinations: Destination[] = [
+    "local",
+    ...(gConnected ? (["google"] as const) : []),
+    ...(oConnected ? (["outlook"] as const) : []),
+  ];
 
   // When the parent passes new pre-fill props (e.g. clicking a slot), sync them.
   useEffect(() => {
@@ -126,16 +164,18 @@ export function QuickAddEvent({
       allDay,
       location: location.trim() || undefined,
       description: description.trim() || undefined,
-      calendarName: gConnected && pushToGoogle ? "Google Calendar" : "Local",
+      calendarName: DEST_LABEL[destination],
       calendarColor: `hsl(${colorHsl})`,
       emoji,
     };
 
     try {
       let event: AgendaEvent;
-      if (gConnected && pushToGoogle) {
+      if (destination === "google") {
         const created = await createGoogleEvent(draft);
-        // Re-apply Alfred-side cosmetic fields the API doesn't echo (color picked locally).
+        event = { ...created, calendarColor: draft.calendarColor };
+      } else if (destination === "outlook") {
+        const created = await createOutlookEvent(draft);
         event = { ...created, calendarColor: draft.calendarColor };
       } else {
         const id =
@@ -146,7 +186,10 @@ export function QuickAddEvent({
         addLocalEvent(event);
       }
       toast({
-        title: gConnected && pushToGoogle ? "Added to Google Calendar" : "Event added",
+        title:
+          destination === "local"
+            ? "Event added"
+            : `Added to ${DEST_LABEL[destination]}`,
         description: allDay
           ? `${event.title} · all day`
           : `${event.title} · ${start}–${end}`,
@@ -186,11 +229,7 @@ export function QuickAddEvent({
           <div>
             <h3 className="font-display text-xl">Add to the diary</h3>
             <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
-              {gConnected
-                ? pushToGoogle
-                  ? "Will save to Google Calendar"
-                  : "Will save locally (Google off for this event)"
-                : "Saves locally · connect Google to sync"}
+              {`Will save to ${DEST_LABEL[destination]}`}
             </p>
           </div>
           <button
@@ -362,13 +401,28 @@ export function QuickAddEvent({
           />
         </div>
 
-        {gConnected && (
-          <label className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/40 px-3 py-2 text-xs">
-            <span className="font-mono uppercase tracking-wider text-muted-foreground">
-              Save to Google Calendar
-            </span>
-            <Switch checked={pushToGoogle} onCheckedChange={setPushToGoogle} />
-          </label>
+        {destinations.length > 1 && (
+          <div className="rounded-md border border-border/60 bg-background/40 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+              Save to
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {destinations.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDestination(d)}
+                  className={`px-3 py-1 rounded font-mono text-[10px] tracking-[0.15em] uppercase transition-all ${
+                    destination === d
+                      ? "bg-gold/20 text-gold ring-1 ring-gold/40"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {DEST_LABEL[d]}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {error && (

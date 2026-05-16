@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AgendaEvent, EVENT_COLORS, EVENT_EMOJIS } from "@/lib/agenda";
 import { updateLocalEvent } from "@/lib/agendaStore";
 import { updateGoogleEvent } from "@/lib/googleCalendar";
+import { updateOutlookEvent } from "@/lib/outlookCalendar";
 
 interface Props {
   event: AgendaEvent;
@@ -89,6 +90,8 @@ export function EditEventForm({ event, onClose }: Props) {
     try {
       if (event.source === "google") {
         await updateGoogleEvent(event.id, patch);
+      } else if (event.source === "outlook") {
+        await updateOutlookEvent(event.id, patch);
       } else {
         updateLocalEvent(event.id, patch);
       }
