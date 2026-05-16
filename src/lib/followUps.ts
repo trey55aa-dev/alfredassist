@@ -16,17 +16,25 @@ const SETTINGS_KEY = "alfred.followups.settings";
 
 export interface FollowUpSettings {
   enabled: boolean;
-  /** Hours after original event end. */
+  /** Hours after original event end (used for general meetings). */
   defaultOffsetHours: number;
-  /** Hours offset for interview-tagged events. */
+  /** Hours offset for interview-shaped events. */
   interviewOffsetHours: number;
+  /** When true, create follow-ups for ANY timed event (not just interviews). */
+  followAllMeetings: boolean;
+  /** Extra trigger words (lowercased) that count as interview-shaped. */
+  customKeywords: string[];
 }
 
 export const DEFAULT_FOLLOWUP_SETTINGS: FollowUpSettings = {
   enabled: true,
   defaultOffsetHours: 48,
   interviewOffsetHours: 24,
+  followAllMeetings: false,
+  customKeywords: [],
 };
+
+export const FOLLOWUP_SETTINGS_CHANGED = "alfred.followups:changed";
 
 const INTERVIEW_PATTERN =
   /\b(interview|intro\s*call|phone\s*screen|tech\s*screen|recruiter|hiring\s*manager|panel|onsite|on-site|chat\s+with)\b/i;
@@ -45,6 +53,7 @@ export function getFollowUpSettings(): FollowUpSettings {
 export function saveFollowUpSettings(s: FollowUpSettings) {
   if (typeof window === "undefined") return;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  window.dispatchEvent(new Event(FOLLOWUP_SETTINGS_CHANGED));
 }
 
 function loadSeen(): Set<string> {
@@ -78,10 +87,15 @@ function classify(
   settings: FollowUpSettings,
 ): Candidate | null {
   if (e.allDay) return null;
-  const text = `${e.title} ${e.description ?? ""}`;
-  const isInterview = INTERVIEW_PATTERN.test(text);
-  if (!isInterview) return null; // v1: only auto-create for interview-shaped events
-  const offsetHours = settings.interviewOffsetHours;
+  const text = `${e.title} ${e.description ?? ""}`.toLowerCase();
+  const customHit = settings.customKeywords.some(
+    (k) => k.trim() && text.includes(k.trim().toLowerCase()),
+  );
+  const isInterview = INTERVIEW_PATTERN.test(text) || customHit;
+  if (!isInterview && !settings.followAllMeetings) return null;
+  const offsetHours = isInterview
+    ? settings.interviewOffsetHours
+    : settings.defaultOffsetHours;
   const start = new Date(new Date(e.end).getTime() + offsetHours * 3600_000);
   // Default to a 15-minute slot at 9am-ish: snap to the nearest hour after offset
   start.setMinutes(0, 0, 0);

@@ -44,7 +44,8 @@ import {
 } from "@/lib/outlookCalendar";
 import { OutlookCalendarConnect } from "@/components/OutlookCalendarConnect";
 import { runCarryOver } from "@/lib/carryOver";
-import { processForFollowUps } from "@/lib/followUps";
+import { processForFollowUps, FOLLOWUP_SETTINGS_CHANGED } from "@/lib/followUps";
+import { FollowUpSettingsButton } from "@/components/FollowUpSettingsButton";
 import {
   notifyCarryOver,
   scheduleUpcomingReminders,
@@ -145,6 +146,7 @@ export default function Agenda() {
     window.addEventListener(LOCAL_EVENTS_CHANGED, onChange);
     window.addEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
     window.addEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
+    window.addEventListener(FOLLOWUP_SETTINGS_CHANGED, onChange);
     window.addEventListener("storage", onChange);
     window.addEventListener("focus", onFocus);
     // Periodic poll (5 min). Local-only sessions skip the network in getTodayEvents.
@@ -153,6 +155,7 @@ export default function Agenda() {
       window.removeEventListener(LOCAL_EVENTS_CHANGED, onChange);
       window.removeEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
       window.removeEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
+      window.removeEventListener(FOLLOWUP_SETTINGS_CHANGED, onChange);
       window.removeEventListener("storage", onChange);
       window.removeEventListener("focus", onFocus);
       clearInterval(poll);
@@ -261,6 +264,7 @@ export default function Agenda() {
         actions={
           <div className="flex items-center gap-3 flex-wrap justify-end">
             <NotificationToggle />
+            <FollowUpSettingsButton />
             <GoogleCalendarConnect onSynced={refresh} />
             <OutlookCalendarConnect onSynced={refresh} />
           </div>
