@@ -39,6 +39,8 @@ import {
 } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useCloudGoals } from "@/hooks/useCloudGoals";
+import { Cloud, CloudOff } from "lucide-react";
 import { BackupRestore } from "@/components/BackupRestore";
 import {
   CATEGORIES,
@@ -80,7 +82,14 @@ const TIMEFRAME_LABEL: Record<GoalTimeframe, string> = {
 };
 
 export default function Goals2026() {
-  const [goals, setGoals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
+  const {
+    goals,
+    setGoals,
+    loading: cloudLoading,
+    syncing,
+    error: cloudError,
+    signedIn,
+  } = useCloudGoals();
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [view, setView] = useState<"all" | "quarters" | "timeframe">("all");
   const [activeTags, setActiveTags] = useState<string[]>([]);
@@ -133,7 +142,13 @@ export default function Goals2026() {
         title="2026 Goals"
         description="Define the campaign. Set deadlines. Conquer by quarter."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SyncIndicator
+              signedIn={signedIn}
+              loading={cloudLoading}
+              syncing={syncing}
+              error={cloudError}
+            />
             <BackupRestore />
             <Button
               variant="outline"
@@ -1647,5 +1662,62 @@ function PlanTimeline({
         )}
       </div>
     </div>
+  );
+}
+
+function SyncIndicator({
+  signedIn,
+  loading,
+  syncing,
+  error,
+}: {
+  signedIn: boolean;
+  loading: boolean;
+  syncing: boolean;
+  error: string | null;
+}) {
+  if (!signedIn) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground"
+        title="Sign in to sync goals across devices"
+      >
+        <CloudOff className="h-3.5 w-3.5" />
+        Local only
+      </span>
+    );
+  }
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading
+      </span>
+    );
+  }
+  if (error) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-destructive"
+        title={error}
+      >
+        <CloudOff className="h-3.5 w-3.5" />
+        Sync error
+      </span>
+    );
+  }
+  if (syncing) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-gold">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Syncing
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-gold/80">
+      <Cloud className="h-3.5 w-3.5" />
+      Synced
+    </span>
   );
 }

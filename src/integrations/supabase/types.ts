@@ -12,8 +12,99 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      goals: {
+        Row: {
+          category: string
+          client_id: string
+          created_at: string
+          current_value: number | null
+          deadline: string | null
+          done: boolean
+          id: string
+          note: string | null
+          plan_start_date: string | null
+          plan_summary: string | null
+          quarter: string | null
+          sub_steps: Json | null
+          tags: string[] | null
+          target: number | null
+          timeframe: string
+          title: string
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          client_id: string
+          created_at?: string
+          current_value?: number | null
+          deadline?: string | null
+          done?: boolean
+          id?: string
+          note?: string | null
+          plan_start_date?: string | null
+          plan_summary?: string | null
+          quarter?: string | null
+          sub_steps?: Json | null
+          tags?: string[] | null
+          target?: number | null
+          timeframe?: string
+          title: string
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          client_id?: string
+          created_at?: string
+          current_value?: number | null
+          deadline?: string | null
+          done?: boolean
+          id?: string
+          note?: string | null
+          plan_start_date?: string | null
+          plan_summary?: string | null
+          quarter?: string | null
+          sub_steps?: Json | null
+          tags?: string[] | null
+          target?: number | null
+          timeframe?: string
+          title?: string
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -175,6 +266,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
