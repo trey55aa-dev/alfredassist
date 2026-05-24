@@ -85,6 +85,7 @@ export default function Goals2026() {
   const {
     goals,
     setGoals,
+    loadStarterTemplate,
     loading: cloudLoading,
     syncing,
     error: cloudError,
@@ -154,11 +155,16 @@ export default function Goals2026() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (confirm("Reset all 2026 goals to defaults?")) setGoals(SEED_GOALS);
+                if (
+                  confirm(
+                    "Clear all goals? This removes every goal on your account. You can re-add or load the template afterwards.",
+                  )
+                )
+                  setGoals([]);
               }}
               className="border-border text-muted-foreground hover:text-gold"
             >
-              <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
+              <RotateCcw className="h-3.5 w-3.5 mr-1" /> Clear all
             </Button>
           </div>
         }
@@ -185,6 +191,11 @@ export default function Goals2026() {
 
       {/* Add new goal */}
       <AddGoalForm onAdd={addGoal} />
+
+      {/* First-run welcome — only when signed in, finished loading, and truly empty */}
+      {signedIn && !cloudLoading && goals.length === 0 && (
+        <OnboardingEmptyState onLoadTemplate={loadStarterTemplate} />
+      )}
 
       {/* Tag filter */}
       {allTags.length > 0 && (
@@ -1719,5 +1730,47 @@ function SyncIndicator({
       <Cloud className="h-3.5 w-3.5" />
       Synced
     </span>
+  );
+}
+
+function OnboardingEmptyState({
+  onLoadTemplate,
+}: {
+  onLoadTemplate: () => void;
+}) {
+  return (
+    <Card className="p-8 bg-gradient-card border-gold/30 border-l-2 border-l-gold/60 text-center">
+      <div className="mx-auto mb-4 h-12 w-12 rounded-md bg-gold/15 flex items-center justify-center">
+        <Sparkles className="h-6 w-6 text-gold" />
+      </div>
+      <h3 className="font-display text-2xl text-foreground">
+        A blank ledger, sir.
+      </h3>
+      <p className="mt-2 max-w-md mx-auto text-sm text-muted-foreground leading-relaxed">
+        Begin where you stand. Add your first goal above — anything from
+        "drink more water" to "publish a book." Big or small, daily or annual.
+      </p>
+      <div className="my-5 flex items-center gap-3 max-w-xs mx-auto">
+        <div className="h-px flex-1 bg-border" />
+        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-muted-foreground">
+          or
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Need inspiration? Load a curated set of example goals as a template
+        (you can edit, delete, or add to them freely).
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onLoadTemplate}
+        className="border-gold/40 text-gold hover:text-gold hover:bg-muted/40"
+      >
+        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+        Load example goals
+      </Button>
+    </Card>
   );
 }
