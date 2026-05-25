@@ -29,6 +29,8 @@ interface GoalRow {
   plan_summary: string | null;
   plan_start_date: string | null;
   tags: string[] | null;
+  progress_log: Record<string, number> | null;
+  last_check_in: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +52,8 @@ function rowToGoal(row: GoalRow): Goal {
     planSummary: row.plan_summary ?? undefined,
     planStartDate: row.plan_start_date ?? undefined,
     tags: row.tags ?? undefined,
+    progressLog: row.progress_log ?? undefined,
+    lastCheckIn: row.last_check_in ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
@@ -74,6 +78,9 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
     plan_summary: goal.planSummary ?? null,
     plan_start_date: goal.planStartDate ?? null,
     tags: goal.tags ?? null,
+    progress_log:
+      (goal.progressLog as unknown as GoalInsert["progress_log"]) ?? null,
+    last_check_in: goal.lastCheckIn ?? null,
   };
   // Preserve seed createdAt only when meaningful; let DB default when 0.
   if (goal.createdAt && goal.createdAt > 0) {

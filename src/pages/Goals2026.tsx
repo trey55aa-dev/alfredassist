@@ -38,9 +38,28 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
-import { Cloud, CloudOff } from "lucide-react";
+import { Cloud, CloudOff, Minus, History } from "lucide-react";
+import {
+  computeProjection,
+  last14Days,
+  logProgress,
+} from "@/lib/goalsHistory";
+import {
+  isSuggestionAdded,
+  markSuggestionAdded,
+  suggestNext,
+} from "@/lib/goalsSuggest";
+import {
+  addLocalEvent,
+} from "@/lib/agendaStore";
+import {
+  createGoogleEvent,
+  isGoogleConnected,
+} from "@/lib/googleCalendar";
+import type { AgendaEvent } from "@/lib/agenda";
 import { BackupRestore } from "@/components/BackupRestore";
 import {
   CATEGORIES,
@@ -648,6 +667,10 @@ function GoalRow({
                 </span>
               </div>
             )}
+            {measurable && !goal.done && (
+              <ProgressInsight goal={goal} onChange={onChange} />
+            )}
+            {!goal.done && <SuggestedNextRow goal={goal} />}
           </button>
 
           {open && (
@@ -1772,5 +1795,234 @@ function OnboardingEmptyState({
         Load example goals
       </Button>
     </Card>
+  );
+}
+
+function ProgressInsight({
+  goal,
+  onChange,
+}: {
+  goal: Goal;
+  onChange: (patch: Partial<Goal>) => void;
+}) {
+  const projection = computeProjection(goal);
+  const grid = last14Days(goal);
+  const log = goal.progressLog ?? {};
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const loggedToday = log[todayStr] !== undefined;
+
+  const apply = (delta: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = logProgress({ goal, delta });
+    onChange({
+      current: next.current,
+      progressLog: next.progressLog,
+      lastCheckIn: next.lastCheckIn,
+    });
+  };
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-border/40 bg-background/30 p-2 space-y-2"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Projection line */}
+      {projection.label && (
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+          <span
+            className={`font-mono text-[10px] tracking-[0.2em] uppercase ${projection.tone}`}
+          >
+            {projection.label}
+          </span>
+          {projection.detail && (
+            <span className="font-mono text-[9px] text-muted-foreground/80 leading-snug max-w-md text-right">
+              {projection.detail}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 14-day grid */}
+      <div className="flex items-center gap-2">
+        <History className="h-3 w-3 text-muted-foreground/60" aria-hidden />
+        <div className="flex gap-0.5">
+          {grid.map((d) => (
+            <span
+              key={d.date}
+              title={
+                d.logged
+                  ? `${d.date}: +${d.delta} → ${d.value}`
+                  : `${d.date}: no entry`
+              }
+              className={`h-3 w-3 rounded-sm transition-colors ${
+                d.logged
+                  ? d.delta > 0
+                    ? "bg-gold/80"
+                    : "bg-gold/30"
+                  : "bg-muted/40"
+              }`}
+            />
+          ))}
+        </div>
+        <span className="font-mono text-[9px] tracking-wider text-muted-foreground/70">
+          last 14 days
+        </span>
+      </div>
+
+      {/* Quick-log */}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={(e) => apply(-1, e)}
+          disabled={(goal.current ?? 0) <= 0}
+          className="h-7 w-7 rounded border border-border bg-background/50 text-muted-foreground hover:text-destructive hover:border-destructive/40 disabled:opacity-30 transition-colors inline-flex items-center justify-center"
+          aria-label="Subtract 1"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => apply(1, e)}
+          className="h-7 px-3 rounded border border-gold/40 bg-gold/10 text-gold hover:bg-gold/20 transition-colors inline-flex items-center justify-center gap-1 font-mono text-[10px] tracking-wider uppercase"
+        >
+          <Plus className="h-3 w-3" />
+          {loggedToday ? "log again" : "log today"}
+        </button>
+        <Input
+          type="number"
+          placeholder="amount"
+          aria-label="Log custom amount"
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const v = Number((e.target as HTMLInputElement).value);
+            if (!Number.isFinite(v) || v === 0) return;
+            const next = logProgress({ goal, delta: v });
+            onChange({
+              current: next.current,
+              progressLog: next.progressLog,
+              lastCheckIn: next.lastCheckIn,
+            });
+            (e.target as HTMLInputElement).value = "";
+          }}
+          className="h-7 px-2 text-[11px] bg-background/50 border-border w-20"
+        />
+        {goal.lastCheckIn && (
+          <span className="ml-auto font-mono text-[9px] tracking-wider text-muted-foreground/70">
+            last: {goal.lastCheckIn}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SuggestedNextRow({ goal }: { goal: Goal }) {
+  const suggestion = suggestNext(goal);
+  const { toast } = useToast();
+  const [added, setAdded] = useState(() =>
+    suggestion ? isSuggestionAdded(suggestion.dedupeKey) : false,
+  );
+
+  if (!suggestion) return null;
+
+  const handleAdd = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const start = new Date(suggestion.dueDate);
+    const end = new Date(start.getTime() + 15 * 60_000);
+    const draft: Omit<AgendaEvent, "id" | "source"> = {
+      title: suggestion.taskTitle,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      allDay: false,
+      description: `Auto-suggested next step on goal "${goal.title}".`,
+      calendarName: isGoogleConnected() ? "Google Calendar" : "Local",
+      calendarColor: "hsl(45 80% 55%)",
+      emoji: suggestion.kind === "quantitative" ? "🎯" : "✨",
+    };
+    try {
+      if (isGoogleConnected()) {
+        await createGoogleEvent(draft);
+      } else {
+        const id =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `sug_${Date.now()}`;
+        addLocalEvent({ ...draft, id, source: "manual" });
+      }
+      markSuggestionAdded(suggestion.dedupeKey);
+      setAdded(true);
+      toast({
+        title: "Added to your agenda",
+        description: `${suggestion.taskTitle} · Sun ${start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not add",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const statusTone =
+    suggestion.status === "behind_critical" || suggestion.status === "missing"
+      ? "text-destructive"
+      : suggestion.status === "behind"
+        ? "text-orange-400"
+        : suggestion.status === "ahead"
+          ? "text-gold"
+          : "text-teal";
+  const statusLabel =
+    suggestion.status === "ahead"
+      ? "Ahead of pace"
+      : suggestion.status === "on_pace"
+        ? "On pace"
+        : suggestion.status === "behind"
+          ? "Behind"
+          : suggestion.status === "behind_critical"
+            ? "Falling behind"
+            : "No progress yet";
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-gold/20 bg-gold/5 px-3 py-2 space-y-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <Sparkles className="h-3 w-3 text-gold shrink-0" aria-hidden />
+        <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gold/80">
+          Next
+        </span>
+        <span className={`font-mono text-[9px] tracking-[0.2em] uppercase ${statusTone}`}>
+          · {statusLabel}
+        </span>
+      </div>
+      <p className="text-[11px] leading-snug text-foreground">
+        {suggestion.headline}
+      </p>
+      {suggestion.rationale && (
+        <p className="font-mono text-[9px] text-muted-foreground/80 leading-snug">
+          {suggestion.rationale}
+        </p>
+      )}
+      <div className="flex justify-end">
+        {added ? (
+          <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
+            Added to Sunday
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="inline-flex items-center gap-1 rounded border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-[9px] tracking-[0.2em] uppercase text-gold hover:bg-gold/20 transition-colors"
+          >
+            <Plus className="h-2.5 w-2.5" />
+            Add to agenda
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

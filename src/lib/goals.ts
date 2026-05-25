@@ -76,6 +76,10 @@ export interface Goal {
   planStartDate?: string;
   /** Free-form tags. Cross-cuts categories ("morning", "outdoor", "high-energy"). */
   tags?: string[];
+  /** Map of YYYY-MM-DD -> the `current` value as of that day's last check-in. */
+  progressLog?: Record<string, number>;
+  /** YYYY-MM-DD of the most recent check-in. */
+  lastCheckIn?: string;
 }
 
 /* ---------- Pace / position helpers ---------- */

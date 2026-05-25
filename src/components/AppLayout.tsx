@@ -3,6 +3,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AmbientPattern } from "@/components/AmbientPattern";
 import { ActiveTimerBar } from "@/components/ActiveTimerBar";
+import { FocusModeBanner } from "@/components/FocusModeBanner";
+import { FocusModeStarter } from "@/components/FocusModeStarter";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -33,10 +35,15 @@ export default function AppLayout() {
                 {formatLongDate()}
               </div>
             </div>
-            <div className="px-4 font-display italic text-sm text-gold/80">
-              Tiimo Command Center
+            <div className="flex items-center gap-3 px-3">
+              <FocusModeStarter />
+              <div className="hidden md:block font-display italic text-sm text-gold/80">
+                Tiimo Command Center
+              </div>
             </div>
           </header>
+
+          <FocusModeBanner />
 
           <main className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 pb-32 fade-in">

@@ -1,4 +1,16 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useFocusMode } from "@/hooks/useFocusMode";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -50,10 +62,16 @@ const items = [
   { title: "Health", url: "/health", icon: Activity },
 ];
 
+/** Sidebar routes that stay accessible without confirmation while focused. */
+const FOCUS_SAFE = new Set<string>(["/agenda"]);
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
+  const focus = useFocusMode();
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const { profile, user, signOut } = useAuth();
   const {
     theme,
@@ -74,6 +92,38 @@ export function AppSidebar() {
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
   return (
+    <>
+      <AlertDialog
+        open={pendingUrl !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingUrl(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave your focus session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {focus.taskTitle
+                ? `You said you'd focus on "${focus.taskTitle}". Heading to another page breaks the streak you set yourself.`
+                : "You're in a focus session. Heading to another page breaks the streak you set yourself."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingUrl(null)}>
+              Stay focused
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const url = pendingUrl;
+                setPendingUrl(null);
+                if (url) navigate(url);
+              }}
+            >
+              Go anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent className="bg-sidebar">
         {/* Brand */}
@@ -108,17 +158,24 @@ export function AppSidebar() {
                   item.url === "/"
                     ? location.pathname === "/"
                     : location.pathname.startsWith(item.url);
+                const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild>
                       <NavLink
                         to={item.url}
                         end={item.url === "/"}
+                        onClick={(e) => {
+                          if (dimmed) {
+                            e.preventDefault();
+                            setPendingUrl(item.url);
+                          }
+                        }}
                         className={`group flex items-center gap-3 rounded-md px-3 py-2 transition-all ${
                           isActive
                             ? "bg-sidebar-accent text-gold shadow-inset-gold"
                             : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-gold"
-                        }`}
+                        } ${dimmed ? "opacity-40" : ""}`}
                       >
                         <item.icon
                           className={`h-4 w-4 transition-colors ${
@@ -327,5 +384,6 @@ export function AppSidebar() {
         </div>
       </SidebarContent>
     </Sidebar>
+    </>
   );
 }

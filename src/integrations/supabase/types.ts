@@ -48,9 +48,11 @@ export type Database = {
           deadline: string | null
           done: boolean
           id: string
+          last_check_in: string | null
           note: string | null
           plan_start_date: string | null
           plan_summary: string | null
+          progress_log: Json | null
           quarter: string | null
           sub_steps: Json | null
           tags: string[] | null
@@ -69,9 +71,11 @@ export type Database = {
           deadline?: string | null
           done?: boolean
           id?: string
+          last_check_in?: string | null
           note?: string | null
           plan_start_date?: string | null
           plan_summary?: string | null
+          progress_log?: Json | null
           quarter?: string | null
           sub_steps?: Json | null
           tags?: string[] | null
@@ -90,9 +94,11 @@ export type Database = {
           deadline?: string | null
           done?: boolean
           id?: string
+          last_check_in?: string | null
           note?: string | null
           plan_start_date?: string | null
           plan_summary?: string | null
+          progress_log?: Json | null
           quarter?: string | null
           sub_steps?: Json | null
           tags?: string[] | null
