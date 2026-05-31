@@ -216,6 +216,72 @@ export type Database = {
         }
         Relationships: []
       }
+      local_events: {
+        Row: {
+          actual_minutes: number | null
+          all_day: boolean
+          calendar_color: string | null
+          calendar_name: string | null
+          carry_count: number | null
+          client_id: string
+          completed: boolean
+          created_at: string
+          description: string | null
+          emoji: string | null
+          end_at: string
+          estimated_minutes: number | null
+          id: string
+          location: string | null
+          original_date: string | null
+          start_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actual_minutes?: number | null
+          all_day?: boolean
+          calendar_color?: string | null
+          calendar_name?: string | null
+          carry_count?: number | null
+          client_id: string
+          completed?: boolean
+          created_at?: string
+          description?: string | null
+          emoji?: string | null
+          end_at: string
+          estimated_minutes?: number | null
+          id?: string
+          location?: string | null
+          original_date?: string | null
+          start_at: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actual_minutes?: number | null
+          all_day?: boolean
+          calendar_color?: string | null
+          calendar_name?: string | null
+          carry_count?: number | null
+          client_id?: string
+          completed?: boolean
+          created_at?: string
+          description?: string | null
+          emoji?: string | null
+          end_at?: string
+          estimated_minutes?: number | null
+          id?: string
+          location?: string | null
+          original_date?: string | null
+          start_at?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
