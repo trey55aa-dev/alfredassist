@@ -20,23 +20,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import {
-  CUSTOM_LISTS_KEY,
   CustomList,
   CustomListItem,
   LIST_COLORS,
   LIST_EMOJIS,
-  SEED_LISTS,
   newItem,
   newList,
 } from "@/lib/customLists";
+import { useCloudCustomLists } from "@/hooks/useCloudCustomLists";
 
 export default function CustomLists() {
-  const [lists, setLists] = useLocalStorage<CustomList[]>(
-    CUSTOM_LISTS_KEY,
-    SEED_LISTS
-  );
+  const { lists, setLists } = useCloudCustomLists();
   const [draftTitle, setDraftTitle] = useState("");
 
   const addList = () => {

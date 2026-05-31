@@ -39,6 +39,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_lists: {
+        Row: {
+          client_id: string
+          color: string | null
+          created_at: string
+          emoji: string | null
+          id: string
+          items: Json | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          items?: Json | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          items?: Json | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           category: string
