@@ -20,8 +20,6 @@ import {
   CADENCES,
   CADENCE_LABEL,
   CADENCE_NOUN,
-  HABITS_KEY,
-  HABIT_LOGS_KEY,
   Habit,
   HabitLog,
   SEED_HABITS,
@@ -33,7 +31,9 @@ import {
   longestStreakFor,
   toggleHabitForToday,
 } from "@/lib/habits";
-import { GOALS_KEY, Goal, SEED_GOALS } from "@/lib/goals";
+import type { Goal } from "@/lib/goals";
+import { useCloudHabits } from "@/hooks/useCloudHabits";
+import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { useEffect } from "react";
 
@@ -49,9 +49,9 @@ export interface ChecklistState {
 }
 
 export default function Checklist() {
-  const [habits, setHabits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
-  const [logs, setLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
-  const [goals, setGoals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
+  const { habits, setHabits, habitLogs: logs, setHabitLogs: setLogs } =
+    useCloudHabits();
+  const { goals, setGoals } = useCloudGoals();
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   const [tab, setTab] = useState<Cadence>("daily");
 

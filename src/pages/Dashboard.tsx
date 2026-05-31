@@ -20,15 +20,14 @@ import type { BrainEntry } from "./BrainDump";
 import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
 import {
-  HABITS_KEY,
-  HABIT_LOGS_KEY,
   Habit,
   HabitLog,
-  SEED_HABITS,
   habitsAtRisk,
   isCompleteForPeriod,
   toggleHabitForToday,
 } from "@/lib/habits";
+import { useCloudHabits } from "@/hooks/useCloudHabits";
+import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { HealthSummaryCard } from "@/components/HealthSummaryCard";
@@ -45,8 +44,7 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
-  const [habitLogs, setHabitLogs] = useLocalStorage<HabitLog[]>(HABIT_LOGS_KEY, []);
+  const { habits, habitLogs, setHabitLogs } = useCloudHabits();
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
     date: todayKey(),
@@ -54,7 +52,7 @@ export default function Dashboard() {
     minutes: 0,
   });
   const [journal] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
-  const [goals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
+  const { goals } = useCloudGoals();
 
   const goalStats = useMemo(() => {
     const total = goals.length;

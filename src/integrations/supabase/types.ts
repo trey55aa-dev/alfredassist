@@ -111,6 +111,75 @@ export type Database = {
         }
         Relationships: []
       }
+      habit_logs: {
+        Row: {
+          created_at: string
+          habit_client_id: string
+          id: string
+          log_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          habit_client_id: string
+          id?: string
+          log_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          habit_client_id?: string
+          id?: string
+          log_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      habits: {
+        Row: {
+          archived: boolean
+          cadence: string
+          client_id: string
+          created_at: string
+          goal_id: string | null
+          goal_increment: number | null
+          id: string
+          recovery_steps: string[] | null
+          target: number | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived?: boolean
+          cadence?: string
+          client_id: string
+          created_at?: string
+          goal_id?: string | null
+          goal_increment?: number | null
+          id?: string
+          recovery_steps?: string[] | null
+          target?: number | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived?: boolean
+          cadence?: string
+          client_id?: string
+          created_at?: string
+          goal_id?: string | null
+          goal_increment?: number | null
+          id?: string
+          recovery_steps?: string[] | null
+          target?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

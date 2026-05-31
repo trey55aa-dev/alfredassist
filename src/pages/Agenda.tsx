@@ -52,15 +52,8 @@ import {
 } from "@/lib/notifications";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
-import {
-  Habit,
-  HabitLog,
-  HABITS_KEY,
-  HABIT_LOGS_KEY,
-  SEED_HABITS,
-  habitsAtRisk,
-  toggleHabitForToday,
-} from "@/lib/habits";
+import { habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
+import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { formatLongDate } from "@/lib/alfred";
 
 type ViewMode = "timeline" | "list";
@@ -74,11 +67,7 @@ export default function Agenda() {
     "alfred.agenda.view",
     "timeline",
   );
-  const [habits] = useLocalStorage<Habit[]>(HABITS_KEY, SEED_HABITS);
-  const [habitLogs, setHabitLogs] = useLocalStorage<HabitLog[]>(
-    HABIT_LOGS_KEY,
-    [],
-  );
+  const { habits, habitLogs, setHabitLogs } = useCloudHabits();
   const recoveries = useMemo(
     () => habitsAtRisk(habits, habitLogs, now),
     [habits, habitLogs, now],
