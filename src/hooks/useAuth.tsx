@@ -16,6 +16,7 @@ interface AuthContextValue {
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -67,8 +68,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await loadProfile(user.id);
   };
 
+  const updateDisplayName = async (name: string) => {
+    if (!user) return;
+    const trimmed = name.trim();
+    // Upsert keeps it robust whether or not the profile row already exists.
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(
+        { user_id: user.id, display_name: trimmed || null },
+        { onConflict: "user_id" },
+      );
+    if (error) throw new Error(error.message);
+    // Also stash on the auth user metadata so future OAuth logins keep it.
+    await supabase.auth.updateUser({ data: { display_name: trimmed } });
+    await loadProfile(user.id);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        signOut,
+        refreshProfile,
+        updateDisplayName,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

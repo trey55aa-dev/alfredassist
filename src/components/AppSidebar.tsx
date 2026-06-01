@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -25,7 +25,9 @@ import {
   Palette,
   Sparkles,
   Activity,
+  Pencil,
 } from "lucide-react";
+import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -72,7 +74,19 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const focus = useFocusMode();
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
+
+  // First run after sign-in with no name set: gently prompt once.
+  useEffect(() => {
+    if (!user) return;
+    const asked = localStorage.getItem("alfred.askedName");
+    const hasName = !!profile?.display_name?.trim();
+    if (!hasName && !asked) {
+      setNameDialogOpen(true);
+      localStorage.setItem("alfred.askedName", "1");
+    }
+  }, [user, profile?.display_name]);
   const {
     theme,
     applyTheme,
@@ -93,6 +107,7 @@ export function AppSidebar() {
 
   return (
     <>
+      <ProfileNameDialog open={nameDialogOpen} onOpenChange={setNameDialogOpen} />
       <AlertDialog
         open={pendingUrl !== null}
         onOpenChange={(open) => {
@@ -209,14 +224,24 @@ export function AppSidebar() {
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-foreground truncate">
-                    {profile?.display_name ?? user?.email?.split("@")[0] ?? "Sir"}
+                <button
+                  type="button"
+                  onClick={() => setNameDialogOpen(true)}
+                  className="min-w-0 text-left group/name"
+                  title="Edit your name"
+                >
+                  <div className="flex items-center gap-1 text-xs font-medium text-foreground truncate">
+                    <span className="truncate">
+                      {profile?.display_name?.trim() ||
+                        user?.email?.split("@")[0] ||
+                        "Set your name"}
+                    </span>
+                    <Pencil className="h-2.5 w-2.5 text-muted-foreground/50 group-hover/name:text-gold shrink-0" />
                   </div>
                   <div className="font-mono text-[9px] tracking-[0.15em] uppercase text-muted-foreground truncate">
                     {user?.email}
                   </div>
-                </div>
+                </button>
               )}
             </div>
             {!collapsed && (
