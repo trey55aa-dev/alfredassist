@@ -9,10 +9,16 @@ import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
 import { useEventsSync } from "@/hooks/useEventsSync";
+import { initAppIcon } from "@/lib/appIcon";
 
 export default function AppLayout() {
   // Mirror manual agenda events to the cloud + hydrate on sign-in.
   useEventsSync();
+
+  // Apply the user's custom app icon (favicon + apple-touch-icon) on load.
+  useEffect(() => {
+    initAppIcon();
+  }, []);
 
   // Initialize saved theme on mount
   useEffect(() => {

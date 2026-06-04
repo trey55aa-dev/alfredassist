@@ -205,6 +205,19 @@ export function useThemeColor() {
     document.documentElement.style.setProperty("--foreground", newTheme.foreground);
   };
 
+  /** Pick ANY background color via hex; text color auto-derives for readability. */
+  const applyThemeHex = (bgHex: string) => {
+    const background = hexToHsl(bgHex);
+    const parts = background.split(/\s+/);
+    const h = parseFloat(parts[0]) || 0;
+    const l = parseFloat(parts[2]) || 0;
+    // Dark background → light text; light background → dark text.
+    // Keep a hint of the background hue in the text so it feels cohesive.
+    const foreground =
+      l < 50 ? `${h} 30% 92%` : `${h} 30% 10%`;
+    applyTheme({ name: "Custom", background, foreground });
+  };
+
   const resetTheme = () => {
     const defaultTheme = PRESET_THEMES[0];
     applyTheme(defaultTheme);
@@ -238,6 +251,7 @@ export function useThemeColor() {
   return {
     theme,
     applyTheme,
+    applyThemeHex,
     resetTheme,
     accent,
     applyAccent,

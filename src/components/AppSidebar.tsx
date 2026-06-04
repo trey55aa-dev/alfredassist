@@ -28,6 +28,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
+import { AppIconCustomizer } from "@/components/AppIconCustomizer";
 import { useAuth } from "@/hooks/useAuth";
 import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -90,6 +91,7 @@ export function AppSidebar() {
   const {
     theme,
     applyTheme,
+    applyThemeHex,
     resetTheme,
     accent,
     applyAccent,
@@ -102,6 +104,7 @@ export function AppSidebar() {
     presets,
   } = useThemeColor();
   const accentHex = hslToHex(accent.hsl);
+  const backgroundHex = hslToHex(theme.background);
   const initial =
     (profile?.display_name?.[0] ?? user?.email?.[0] ?? "A").toUpperCase();
 
@@ -295,6 +298,16 @@ export function AppSidebar() {
                       </button>
                     ))}
                   </div>
+                  <label className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <span>Custom background</span>
+                    <input
+                      type="color"
+                      value={backgroundHex}
+                      onChange={(e) => applyThemeHex(e.target.value)}
+                      className="h-7 w-12 rounded cursor-pointer bg-transparent border border-border"
+                      aria-label="Pick a custom background color"
+                    />
+                  </label>
                   <button
                     onClick={resetTheme}
                     className="w-full py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-gold transition-colors"
@@ -366,6 +379,10 @@ export function AppSidebar() {
               </PopoverContent>
             </Popover>
           )}
+
+          {/* App Icon Customizer */}
+          {!collapsed && <AppIconCustomizer />}
+
           {!collapsed && (
             <div className="mt-3 px-2 space-y-3">
               {/* Toggle */}
