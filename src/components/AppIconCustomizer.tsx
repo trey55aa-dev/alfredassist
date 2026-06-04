@@ -1,34 +1,76 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ImageIcon, Download } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
 import {
-  AppIconConfig,
   DEFAULT_APP_ICON,
   applyAppIcon,
   buildIconSvg,
   getAppIcon,
+  getIconSyncWithTheme,
+  iconColorsFromTheme,
   renderIconPng,
   saveAppIcon,
+  setIconSyncWithTheme,
   svgToDataUrl,
 } from "@/lib/appIcon";
 
+// The letter is always "A" — the Alfred brand mark.
+const SYMBOL = "A";
+
 export function AppIconCustomizer() {
   const { toast } = useToast();
-  const [cfg, setCfg] = useState<AppIconConfig>(() => getAppIcon());
+  const { theme, accent } = useThemeColor();
+  const [syncWithTheme, setSyncWithTheme] = useState(() => getIconSyncWithTheme());
+
+  // When synced, colors are always derived from the live theme/accent.
+  // When unsynced, user picks manually.
+  const [manualBg, setManualBg] = useState(() =>
+    syncWithTheme ? iconColorsFromTheme().bgColor : getAppIcon().bgColor,
+  );
+  const [manualFg, setManualFg] = useState(() =>
+    syncWithTheme ? iconColorsFromTheme().fgColor : getAppIcon().fgColor,
+  );
+  const [radius, setRadius] = useState(() => getAppIcon().radius);
+
+  const { bgColor, fgColor } = syncWithTheme
+    ? iconColorsFromTheme()
+    : { bgColor: manualBg, fgColor: manualFg };
+
+  const cfg = { symbol: SYMBOL, bgColor, fgColor, radius };
 
   const previewSrc = useMemo(
     () => svgToDataUrl(buildIconSvg(cfg, 256)),
-    [cfg],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bgColor, fgColor, radius],
   );
 
-  const patch = (p: Partial<AppIconConfig>) => setCfg((c) => ({ ...c, ...p }));
+  // When sync is on and the theme/accent changes, auto-apply immediately.
+  useEffect(() => {
+    if (!syncWithTheme) return;
+    const colors = iconColorsFromTheme();
+    const next = { symbol: SYMBOL, bgColor: colors.bgColor, fgColor: colors.fgColor, radius };
+    saveAppIcon(next);
+    applyAppIcon(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme.background, accent.hsl, syncWithTheme]);
+
+  const handleSyncToggle = (on: boolean) => {
+    setSyncWithTheme(on);
+    setIconSyncWithTheme(on);
+    if (on) {
+      const colors = iconColorsFromTheme();
+      setManualBg(colors.bgColor);
+      setManualFg(colors.fgColor);
+    }
+  };
 
   const apply = async () => {
     saveAppIcon(cfg);
@@ -36,15 +78,19 @@ export function AppIconCustomizer() {
     toast({
       title: "Icon updated",
       description:
-        "Browser tab updated now. For the home-screen icon, remove & re-add Alfred to your home screen.",
+        "Browser tab updated now. Remove & re-add to your home screen to refresh that icon.",
     });
   };
 
   const reset = async () => {
-    setCfg(DEFAULT_APP_ICON);
-    saveAppIcon(DEFAULT_APP_ICON);
-    await applyAppIcon(DEFAULT_APP_ICON);
-    toast({ title: "Icon reset to default" });
+    setSyncWithTheme(true);
+    setIconSyncWithTheme(true);
+    setRadius(DEFAULT_APP_ICON.radius);
+    const colors = iconColorsFromTheme();
+    const next = { ...DEFAULT_APP_ICON, bgColor: colors.bgColor, fgColor: colors.fgColor };
+    saveAppIcon(next);
+    await applyAppIcon(next);
+    toast({ title: "Icon reset" });
   };
 
   const download = async () => {
@@ -59,6 +105,9 @@ export function AppIconCustomizer() {
     }
   };
 
+  // Tiny accent swatch to show what color theme->icon would be
+  const accentHex = hslToHex(accent.hsl);
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -72,13 +121,13 @@ export function AppIconCustomizer() {
           />
         </button>
       </PopoverTrigger>
-      <PopoverContent side="right" align="start" className="w-64 bg-popover border-border">
+      <PopoverContent side="right" align="start" className="w-60 bg-popover border-border">
         <div className="space-y-3">
           <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
             App Icon
           </div>
 
-          {/* Live preview */}
+          {/* Live preview — always shows the A */}
           <div className="flex justify-center">
             <img
               src={previewSrc}
@@ -87,45 +136,65 @@ export function AppIconCustomizer() {
             />
           </div>
 
-          {/* Symbol */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Letter or emoji
-            </span>
-            <Input
-              value={cfg.symbol}
-              onChange={(e) => patch({ symbol: e.target.value })}
-              maxLength={2}
-              placeholder="A"
-              className="h-8 text-center text-sm bg-background/50 border-border"
+          {/* Sync with theme toggle */}
+          <label className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/30 px-2.5 py-2">
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] tracking-wider uppercase text-foreground">
+                Match app theme
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <div
+                  className="h-3 w-3 rounded-full border border-border"
+                  style={{ background: bgColor }}
+                />
+                <div
+                  className="h-3 w-3 rounded-full border border-border"
+                  style={{ background: fgColor }}
+                />
+                <span className="font-mono text-[9px] text-muted-foreground">
+                  auto-updates with your theme
+                </span>
+              </div>
+            </div>
+            <Switch
+              checked={syncWithTheme}
+              onCheckedChange={handleSyncToggle}
+              className="data-[state=checked]:bg-gold h-4 w-7 shrink-0"
             />
           </label>
 
-          {/* Colors */}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-              <span>Background</span>
-              <input
-                type="color"
-                value={cfg.bgColor}
-                onChange={(e) => patch({ bgColor: e.target.value })}
-                className="h-7 w-10 rounded cursor-pointer bg-transparent border border-border"
-                aria-label="Icon background color"
-              />
-            </label>
-            <label className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-              <span>Symbol</span>
-              <input
-                type="color"
-                value={cfg.fgColor}
-                onChange={(e) => patch({ fgColor: e.target.value })}
-                className="h-7 w-10 rounded cursor-pointer bg-transparent border border-border"
-                aria-label="Icon symbol color"
-              />
-            </label>
-          </div>
+          {/* Manual color pickers — only visible when not synced */}
+          {!syncWithTheme && (
+            <div className="space-y-2">
+              <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground">
+                Custom colors
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>Background</span>
+                  <input
+                    type="color"
+                    value={manualBg}
+                    onChange={(e) => setManualBg(e.target.value)}
+                    className="h-8 w-full rounded cursor-pointer bg-transparent border border-border"
+                    aria-label="Icon background color"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>A color</span>
+                  <input
+                    type="color"
+                    value={manualFg}
+                    onChange={(e) => setManualFg(e.target.value)}
+                    className="h-8 w-full rounded cursor-pointer bg-transparent border border-border"
+                    aria-label="Icon letter color"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
 
-          {/* Roundness */}
+          {/* Roundness — always shown */}
           <label className="block space-y-1">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
               Corner roundness
@@ -134,8 +203,8 @@ export function AppIconCustomizer() {
               type="range"
               min={0}
               max={50}
-              value={Math.round(cfg.radius * 100)}
-              onChange={(e) => patch({ radius: Number(e.target.value) / 100 })}
+              value={Math.round(radius * 100)}
+              onChange={(e) => setRadius(Number(e.target.value) / 100)}
               className="w-full accent-gold"
             />
           </label>
@@ -151,22 +220,23 @@ export function AppIconCustomizer() {
             <button
               type="button"
               onClick={download}
-              title="Download PNG"
+              title="Download PNG (512×512)"
               className="p-2 rounded-md border border-border text-muted-foreground hover:text-gold transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
             </button>
           </div>
+
           <button
             type="button"
             onClick={reset}
             className="w-full py-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-gold transition-colors"
           >
-            Reset to Default
+            Reset
           </button>
-          <p className="font-mono text-[9px] text-muted-foreground/70 leading-snug">
-            Browser tab updates instantly. Home-screen icon: remove & re-add
-            Alfred to your home screen to pick up the new icon.
+
+          <p className="font-mono text-[9px] text-muted-foreground/60 leading-snug">
+            Browser tab updates instantly. Remove & re-add to home screen to refresh that icon.
           </p>
         </div>
       </PopoverContent>

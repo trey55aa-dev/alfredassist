@@ -16,6 +16,18 @@ export interface AppIconConfig {
 }
 
 const KEY = "alfred.appIcon";
+const SYNC_KEY = "alfred.appIcon.syncTheme";
+
+export function getIconSyncWithTheme(): boolean {
+  if (typeof window === "undefined") return true;
+  const raw = localStorage.getItem(SYNC_KEY);
+  return raw === null ? true : raw === "1"; // default ON
+}
+
+export function setIconSyncWithTheme(on: boolean): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SYNC_KEY, on ? "1" : "0");
+}
 
 export const DEFAULT_APP_ICON: AppIconConfig = {
   symbol: "A",
@@ -23,6 +35,47 @@ export const DEFAULT_APP_ICON: AppIconConfig = {
   fgColor: "#caa45a",
   radius: 0.22,
 };
+
+/** Derive icon colors directly from CSS variables set by the theme/accent system. */
+export function iconColorsFromTheme(): { bgColor: string; fgColor: string } {
+  if (typeof document === "undefined") {
+    return { bgColor: DEFAULT_APP_ICON.bgColor, fgColor: DEFAULT_APP_ICON.fgColor };
+  }
+  const style = getComputedStyle(document.documentElement);
+  const bgHsl = style.getPropertyValue("--background").trim();
+  const accentHsl = style.getPropertyValue("--primary").trim();
+  const hslToHexLocal = (hsl: string): string => {
+    const parts = hsl.split(/\s+/);
+    const h = (parseFloat(parts[0]) || 0) / 360;
+    const s = (parseFloat(parts[1]) || 0) / 100;
+    const l = (parseFloat(parts[2]) || 0) / 100;
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    let r: number, g: number, b: number;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+    const toHex = (n: number) =>
+      Math.round(n * 255).toString(16).padStart(2, "0");
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  };
+  return {
+    bgColor: bgHsl ? hslToHexLocal(bgHsl) : DEFAULT_APP_ICON.bgColor,
+    fgColor: accentHsl ? hslToHexLocal(accentHsl) : DEFAULT_APP_ICON.fgColor,
+  };
+}
 
 export function getAppIcon(): AppIconConfig {
   if (typeof window === "undefined") return DEFAULT_APP_ICON;
