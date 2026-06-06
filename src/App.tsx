@@ -18,6 +18,7 @@ import Agenda from "./pages/Agenda";
 import CustomLists from "./pages/CustomLists";
 import Auth from "./pages/Auth";
 import Health from "./pages/Health";
+import Achievements from "./pages/Achievements";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/lists" element={<CustomLists />} />
               <Route path="/health" element={<Health />} />
+              <Route path="/achievements" element={<Achievements />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

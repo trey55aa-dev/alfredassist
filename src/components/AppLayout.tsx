@@ -5,6 +5,9 @@ import { AmbientPattern } from "@/components/AmbientPattern";
 import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { FocusModeBanner } from "@/components/FocusModeBanner";
 import { FocusModeStarter } from "@/components/FocusModeStarter";
+import { XpFlash } from "@/components/XpFlash";
+import { LevelUpModal } from "@/components/LevelUpModal";
+import { BadgeToast } from "@/components/BadgeToast";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -63,6 +66,9 @@ export default function AppLayout() {
         </div>
 
         <ActiveTimerBar />
+        <XpFlash />
+        <BadgeToast />
+        <LevelUpModal />
       </div>
     </SidebarProvider>
   );

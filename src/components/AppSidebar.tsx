@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useFocusMode } from "@/hooks/useFocusMode";
+import { useGamification } from "@/hooks/useGamification";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Activity,
   Pencil,
+  Trophy,
 } from "lucide-react";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
@@ -63,6 +65,7 @@ const items = [
   { title: "Feature Guide", url: "/guide", icon: BookOpen },
   { title: "Audio Journal", url: "/journal", icon: Mic },
   { title: "Health", url: "/health", icon: Activity },
+  { title: "Achievements", url: "/achievements", icon: Trophy },
 ];
 
 /** Sidebar routes that stay accessible without confirmation while focused. */
@@ -216,6 +219,9 @@ export function AppSidebar() {
 
         <div className="mt-auto p-3 space-y-3">
           <div className="divider-gold mx-1" />
+
+          {/* XP / Level mini bar */}
+          <XpBar />
 
           {/* Profile chip */}
           <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : "justify-between"}`}>
@@ -427,5 +433,47 @@ export function AppSidebar() {
       </SidebarContent>
     </Sidebar>
     </>
+  );
+}
+
+function XpBar() {
+  const { state, level, next, progress } = useGamification();
+  const { state: sidebar } = useSidebar();
+  const collapsed = sidebar === "collapsed";
+  if (collapsed) {
+    return (
+      <div
+        className="flex justify-center"
+        title={`Level ${level.level} · ${state.xp} XP`}
+      >
+        <span className="font-mono text-[10px] text-gold">Lv{level.level}</span>
+      </div>
+    );
+  }
+  return (
+    <NavLink
+      to="/achievements"
+      className="block rounded-md hover:bg-sidebar-accent/50 px-2 py-1.5 transition-colors"
+    >
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gold">
+          Level {level.level} · {level.title}
+        </span>
+        <span className="font-mono text-[9px] text-muted-foreground">
+          {state.xp} XP
+        </span>
+      </div>
+      <div className="h-1 rounded-full bg-muted/40 overflow-hidden">
+        <div
+          className="h-full bg-gradient-gold transition-all duration-700"
+          style={{ width: `${progress.pct}%` }}
+        />
+      </div>
+      {next && (
+        <div className="font-mono text-[8px] text-muted-foreground/60 mt-0.5 text-right">
+          {progress.progress}/{progress.needed} → Lv{next.level}
+        </div>
+      )}
+    </NavLink>
   );
 }

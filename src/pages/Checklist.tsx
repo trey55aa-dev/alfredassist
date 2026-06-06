@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { awardXp, XP_VALUES } from "@/lib/gamification";
 import { Plus, Trash2, Flame, Target as TargetIcon, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -90,6 +91,7 @@ export default function Checklist() {
     const wasDone = isCompleteForPeriod(habit, logs);
     const { logs: nextLogs, nowComplete } = toggleHabitForToday(habit, logs);
     setLogs(nextLogs);
+    if (nowComplete && !wasDone) awardXp(XP_VALUES.HABIT_COMPLETE, "habit");
 
     // Auto-increment linked goal
     if (habit.goalId && nowComplete && !wasDone) {

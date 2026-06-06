@@ -44,6 +44,7 @@ import {
 } from "@/lib/outlookCalendar";
 import { OutlookCalendarConnect } from "@/components/OutlookCalendarConnect";
 import { runCarryOver } from "@/lib/carryOver";
+import { awardXp, XP_VALUES } from "@/lib/gamification";
 import { processForFollowUps, FOLLOWUP_SETTINGS_CHANGED } from "@/lib/followUps";
 import { FollowUpSettingsButton } from "@/components/FollowUpSettingsButton";
 import {
@@ -184,6 +185,9 @@ export default function Agenda() {
         await remoteUpdate(id, { completed: nextCompleted });
         if (nextCompleted) {
           toast({ title: "Marked complete", description: ev.title });
+          awardXp(XP_VALUES.EVENT_COMPLETE, "event", {
+            hourOfDay: new Date().getHours(),
+          });
         }
       } catch (err) {
         // Revert
@@ -241,6 +245,7 @@ export default function Agenda() {
     setHabitLogs(result.logs);
     if (result.nowComplete) {
       toast({ title: "Back on track", description: habit.title });
+      awardXp(XP_VALUES.HABIT_COMPLETE, "habit");
     }
   };
 

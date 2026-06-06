@@ -40,6 +40,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { awardXp, XP_VALUES } from "@/lib/gamification";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { Cloud, CloudOff, Minus, History } from "lucide-react";
 import {
@@ -144,8 +145,13 @@ export default function Goals2026() {
 
   const update = (id: string, patch: Partial<Goal>) =>
     setGoals(safeGoals.map((g) => (g.id === id ? { ...g, ...patch } : g)));
-  const toggle = (id: string) =>
-    update(id, { done: !safeGoals.find((g) => g.id === id)?.done });
+  const toggle = (id: string) => {
+    const goal = safeGoals.find((g) => g.id === id);
+    if (!goal) return;
+    const wasDone = goal.done;
+    update(id, { done: !wasDone });
+    if (!wasDone) awardXp(XP_VALUES.GOAL_DONE, "goal");
+  };
   const remove = (id: string) => setGoals(safeGoals.filter((g) => g.id !== id));
 
   const addGoal = (g: Omit<Goal, "id" | "createdAt">) => {
@@ -975,7 +981,9 @@ function AIBreakdown({
   const toggleStep = (id: string) => {
     const target = subSteps.find((s) => s.id === id);
     if (!target) return;
-    setStepStatus(id, target.done ? "pending" : "done");
+    const nowDone = !target.done;
+    setStepStatus(id, nowDone ? "done" : "pending");
+    if (nowDone) awardXp(XP_VALUES.GOAL_STEP_DONE, "goal_step");
   };
 
   const removePlan = () => {
