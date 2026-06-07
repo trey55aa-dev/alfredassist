@@ -1,6 +1,23 @@
 export type GoalCategory = "Body" | "Career" | "Money" | "Skills" | "Life";
 export type GoalTimeframe = "daily" | "monthly" | "quarterly" | "annual";
 export type GoalQuarter = "Q1" | "Q2" | "Q3" | "Q4" | null;
+/** "metric" = track a number toward a target (default). "streak" = N consecutive days. */
+export type GoalType = "metric" | "streak";
+
+export interface DailyEntry {
+  done: boolean;
+  /** HH:MM when the user marked it done. */
+  time?: string;
+}
+
+export interface RelapseEntry {
+  /** YYYY-MM-DD */
+  date: string;
+  /** HH:MM */
+  time?: string;
+  reason: string;
+  avoidance: string;
+}
 
 export type SubStepStatus = "pending" | "in_progress" | "done" | "at_risk" | "blocked";
 
@@ -80,6 +97,14 @@ export interface Goal {
   progressLog?: Record<string, number>;
   /** YYYY-MM-DD of the most recent check-in. */
   lastCheckIn?: string;
+  /** "metric" (default) or "streak" — drives the analytics panel behaviour. */
+  goalType?: GoalType;
+  /** YYYY-MM-DD when the current streak challenge started (streak goals). */
+  streakStart?: string;
+  /** Per-day completion log (streak goals). */
+  dailyLog?: Record<string, DailyEntry>;
+  /** Relapse / miss log (streak goals). */
+  relapseLog?: RelapseEntry[];
 }
 
 /* ---------- Pace / position helpers ---------- */
@@ -169,7 +194,7 @@ const SEED: Goal[] = [
   { id: "g1", title: "Run a 5K", category: "Body", timeframe: "annual", quarter: "Q2", done: false, createdAt: 0 },
   { id: "g2", title: "Compete in a Hyrox event", category: "Body", timeframe: "annual", quarter: "Q4", done: false, createdAt: 0 },
   { id: "g3", title: "100 push-ups straight", category: "Body", timeframe: "annual", quarter: "Q3", target: 100, current: 0, unit: "reps", done: false, createdAt: 0 },
-  { id: "g4", title: "90 days no fap / no porn", category: "Body", timeframe: "quarterly", quarter: "Q1", target: 90, current: 0, unit: "days", done: false, createdAt: 0 },
+  { id: "g4", title: "90 days no fap / no porn", category: "Body", timeframe: "quarterly", quarter: "Q1", target: 90, current: 0, unit: "days", goalType: "streak", deadline: "2026-12-31", done: false, createdAt: 0, dailyLog: {}, relapseLog: [] },
   { id: "g5", title: "Learn to dance", category: "Body", timeframe: "annual", quarter: "Q3", done: false, createdAt: 0 },
 
   // Career

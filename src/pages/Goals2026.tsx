@@ -62,6 +62,7 @@ import {
 } from "@/lib/googleCalendar";
 import type { AgendaEvent } from "@/lib/agenda";
 import { BackupRestore } from "@/components/BackupRestore";
+import { GoalAnalyticsPanel } from "@/components/GoalAnalyticsPanel";
 import {
   CATEGORIES,
   GOALS_KEY,
@@ -82,6 +83,7 @@ import {
   paceStatus,
   progressPct,
 } from "@/lib/goals";
+import { deadlineQuarterLabel, computeStreakStats } from "@/lib/goalsAnalytics";
 import { buildSchedule, STATUS_META } from "@/lib/planSchedule";
 import type { BrainEntry } from "./BrainDump";
 import { cn } from "@/lib/utils";
@@ -643,10 +645,21 @@ function GoalRow({
               {goal.quarter && <Badge variant="gold">{goal.quarter}</Badge>}
               {goal.deadline && (
                 <Badge variant={days !== null && days < 0 ? "destructive" : "muted"}>
-                  {format(new Date(goal.deadline), "MMM d")}
+                  {format(new Date(goal.deadline), "MMM d, yyyy")}
                   {days !== null && (days < 0 ? " · overdue" : ` · ${days}d`)}
                 </Badge>
               )}
+              {goal.deadline && deadlineQuarterLabel(goal.deadline) && (
+                <Badge variant="gold">
+                  {deadlineQuarterLabel(goal.deadline)}
+                </Badge>
+              )}
+              {goal.goalType === "streak" && (() => {
+                const s = computeStreakStats(goal);
+                return s.currentStreak > 0 ? (
+                  <Badge variant="gold">🔥 {s.currentStreak}d streak</Badge>
+                ) : null;
+              })()}
               {linked.length > 0 && (
                 <Badge variant="muted">
                   <Brain className="h-2.5 w-2.5 mr-1 inline" />
@@ -681,7 +694,10 @@ function GoalRow({
 
           {open && (
             <div className="mt-3 space-y-3 fade-in">
-              <div className="grid grid-cols-2 gap-2">
+              {/* Analytics panel — streak tracker or quarterly pace */}
+              <GoalAnalyticsPanel goal={goal} onChange={onChange} />
+
+              <div className="grid grid-cols-3 gap-2">
                 <Select
                   value={goal.timeframe}
                   onChange={(v) => onChange({ timeframe: v as GoalTimeframe })}
@@ -692,6 +708,12 @@ function GoalRow({
                   onChange={(v) => onChange({ quarter: (v || null) as GoalQuarter })}
                   options={["", ...QUARTERS]}
                   render={(q) => (q === "" ? "No quarter" : q)}
+                />
+                <Select
+                  value={goal.goalType ?? "metric"}
+                  onChange={(v) => onChange({ goalType: v as "metric" | "streak" })}
+                  options={["metric", "streak"]}
+                  render={(t) => (t === "streak" ? "Streak" : "Metric")}
                 />
               </div>
               <Popover>

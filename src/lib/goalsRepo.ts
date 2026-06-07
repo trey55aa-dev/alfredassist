@@ -7,7 +7,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
-import type { Goal, GoalCategory, GoalQuarter, GoalSubStep, GoalTimeframe } from "./goals";
+import type { Goal, GoalCategory, GoalQuarter, GoalSubStep, GoalTimeframe, GoalType, DailyEntry, RelapseEntry } from "./goals";
 
 type GoalInsert = TablesInsert<"goals">;
 
@@ -31,6 +31,10 @@ interface GoalRow {
   tags: string[] | null;
   progress_log: Record<string, number> | null;
   last_check_in: string | null;
+  goal_type: string | null;
+  streak_start: string | null;
+  daily_log: Record<string, DailyEntry> | null;
+  relapse_log: RelapseEntry[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +58,10 @@ function rowToGoal(row: GoalRow): Goal {
     tags: row.tags ?? undefined,
     progressLog: row.progress_log ?? undefined,
     lastCheckIn: row.last_check_in ?? undefined,
+    goalType: (row.goal_type as GoalType | null) ?? undefined,
+    streakStart: row.streak_start ?? undefined,
+    dailyLog: row.daily_log ?? undefined,
+    relapseLog: row.relapse_log ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
@@ -81,6 +89,10 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
     progress_log:
       (goal.progressLog as unknown as GoalInsert["progress_log"]) ?? null,
     last_check_in: goal.lastCheckIn ?? null,
+    goal_type: goal.goalType ?? null,
+    streak_start: goal.streakStart ?? null,
+    daily_log: (goal.dailyLog as unknown as GoalInsert["daily_log"]) ?? null,
+    relapse_log: (goal.relapseLog as unknown as GoalInsert["relapse_log"]) ?? null,
   };
   // Preserve seed createdAt only when meaningful; let DB default when 0.
   if (goal.createdAt && goal.createdAt > 0) {
