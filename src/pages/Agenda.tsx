@@ -56,6 +56,7 @@ import { NotificationToggle } from "@/components/NotificationToggle";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
 import {
   parseRecurringInstanceId,
+  RECURRING_CHANGED,
   setRecurringCompleted,
   setRecurringSkipped,
 } from "@/lib/recurring";
@@ -142,6 +143,7 @@ export default function Agenda() {
     window.addEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
     window.addEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
     window.addEventListener(FOLLOWUP_SETTINGS_CHANGED, onChange);
+    window.addEventListener(RECURRING_CHANGED, onChange);
     window.addEventListener("storage", onChange);
     window.addEventListener("focus", onFocus);
     // Periodic poll (5 min). Local-only sessions skip the network in getTodayEvents.
@@ -151,6 +153,7 @@ export default function Agenda() {
       window.removeEventListener(GOOGLE_CONNECTED_CHANGED, onChange);
       window.removeEventListener(OUTLOOK_CONNECTED_CHANGED, onChange);
       window.removeEventListener(FOLLOWUP_SETTINGS_CHANGED, onChange);
+      window.removeEventListener(RECURRING_CHANGED, onChange);
       window.removeEventListener("storage", onChange);
       window.removeEventListener("focus", onFocus);
       clearInterval(poll);

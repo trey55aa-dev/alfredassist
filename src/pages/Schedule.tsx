@@ -32,6 +32,7 @@ import { EVENT_COLORS, EVENT_EMOJIS } from "@/lib/agenda";
 import {
   DAY_NAMES,
   RECURRENCE_LABELS,
+  RECURRING_CHANGED,
   RecurrenceType,
   RecurringTemplate,
   deleteTemplate,
@@ -39,29 +40,13 @@ import {
   isApplicableToDate,
   loadTemplates,
   saveTemplates,
+  tocssColor,
   upsertTemplate,
 } from "@/lib/recurring";
-import { nanoid } from "nanoid";
 
-const DEFAULT_COLOR = "270 40% 55%";
+const DEFAULT_COLOR = "270 40% 55%"; // bare HSL; tocssColor wraps it for CSS use
 
 /* ---------- Helpers ---------- */
-
-function hslToHex(hsl: string): string {
-  const parts = hsl.split(/\s+/);
-  const h = parseFloat(parts[0]) || 0;
-  const s = parseFloat(parts[1]) / 100 || 0;
-  const l = parseFloat(parts[2]) / 100 || 0;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
 
 function formatTime12(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
@@ -122,7 +107,7 @@ function FormDialog({ initial, onSave, onClose }: FormDialogProps) {
   const save = () => {
     if (!title.trim()) return;
     const t: RecurringTemplate = {
-      id: initial.id ?? nanoid(),
+      id: initial.id ?? crypto.randomUUID(),
       title: title.trim(),
       emoji: emoji || undefined,
       color,
@@ -135,7 +120,7 @@ function FormDialog({ initial, onSave, onClose }: FormDialogProps) {
     onSave(t);
   };
 
-  const colorHex = hslToHex(color);
+  const colorCss = tocssColor(color);
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -205,7 +190,7 @@ function FormDialog({ initial, onSave, onClose }: FormDialogProps) {
                   onClick={() => setColor(c.hsl)}
                   className="h-6 w-6 rounded-full border-2 transition-all"
                   style={{
-                    background: hslToHex(c.hsl),
+                    background: tocssColor(c.hsl),
                     borderColor: color === c.hsl ? "hsl(var(--gold))" : "transparent",
                   }}
                 />
@@ -216,11 +201,8 @@ function FormDialog({ initial, onSave, onClose }: FormDialogProps) {
               >
                 <input
                   type="color"
-                  value={colorHex}
-                  onChange={(e) => {
-                    // Convert hex to approximate HSL string via the browser
-                    setColor(e.target.value); // store hex when custom — display still works
-                  }}
+                  value={colorCss.startsWith("#") ? colorCss : "#9b59b6"}
+                  onChange={(e) => setColor(e.target.value)}
                   className="h-8 w-8 -translate-x-1 -translate-y-1 cursor-pointer"
                 />
               </label>
@@ -325,8 +307,7 @@ interface TemplateCardProps {
 }
 
 function TemplateCard({ template: t, isToday, onToggle, onEdit, onDelete }: TemplateCardProps) {
-  const colorStr = t.color ?? DEFAULT_COLOR;
-  const blockColor = colorStr.includes("#") ? colorStr : hslToHex(colorStr);
+  const blockColor = tocssColor(t.color);
 
   return (
     <div

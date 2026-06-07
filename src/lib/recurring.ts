@@ -7,11 +7,25 @@ import type { AgendaEvent } from "./agenda";
 
 export type RecurrenceType = "daily" | "weekdays" | "weekends" | "custom";
 
+export const RECURRING_CHANGED = "alfred.recurring:changed";
+
+function dispatchChanged() {
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent(RECURRING_CHANGED));
+}
+
+/** Normalise a stored color (HSL bare string or #hex) to a valid CSS color. */
+export function tocssColor(raw: string | undefined): string {
+  if (!raw) return "hsl(270 40% 55%)";
+  if (raw.startsWith("#") || raw.startsWith("rgb") || raw.startsWith("hsl(")) return raw;
+  return `hsl(${raw})`;
+}
+
 export interface RecurringTemplate {
   id: string;
   title: string;
   emoji?: string;
-  color?: string; // HSL string, e.g. "270 40% 55%"
+  color?: string; // hex "#rrggbb" or bare HSL "h s% l%"
   startTime: string; // "HH:MM" 24-hour
   endTime: string;   // "HH:MM" 24-hour
   recurrence: RecurrenceType;
@@ -45,6 +59,7 @@ export function loadTemplates(): RecurringTemplate[] {
 
 export function saveTemplates(templates: RecurringTemplate[]): void {
   localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+  dispatchChanged();
 }
 
 export function upsertTemplate(t: RecurringTemplate): void {
@@ -52,11 +67,11 @@ export function upsertTemplate(t: RecurringTemplate): void {
   const idx = all.findIndex((x) => x.id === t.id);
   if (idx >= 0) all[idx] = t;
   else all.push(t);
-  saveTemplates(all);
+  saveTemplates(all); // dispatchChanged via saveTemplates
 }
 
 export function deleteTemplate(id: string): void {
-  saveTemplates(loadTemplates().filter((t) => t.id !== id));
+  saveTemplates(loadTemplates().filter((t) => t.id !== id)); // dispatchChanged via saveTemplates
 }
 
 /* ---------- Applicability ---------- */
@@ -110,6 +125,7 @@ export function setRecurringCompleted(
   if (value) rec[k] = true;
   else delete rec[k];
   writeRecord(COMPLETIONS_KEY, rec);
+  dispatchChanged();
 }
 
 export function isRecurringSkipped(templateId: string, dateStr: string): boolean {
@@ -126,6 +142,7 @@ export function setRecurringSkipped(
   if (value) rec[k] = true;
   else delete rec[k];
   writeRecord(SKIPPED_KEY, rec);
+  dispatchChanged();
 }
 
 /* ---------- Instance generation ---------- */
@@ -166,7 +183,7 @@ export function templateToAgendaEvent(
     end: end.toISOString(),
     source: "recurring" as AgendaEvent["source"],
     emoji: template.emoji,
-    calendarColor: template.color ?? "270 40% 55%",
+    calendarColor: tocssColor(template.color),
     completed: isRecurringCompleted(template.id, dateStr),
   };
 }

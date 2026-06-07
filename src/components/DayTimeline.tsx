@@ -351,6 +351,9 @@ export function DayTimeline({
                       </div>
                       {!isShort && (
                         <div className="mt-0.5 font-mono text-[10px] tracking-wider text-muted-foreground">
+                          {p.event.source === "recurring" && (
+                            <span className="mr-1 text-[9px]">🔁</span>
+                          )}
                           {formatEventTime(p.event)} ·{" "}
                           {durationMinutes(p.event)} min
                           {carryLabel && (

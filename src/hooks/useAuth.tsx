@@ -33,7 +33,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("id, user_id, display_name, avatar_url")
       .eq("user_id", userId)
       .maybeSingle();
-    setProfile(data);
+
+    if (data) {
+      setProfile(data);
+      return;
+    }
+
+    // No profile yet — happens on first Google/OAuth sign-in.
+    // Pull name + avatar from the provider metadata and seed the row.
+    const { data: authData } = await supabase.auth.getUser();
+    const meta = authData?.user?.user_metadata ?? {};
+    const display_name: string | null =
+      meta.full_name ?? meta.name ?? meta.display_name ??
+      authData?.user?.email?.split("@")[0] ?? null;
+    const avatar_url: string | null = meta.avatar_url ?? meta.picture ?? null;
+
+    await supabase
+      .from("profiles")
+      .upsert({ user_id: userId, display_name, avatar_url }, { onConflict: "user_id" });
+
+    const { data: created } = await supabase
+      .from("profiles")
+      .select("id, user_id, display_name, avatar_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+    setProfile(created);
   };
 
   useEffect(() => {
