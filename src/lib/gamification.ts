@@ -7,13 +7,25 @@ export const XP_VALUES = {
   EVENT_COMPLETE: 5,
   GOAL_STEP_DONE: 25,
   GOAL_DONE: 100,
-  PROGRESS_LOGGED: 5,
+  PROGRESS_LOGGED: 5, // fallback when no target is set
   LIST_ITEM_DONE: 3,
   STREAK_7: 50,
   STREAK_30: 200,
   STREAK_90: 500,
   FOCUS_SESSION: 15,
 } as const;
+
+/**
+ * Proportional XP for logging progress toward a goal.
+ * Awards (delta / target) * 100 XP, so a goal completed entirely through
+ * progress logs earns ~100 XP from logs + another 100 XP on GOAL_DONE.
+ * Falls back to the flat PROGRESS_LOGGED value when target is missing.
+ */
+export function progressXp(delta: number, target: number | undefined): number {
+  if (!target || target <= 0) return XP_VALUES.PROGRESS_LOGGED;
+  const pct = Math.abs(delta) / target;
+  return Math.max(1, Math.min(100, Math.round(pct * 100)));
+}
 
 export interface Level {
   level: number;

@@ -40,7 +40,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { awardXp, XP_VALUES } from "@/lib/gamification";
+import { awardXp, progressXp, XP_VALUES } from "@/lib/gamification";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { Cloud, CloudOff, Minus, History } from "lucide-react";
 import {
@@ -1827,7 +1827,7 @@ function ProgressInsight({
       progressLog: next.progressLog,
       lastCheckIn: next.lastCheckIn,
     });
-    awardXp(XP_VALUES.PROGRESS_LOGGED, "progress", {
+    awardXp(progressXp(delta, goal.target as number), "progress", {
       goalCurrent: next.current,
       unit: goal.unit ?? "",
     });
@@ -1915,7 +1915,7 @@ function ProgressInsight({
               progressLog: next.progressLog,
               lastCheckIn: next.lastCheckIn,
             });
-            awardXp(XP_VALUES.PROGRESS_LOGGED, "progress", {
+            awardXp(progressXp(v, goal.target as number), "progress", {
               goalCurrent: next.current,
               unit: goal.unit ?? "",
             });
