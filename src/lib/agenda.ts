@@ -1,7 +1,7 @@
 // Agenda / calendar event types and helpers.
 // Once Google Calendar OAuth is wired, swap `getTodayEvents` to fetch from the edge function.
 
-export type EventSource = "google" | "outlook" | "apple" | "manual";
+export type EventSource = "google" | "outlook" | "apple" | "manual" | "recurring";
 
 export interface AgendaEvent {
   id: string;
@@ -119,7 +119,9 @@ export function currentEvent(events: AgendaEvent[], now = new Date()): AgendaEve
  */
 export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
   const { loadLocalEvents } = await import("./agendaStore");
+  const { getRecurringInstances } = await import("./recurring");
   const local = loadLocalEvents();
+  const recurring = getRecurringInstances(day);
 
   const { isGoogleConnected, listGoogleEventsForDay } = await import(
     "./googleCalendar"
@@ -130,7 +132,7 @@ export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
 
   const googleOn = isGoogleConnected();
   const outlookOn = isOutlookConnected();
-  if (!googleOn && !outlookOn) return local;
+  if (!googleOn && !outlookOn) return [...local, ...recurring];
 
   const byId = new Map<string, AgendaEvent>();
 
@@ -161,6 +163,10 @@ export async function getTodayEvents(day = new Date()): Promise<AgendaEvent[]> {
     } else {
       byId.set(e.id, e);
     }
+  }
+  // Recurring instances go in last — they have stable IDs and don't conflict.
+  for (const e of recurring) {
+    byId.set(e.id, e);
   }
   return Array.from(byId.values());
 }

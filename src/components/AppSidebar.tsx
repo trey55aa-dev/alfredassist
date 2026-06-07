@@ -24,6 +24,7 @@ import {
   ListChecks,
   LogOut,
   Palette,
+  Repeat,
   Sparkles,
   Activity,
   Pencil,
@@ -60,6 +61,7 @@ const items = [
   { title: "Focus Timer", url: "/focus", icon: Timer },
   { title: "Brain Dump", url: "/brain-dump", icon: Brain },
   { title: "Agenda", url: "/agenda", icon: CalendarDays },
+  { title: "Daily Schedule", url: "/schedule", icon: Repeat },
   { title: "Weekly Planner", url: "/planner", icon: CalendarDays },
   { title: "2026 Goals", url: "/goals-2026", icon: Target },
   { title: "Feature Guide", url: "/guide", icon: BookOpen },
@@ -69,7 +71,7 @@ const items = [
 ];
 
 /** Sidebar routes that stay accessible without confirmation while focused. */
-const FOCUS_SAFE = new Set<string>(["/agenda"]);
+const FOCUS_SAFE = new Set<string>(["/agenda", "/schedule"]);
 
 export function AppSidebar() {
   const { state } = useSidebar();

@@ -6,6 +6,7 @@ import {
   MapPin,
   Pencil,
   Play,
+  Repeat,
   Timer as TimerIcon,
   Trash2,
 } from "lucide-react";
@@ -466,7 +467,27 @@ export function DayTimeline({
                       </div>
                     </div>
 
-                    {(p.event.source === "manual" ||
+                    {p.event.source === "recurring" ? (
+                      <div className="mt-1 flex items-center gap-2 border-t border-border/40 pt-2">
+                        <a
+                          href="/schedule"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-gold"
+                        >
+                          <Repeat className="h-3 w-3" /> Manage routine
+                        </a>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove?.(p.event.id);
+                          }}
+                          className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" /> Skip today
+                        </button>
+                      </div>
+                    ) : (p.event.source === "manual" ||
                       p.event.source === "google" ||
                       p.event.source === "outlook") && (
                       <div className="mt-1 flex items-center gap-2 border-t border-border/40 pt-2">

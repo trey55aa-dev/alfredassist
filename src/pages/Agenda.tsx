@@ -54,6 +54,11 @@ import {
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
+import {
+  parseRecurringInstanceId,
+  setRecurringCompleted,
+  setRecurringSkipped,
+} from "@/lib/recurring";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { formatLongDate } from "@/lib/alfred";
 
@@ -169,6 +174,23 @@ export default function Agenda() {
   const handleToggle = async (id: string) => {
     const ev = today.find((e) => e.id === id);
     if (!ev) return;
+
+    // Recurring instance — update per-day completion store, no cloud write needed.
+    if (ev.source === "recurring") {
+      const parsed = parseRecurringInstanceId(ev.id);
+      if (!parsed) return;
+      const nextCompleted = !ev.completed;
+      setRecurringCompleted(parsed.templateId, parsed.dateStr, nextCompleted);
+      setEvents((prev) =>
+        prev ? prev.map((e) => (e.id === id ? { ...e, completed: nextCompleted } : e)) : prev,
+      );
+      if (nextCompleted) {
+        toast({ title: "Routine done", description: ev.title });
+        awardXp(XP_VALUES.EVENT_COMPLETE, "event", { hourOfDay: new Date().getHours() });
+      }
+      return;
+    }
+
     const isRemote = ev.source === "google" || ev.source === "outlook";
     if (isRemote) {
       const provider = ev.source === "google" ? "Google" : "Outlook";
@@ -213,6 +235,17 @@ export default function Agenda() {
   const handleRemove = async (id: string) => {
     const ev = today.find((e) => e.id === id);
     if (!ev) return;
+
+    // Recurring instance — skip just for today, not delete the template.
+    if (ev.source === "recurring") {
+      const parsed = parseRecurringInstanceId(ev.id);
+      if (!parsed) return;
+      setRecurringSkipped(parsed.templateId, parsed.dateStr, true);
+      setEvents((prev) => (prev ? prev.filter((e) => e.id !== id) : prev));
+      toast({ title: "Skipped today", description: "It'll be back tomorrow. Edit in Daily Schedule to remove it." });
+      return;
+    }
+
     const isRemote = ev.source === "google" || ev.source === "outlook";
     if (isRemote) {
       const provider = ev.source === "google" ? "Google" : "Outlook";
