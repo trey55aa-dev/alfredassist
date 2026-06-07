@@ -91,7 +91,10 @@ export default function Checklist() {
     const wasDone = isCompleteForPeriod(habit, logs);
     const { logs: nextLogs, nowComplete } = toggleHabitForToday(habit, logs);
     setLogs(nextLogs);
-    if (nowComplete && !wasDone) awardXp(XP_VALUES.HABIT_COMPLETE, "habit");
+    if (nowComplete && !wasDone) {
+      const streakDays = currentStreakFor(habit, nextLogs);
+      awardXp(XP_VALUES.HABIT_COMPLETE, "habit", { streakDays });
+    }
 
     // Auto-increment linked goal
     if (habit.goalId && nowComplete && !wasDone) {

@@ -1827,6 +1827,10 @@ function ProgressInsight({
       progressLog: next.progressLog,
       lastCheckIn: next.lastCheckIn,
     });
+    awardXp(XP_VALUES.PROGRESS_LOGGED, "progress", {
+      goalCurrent: next.current,
+      unit: goal.unit ?? "",
+    });
   };
 
   return (
@@ -1910,6 +1914,10 @@ function ProgressInsight({
               current: next.current,
               progressLog: next.progressLog,
               lastCheckIn: next.lastCheckIn,
+            });
+            awardXp(XP_VALUES.PROGRESS_LOGGED, "progress", {
+              goalCurrent: next.current,
+              unit: goal.unit ?? "",
             });
             (e.target as HTMLInputElement).value = "";
           }}

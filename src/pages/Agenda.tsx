@@ -53,7 +53,7 @@ import {
 } from "@/lib/notifications";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
-import { habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
+import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { formatLongDate } from "@/lib/alfred";
 
@@ -245,7 +245,8 @@ export default function Agenda() {
     setHabitLogs(result.logs);
     if (result.nowComplete) {
       toast({ title: "Back on track", description: habit.title });
-      awardXp(XP_VALUES.HABIT_COMPLETE, "habit");
+      const streakDays = currentStreakFor(habit, result.logs);
+      awardXp(XP_VALUES.HABIT_COMPLETE, "habit", { streakDays });
     }
   };
 

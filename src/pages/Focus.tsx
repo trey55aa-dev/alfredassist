@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey, formatTime } from "@/lib/alfred";
 import { toast } from "sonner";
+import { awardXp, XP_VALUES } from "@/lib/gamification";
 
 const PRESETS = [10, 25, 45, 60];
 
@@ -41,6 +42,7 @@ export default function Focus() {
             sessions: (prev.date === todayKey() ? prev.sessions : 0) + 1,
             minutes: (prev.date === todayKey() ? prev.minutes : 0) + duration / 60,
           }));
+          awardXp(XP_VALUES.FOCUS_SESSION, "focus");
           toast.success("Session complete", { description: "Excellent work, sir." });
           return duration;
         }
