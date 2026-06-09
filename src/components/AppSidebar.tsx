@@ -29,6 +29,9 @@ import {
   Activity,
   Pencil,
   Trophy,
+  ChevronDown,
+  ChevronRight,
+  CalendarRange,
 } from "lucide-react";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
@@ -40,7 +43,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -54,23 +56,71 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 
-const items = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
-  { title: "Custom Lists", url: "/lists", icon: ListChecks },
-  { title: "Focus Timer", url: "/focus", icon: Timer },
-  { title: "Brain Dump", url: "/brain-dump", icon: Brain },
-  { title: "Agenda", url: "/agenda", icon: CalendarDays },
-  { title: "Daily Schedule", url: "/schedule", icon: Repeat },
-  { title: "Weekly Planner", url: "/planner", icon: CalendarDays },
-  { title: "2026 Goals", url: "/goals-2026", icon: Target },
-  { title: "Feature Guide", url: "/guide", icon: BookOpen },
-  { title: "Audio Journal", url: "/journal", icon: Mic },
-  { title: "Health", url: "/health", icon: Activity },
-  { title: "Achievements", url: "/achievements", icon: Trophy },
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+}
+
+interface NavCategory {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  items: NavItem[];
+}
+
+const NAV_CATEGORIES: NavCategory[] = [
+  {
+    id: "home",
+    label: "Home",
+    icon: LayoutDashboard,
+    items: [
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    ],
+  },
+  {
+    id: "today",
+    label: "Today",
+    icon: CalendarDays,
+    items: [
+      { title: "Agenda",          url: "/agenda",    icon: CalendarDays },
+      { title: "Daily Schedule",  url: "/schedule",  icon: Repeat },
+      { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
+      { title: "Focus Timer",     url: "/focus",     icon: Timer },
+    ],
+  },
+  {
+    id: "capture",
+    label: "Capture",
+    icon: Brain,
+    items: [
+      { title: "Brain Dump",    url: "/brain-dump", icon: Brain },
+      { title: "Audio Journal", url: "/journal",    icon: Mic },
+      { title: "Custom Lists",  url: "/lists",      icon: ListChecks },
+    ],
+  },
+  {
+    id: "goals",
+    label: "Goals",
+    icon: Target,
+    items: [
+      { title: "2026 Goals",      url: "/goals-2026",   icon: Target },
+      { title: "Weekly Planner",  url: "/planner",      icon: CalendarRange },
+      { title: "Health",          url: "/health",       icon: Activity },
+      { title: "Achievements",    url: "/achievements", icon: Trophy },
+    ],
+  },
+  {
+    id: "guide",
+    label: "Guide",
+    icon: BookOpen,
+    items: [
+      { title: "Feature Guide", url: "/guide", icon: BookOpen },
+    ],
+  },
 ];
 
-/** Sidebar routes that stay accessible without confirmation while focused. */
+/** Routes accessible without focus-mode confirmation. */
 const FOCUS_SAFE = new Set<string>(["/agenda", "/schedule"]);
 
 export function AppSidebar() {
@@ -82,6 +132,26 @@ export function AppSidebar() {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
+
+  // Determine which category the current route belongs to
+  const activeCategoryId = NAV_CATEGORIES.find((cat) =>
+    cat.items.some((item) =>
+      item.url === "/" ? location.pathname === "/" : location.pathname.startsWith(item.url)
+    )
+  )?.id ?? "home";
+
+  // Expanded state: active category starts open; others start closed
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NAV_CATEGORIES.map((c) => [c.id, c.id === activeCategoryId]))
+  );
+
+  // Auto-expand when navigating to a new category
+  useEffect(() => {
+    setExpanded((prev) => ({ ...prev, [activeCategoryId]: true }));
+  }, [activeCategoryId]);
+
+  const toggleCategory = (id: string) =>
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // First run after sign-in with no name set: gently prompt once.
   useEffect(() => {
@@ -159,7 +229,7 @@ export function AppSidebar() {
               <div className="leading-tight">
                 <div className="font-display text-lg text-gold">Alfred</div>
                 <div className="text-[10px] uppercase tracking-[0.2em] text-primary">
-                  Personal AI asstiant 
+                  Personal AI Assistant
                 </div>
               </div>
             )}
@@ -168,51 +238,136 @@ export function AppSidebar() {
 
         <div className="divider-gold mx-3" />
 
-        <SidebarGroup>
-          {!collapsed && (
-            <SidebarGroupLabel className="text-[10px] tracking-[0.25em] uppercase text-muted-foreground/70 px-3 mt-3">
-              Protocol
-            </SidebarGroupLabel>
-          )}
+        <SidebarGroup className="mt-1">
           <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => {
-                const isActive =
-                  item.url === "/"
-                    ? location.pathname === "/"
-                    : location.pathname.startsWith(item.url);
-                const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
+            <SidebarMenu className="gap-0.5">
+              {NAV_CATEGORIES.map((cat) => {
+                const isCatActive = cat.id === activeCategoryId;
+                const isOpen = expanded[cat.id];
+                const CatIcon = cat.icon;
+
                 return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
-                        end={item.url === "/"}
-                        onClick={(e) => {
-                          if (dimmed) {
-                            e.preventDefault();
-                            setPendingUrl(item.url);
-                          }
-                        }}
-                        className={`group flex items-center gap-3 rounded-md px-3 py-2 transition-all ${
-                          isActive
-                            ? "bg-sidebar-accent text-gold shadow-inset-gold"
-                            : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-gold"
-                        } ${dimmed ? "opacity-40" : ""}`}
-                      >
-                        <item.icon
-                          className={`h-4 w-4 transition-colors ${
-                            isActive ? "text-gold" : "text-muted-foreground group-hover:text-gold"
+                  <div key={cat.id}>
+                    {/* ── Category header ── */}
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // If collapsed, navigate to first item directly
+                            if (collapsed) {
+                              const first = cat.items[0];
+                              const dimmed = focus.active && !FOCUS_SAFE.has(first.url) && !isCatActive;
+                              if (dimmed) { setPendingUrl(first.url); return; }
+                              navigate(first.url);
+                            } else {
+                              toggleCategory(cat.id);
+                            }
+                          }}
+                          className={`group w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all ${
+                            isCatActive
+                              ? "bg-sidebar-accent/70 text-gold"
+                              : "text-sidebar-foreground hover:bg-sidebar-accent/40 hover:text-gold"
                           }`}
-                        />
-                        {!collapsed && (
-                          <span className="font-mono text-[12px] tracking-wider uppercase text-teal-50">
-                            {item.title}
-                          </span>
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                        >
+                          <CatIcon
+                            className={`h-4 w-4 shrink-0 transition-colors ${
+                              isCatActive ? "text-gold" : "text-muted-foreground group-hover:text-gold"
+                            }`}
+                          />
+                          {!collapsed && (
+                            <>
+                              <span className="flex-1 font-mono text-[11px] tracking-[0.2em] uppercase font-semibold text-left">
+                                {cat.label}
+                              </span>
+                              {cat.items.length > 1 && (
+                                isOpen
+                                  ? <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                  : <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                              )}
+                            </>
+                          )}
+                        </button>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    {/* ── Sub-items (expanded only, hidden when sidebar collapsed) ── */}
+                    {!collapsed && isOpen && cat.items.length > 1 && (
+                      <div className="ml-3 pl-3 border-l border-border/40 mb-1 space-y-0.5">
+                        {cat.items.map((item) => {
+                          const isActive =
+                            item.url === "/"
+                              ? location.pathname === "/"
+                              : location.pathname.startsWith(item.url);
+                          const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
+                          return (
+                            <SidebarMenuItem key={item.title}>
+                              <SidebarMenuButton asChild>
+                                <NavLink
+                                  to={item.url}
+                                  end={item.url === "/"}
+                                  onClick={(e) => {
+                                    if (dimmed) {
+                                      e.preventDefault();
+                                      setPendingUrl(item.url);
+                                    }
+                                  }}
+                                  className={`group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-all text-left ${
+                                    isActive
+                                      ? "bg-sidebar-accent text-gold shadow-inset-gold"
+                                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-gold"
+                                  } ${dimmed ? "opacity-40" : ""}`}
+                                >
+                                  <item.icon
+                                    className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+                                      isActive ? "text-gold" : "text-muted-foreground/70 group-hover:text-gold"
+                                    }`}
+                                  />
+                                  <span className="font-mono text-[11px] tracking-wider uppercase">
+                                    {item.title}
+                                  </span>
+                                </NavLink>
+                              </SidebarMenuButton>
+                            </SidebarMenuItem>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Single-item category: navigate directly on click (already handled above),
+                        but also render as a visible sub-item row when expanded */}
+                    {!collapsed && isOpen && cat.items.length === 1 && (() => {
+                      const item = cat.items[0];
+                      const isActive =
+                        item.url === "/"
+                          ? location.pathname === "/"
+                          : location.pathname.startsWith(item.url);
+                      const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
+                      return (
+                        <div className="ml-3 pl-3 border-l border-border/40 mb-1">
+                          <SidebarMenuItem>
+                            <SidebarMenuButton asChild>
+                              <NavLink
+                                to={item.url}
+                                end={item.url === "/"}
+                                onClick={(e) => {
+                                  if (dimmed) { e.preventDefault(); setPendingUrl(item.url); }
+                                }}
+                                className={`group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-all ${
+                                  isActive
+                                    ? "bg-sidebar-accent text-gold shadow-inset-gold"
+                                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-gold"
+                                } ${dimmed ? "opacity-40" : ""}`}
+                              >
+                                <item.icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-gold" : "text-muted-foreground/70 group-hover:text-gold"}`} />
+                                <span className="font-mono text-[11px] tracking-wider uppercase">{item.title}</span>
+                              </NavLink>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 );
               })}
             </SidebarMenu>
