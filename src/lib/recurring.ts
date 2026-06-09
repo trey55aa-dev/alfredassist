@@ -31,6 +31,8 @@ export interface RecurringTemplate {
   recurrence: RecurrenceType;
   days?: number[]; // 0=Sun … 6=Sat — used when recurrence="custom"
   enabled: boolean;
+  /** Named routine this block belongs to, e.g. "Morning Routine" */
+  routineGroup?: string;
 }
 
 export const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
