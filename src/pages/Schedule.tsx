@@ -50,6 +50,9 @@ import {
   packBlockToTemplate,
   packInstalledCount,
 } from "@/lib/routinePacks";
+import { useAuth } from "@/hooks/useAuth";
+import { useRecurringSync } from "@/hooks/useRecurringSync";
+import { GOALS_KEY, type Goal } from "@/lib/goals";
 
 /* ---------- Helpers ---------- */
 
@@ -251,11 +254,12 @@ function PackInstallDialog({ pack, onInstall, onClose }: PackInstallDialogProps)
 interface FormDialogProps {
   initial: Partial<RecurringTemplate>;
   existingGroups: string[];
+  goals: Goal[];
   onSave: (t: RecurringTemplate) => void;
   onClose: () => void;
 }
 
-function FormDialog({ initial, existingGroups, onSave, onClose }: FormDialogProps) {
+function FormDialog({ initial, existingGroups, goals, onSave, onClose }: FormDialogProps) {
   const [title, setTitle] = useState(initial.title ?? "");
   const [emoji, setEmoji] = useState(initial.emoji ?? "");
   const [color, setColor] = useState(initial.color ?? "270 40% 55%");
@@ -264,13 +268,30 @@ function FormDialog({ initial, existingGroups, onSave, onClose }: FormDialogProp
   const [recurrence, setRecurrence] = useState<RecurrenceType>(initial.recurrence ?? "daily");
   const [days, setDays] = useState<number[]>(initial.days ?? []);
   const [routineGroup, setRoutineGroup] = useState(initial.routineGroup ?? "");
+  const [goalId, setGoalId] = useState(initial.goalId ?? "");
+  const [goalValue, setGoalValue] = useState<string>(
+    initial.goalValue !== undefined ? String(initial.goalValue) : ""
+  );
   const [showEmojis, setShowEmojis] = useState(false);
 
   const toggleDay = (d: number) =>
     setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
+  // Auto-default goalValue to duration when a goal is picked and value is blank
+  const linkedGoal = goals.find((g) => g.id === goalId);
+
+  const computedDuration = (() => {
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    const s = sh * 60 + sm;
+    let e = eh * 60 + em;
+    if (e <= s) e += 24 * 60;
+    return Math.max(1, e - s);
+  })();
+
   const save = () => {
     if (!title.trim()) return;
+    const parsedGoalValue = goalValue !== "" ? Number(goalValue) : undefined;
     const t: RecurringTemplate = {
       id: initial.id ?? crypto.randomUUID(),
       title: title.trim(),
@@ -282,6 +303,8 @@ function FormDialog({ initial, existingGroups, onSave, onClose }: FormDialogProp
       days: recurrence === "custom" ? days : undefined,
       enabled: initial.enabled ?? true,
       routineGroup: routineGroup.trim() || undefined,
+      goalId: goalId || undefined,
+      goalValue: goalId ? (parsedGoalValue ?? computedDuration) : undefined,
     };
     onSave(t);
   };
@@ -461,6 +484,55 @@ function FormDialog({ initial, existingGroups, onSave, onClose }: FormDialogProp
             )}
           </div>
 
+          {/* Goal link */}
+          <div className="space-y-1.5">
+            <label className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+              Counts toward goal (optional)
+            </label>
+            <Select
+              value={goalId || "__none__"}
+              onValueChange={(v) => {
+                setGoalId(v === "__none__" ? "" : v);
+                setGoalValue(""); // reset so auto-default kicks in
+              }}
+            >
+              <SelectTrigger className="h-11 bg-background/60 border-border text-base">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {goals.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.title}
+                    {g.unit ? ` (${g.unit})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {goalId && (
+              <div className="flex items-center gap-2 mt-1">
+                <Input
+                  type="number"
+                  min={0.1}
+                  step={0.5}
+                  placeholder={`${computedDuration} (auto)`}
+                  value={goalValue}
+                  onChange={(e) => setGoalValue(e.target.value)}
+                  className="h-10 w-28 bg-background/60 border-border text-base"
+                />
+                <span className="text-sm text-muted-foreground flex-1">
+                  {linkedGoal?.unit ?? "units"} logged per completion
+                  {!goalValue && (
+                    <span className="block font-mono text-[10px] text-gold">
+                      defaults to {computedDuration} min (block duration)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Save */}
           <div className="flex gap-2 pt-1">
             <Button
@@ -490,6 +562,7 @@ interface GroupSectionProps {
   groupName: string;
   templates: RecurringTemplate[];
   todaySet: Set<string>;
+  goalMap: Map<string, Goal>;
   onToggleAll: (group: string, enabled: boolean) => void;
   onToggleOne: (id: string) => void;
   onEdit: (t: RecurringTemplate) => void;
@@ -498,7 +571,7 @@ interface GroupSectionProps {
 }
 
 function GroupSection({
-  groupName, templates, todaySet,
+  groupName, templates, todaySet, goalMap,
   onToggleAll, onToggleOne, onEdit, onDelete, onAddBlock,
 }: GroupSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -552,6 +625,7 @@ function GroupSection({
               key={t.id}
               template={t}
               isToday={todaySet.has(t.id)}
+              goalTitle={t.goalId ? goalMap.get(t.goalId)?.title : undefined}
               onToggle={() => onToggleOne(t.id)}
               onEdit={() => onEdit(t)}
               onDelete={() => onDelete(t.id)}
@@ -570,12 +644,14 @@ function GroupSection({
 function BlockRow({
   template: t,
   isToday,
+  goalTitle,
   onToggle,
   onEdit,
   onDelete,
 }: {
   template: RecurringTemplate;
   isToday: boolean;
+  goalTitle?: string;
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -600,9 +676,15 @@ function BlockRow({
           {isToday && t.enabled && (
             <span className="font-mono text-[8px] tracking-[0.2em] uppercase text-gold border border-gold/40 rounded px-1">today</span>
           )}
+          {goalTitle && (
+            <span className="font-mono text-[8px] tracking-wider text-teal border border-teal/40 rounded px-1">
+              → {goalTitle}
+            </span>
+          )}
         </div>
         <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
           {formatTime12(t.startTime)} – {formatTime12(t.endTime)} · {recurrenceSummary(t)}
+          {t.goalValue ? ` · +${t.goalValue}${goalTitle ? "" : " units"}` : ""}
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -686,11 +768,32 @@ function PackCard({
 
 export default function Schedule() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { pushTemplateOp, deleteTemplateOp } = useRecurringSync(user?.id);
+
   const [templates, setTemplates] = useState<RecurringTemplate[]>(() => loadTemplates());
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<RecurringTemplate> | null>(null);
   const [installingPack, setInstallingPack] = useState<RoutinePack | null>(null);
   const [showPacks, setShowPacks] = useState(false);
+
+  // Load goals from localStorage for the goal picker (reactive on focus)
+  const [goals, setGoals] = useState<Goal[]>(() => {
+    try { return JSON.parse(localStorage.getItem(GOALS_KEY) ?? "[]"); } catch { return []; }
+  });
+  useEffect(() => {
+    const refresh = () => {
+      try { setGoals(JSON.parse(localStorage.getItem(GOALS_KEY) ?? "[]")); } catch { /* */ }
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  // Stable map of goalId → Goal for display
+  const goalMap = new Map(goals.map((g) => [g.id, g]));
 
   const today = new Date();
   const todaySet = new Set(
@@ -698,6 +801,13 @@ export default function Schedule() {
   );
 
   const reload = () => setTemplates(loadTemplates());
+
+  // Re-render when cloud sync updates localStorage
+  useEffect(() => {
+    const onChange = () => reload();
+    window.addEventListener("alfred.recurring:changed", onChange);
+    return () => window.removeEventListener("alfred.recurring:changed", onChange);
+  }, []);
 
   // Derive groups: sorted by earliest start time in the group
   const groupedMap = new Map<string, RecurringTemplate[]>();
@@ -722,21 +832,25 @@ export default function Schedule() {
   const enabledCount = templates.filter((t) => t.enabled).length;
   const todayCount = getTemplatesForDate(templates, today).length;
 
-  /* mutations */
+  /* ── mutations ── */
   const handleSave = useCallback(
     (t: RecurringTemplate) => {
       upsertTemplate(t);
+      pushTemplateOp(t); // cloud sync
       reload();
       setFormOpen(false);
       setEditing(null);
       toast({ title: editing?.id ? "Block updated" : "Block added", description: t.title });
     },
-    [editing?.id, toast]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editing?.id, toast, pushTemplateOp]
   );
 
   const handleToggleOne = (id: string) => {
     const all = loadTemplates().map((t) => (t.id === id ? { ...t, enabled: !t.enabled } : t));
     saveTemplates(all);
+    const updated = all.find((t) => t.id === id);
+    if (updated) pushTemplateOp(updated);
     reload();
   };
 
@@ -745,6 +859,7 @@ export default function Schedule() {
       t.routineGroup === group ? { ...t, enabled } : t
     );
     saveTemplates(all);
+    all.filter((t) => t.routineGroup === group).forEach((t) => pushTemplateOp(t));
     reload();
     toast({ title: enabled ? `${group} enabled` : `${group} paused` });
   };
@@ -752,18 +867,20 @@ export default function Schedule() {
   const handleDelete = (id: string) => {
     const t = templates.find((x) => x.id === id);
     deleteTemplate(id);
+    deleteTemplateOp(id); // cloud sync
     reload();
     toast({ title: "Block removed", description: t?.title });
   };
 
-  const handleInstallPack = (blocks: ReturnType<typeof ROUTINE_PACKS[0]["blocks"]["map"]>, groupName: string) => {
+  const handleInstallPack = (blocks: PackBlock[], groupName: string) => {
     blocks.forEach((block) => {
       const tpl: RecurringTemplate = {
-        ...packBlockToTemplate(block as any, groupName),
+        ...packBlockToTemplate(block, groupName),
         id: crypto.randomUUID(),
         enabled: true,
       };
       upsertTemplate(tpl);
+      pushTemplateOp(tpl); // cloud sync
     });
     reload();
     setInstallingPack(null);
@@ -865,6 +982,7 @@ export default function Schedule() {
           groupName={group}
           templates={blocks}
           todaySet={todaySet}
+          goalMap={goalMap}
           onToggleAll={handleToggleAll}
           onToggleOne={handleToggleOne}
           onEdit={(t) => { setEditing(t); setFormOpen(true); }}
@@ -887,6 +1005,7 @@ export default function Schedule() {
                 key={t.id}
                 template={t}
                 isToday={todaySet.has(t.id)}
+                goalTitle={t.goalId ? goalMap.get(t.goalId)?.title : undefined}
                 onToggle={() => handleToggleOne(t.id)}
                 onEdit={() => { setEditing(t); setFormOpen(true); }}
                 onDelete={() => handleDelete(t.id)}
@@ -898,7 +1017,7 @@ export default function Schedule() {
 
       {templates.length > 0 && (
         <p className="font-mono text-[9px] tracking-wider text-muted-foreground/60 text-center pb-4">
-          Blocks appear in your Agenda timeline. Mark done to earn XP. Skip today without deleting.
+          Blocks sync across your devices. Check off in Agenda to log goal progress.
         </p>
       )}
 
@@ -906,7 +1025,7 @@ export default function Schedule() {
       {installingPack && (
         <PackInstallDialog
           pack={installingPack}
-          onInstall={handleInstallPack as any}
+          onInstall={handleInstallPack}
           onClose={() => setInstallingPack(null)}
         />
       )}
@@ -916,6 +1035,7 @@ export default function Schedule() {
         <FormDialog
           initial={editing}
           existingGroups={existingGroups}
+          goals={goals}
           onSave={handleSave}
           onClose={() => { setFormOpen(false); setEditing(null); }}
         />

@@ -33,6 +33,11 @@ export interface RecurringTemplate {
   enabled: boolean;
   /** Named routine this block belongs to, e.g. "Morning Routine" */
   routineGroup?: string;
+  /** ID of a Goal this block counts toward when checked off. */
+  goalId?: string;
+  /** Amount to add to the goal's current value each time this block is completed.
+   *  Defaults to the block's duration in minutes. */
+  goalValue?: number;
 }
 
 export const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
@@ -145,6 +150,43 @@ export function setRecurringSkipped(
   else delete rec[k];
   writeRecord(SKIPPED_KEY, rec);
   dispatchChanged();
+}
+
+// ── Silent variants (no event dispatch) — used by cloud sync to batch-apply
+//    remote records without triggering multiple re-renders. ──────────────────
+
+export function setRecurringCompletedSilent(
+  templateId: string,
+  dateStr: string,
+  value: boolean,
+): void {
+  const rec = readRecord(COMPLETIONS_KEY);
+  const k = compKey(templateId, dateStr);
+  if (value) rec[k] = true;
+  else delete rec[k];
+  writeRecord(COMPLETIONS_KEY, rec);
+}
+
+export function setRecurringSkippedSilent(
+  templateId: string,
+  dateStr: string,
+  value: boolean,
+): void {
+  const rec = readRecord(SKIPPED_KEY);
+  const k = compKey(templateId, dateStr);
+  if (value) rec[k] = true;
+  else delete rec[k];
+  writeRecord(SKIPPED_KEY, rec);
+}
+
+/** Duration of a template in minutes (used as default goal value). */
+export function templateDurationMinutes(t: RecurringTemplate): number {
+  const [sh, sm] = t.startTime.split(":").map(Number);
+  const [eh, em] = t.endTime.split(":").map(Number);
+  const start = sh * 60 + sm;
+  let end = eh * 60 + em;
+  if (end <= start) end += 24 * 60; // wrap past midnight
+  return Math.max(1, end - start);
 }
 
 /* ---------- Instance generation ---------- */

@@ -55,12 +55,20 @@ import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
 import {
+  loadTemplates,
   parseRecurringInstanceId,
   RECURRING_CHANGED,
   setRecurringCompleted,
   setRecurringSkipped,
+  templateDurationMinutes,
 } from "@/lib/recurring";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
+import { useAuth } from "@/hooks/useAuth";
+import { useRecurringSync } from "@/hooks/useRecurringSync";
+import { GOALS_KEY, type Goal } from "@/lib/goals";
+import { logProgress } from "@/lib/goalsHistory";
+import { progressXp } from "@/lib/gamification";
+import { upsertGoal } from "@/lib/goalsRepo";
 import { formatLongDate } from "@/lib/alfred";
 
 type ViewMode = "timeline" | "list";
@@ -74,6 +82,8 @@ export default function Agenda() {
     "alfred.agenda.view",
     "timeline",
   );
+  const { user } = useAuth();
+  const { pushCompletionOp } = useRecurringSync(user?.id);
   const { habits, habitLogs, setHabitLogs } = useCloudHabits();
   const recoveries = useMemo(
     () => habitsAtRisk(habits, habitLogs, now),
@@ -178,18 +188,58 @@ export default function Agenda() {
     const ev = today.find((e) => e.id === id);
     if (!ev) return;
 
-    // Recurring instance — update per-day completion store, no cloud write needed.
+    // Recurring instance — update per-day completion store + cloud sync.
     if (ev.source === "recurring") {
       const parsed = parseRecurringInstanceId(ev.id);
       if (!parsed) return;
       const nextCompleted = !ev.completed;
+
+      // 1. Local state
       setRecurringCompleted(parsed.templateId, parsed.dateStr, nextCompleted);
       setEvents((prev) =>
         prev ? prev.map((e) => (e.id === id ? { ...e, completed: nextCompleted } : e)) : prev,
       );
+
+      // 2. Cloud sync (fire-and-forget)
+      pushCompletionOp(parsed.templateId, parsed.dateStr, nextCompleted, false);
+
       if (nextCompleted) {
-        toast({ title: "Routine done", description: ev.title });
+        // 3. Base XP for completing a routine block
         awardXp(XP_VALUES.EVENT_COMPLETE, "event", { hourOfDay: new Date().getHours() });
+
+        // 4. Auto-log progress toward a linked goal (if any)
+        const template = loadTemplates().find((t) => t.id === parsed.templateId);
+        if (template?.goalId) {
+          try {
+            const raw = localStorage.getItem(GOALS_KEY);
+            const allGoals: Goal[] = raw ? (JSON.parse(raw) as Goal[]) : [];
+            const goal = allGoals.find((g) => g.id === template.goalId);
+            if (goal) {
+              const delta = template.goalValue ?? templateDurationMinutes(template);
+              const updated = logProgress({ goal, delta });
+              const newGoals = allGoals.map((g) => (g.id === goal.id ? updated : g));
+              localStorage.setItem(GOALS_KEY, JSON.stringify(newGoals));
+              // Push to cloud so the other device sees it too
+              if (user?.id) upsertGoal(user.id, updated).catch(console.error);
+              // Proportional XP on top of base
+              awardXp(
+                progressXp(delta, goal.target),
+                "event",
+                { hourOfDay: new Date().getHours() },
+              );
+              toast({
+                title: `${ev.title} ✓`,
+                description: `+${delta}${goal.unit ? " " + goal.unit : ""} logged toward "${goal.title}"`,
+              });
+            } else {
+              toast({ title: "Routine done ✓", description: ev.title });
+            }
+          } catch {
+            toast({ title: "Routine done ✓", description: ev.title });
+          }
+        } else {
+          toast({ title: "Routine done ✓", description: ev.title });
+        }
       }
       return;
     }
@@ -245,6 +295,7 @@ export default function Agenda() {
       if (!parsed) return;
       setRecurringSkipped(parsed.templateId, parsed.dateStr, true);
       setEvents((prev) => (prev ? prev.filter((e) => e.id !== id) : prev));
+      pushCompletionOp(parsed.templateId, parsed.dateStr, false, true);
       toast({ title: "Skipped today", description: "It'll be back tomorrow. Edit in Daily Schedule to remove it." });
       return;
     }
