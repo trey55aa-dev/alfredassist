@@ -132,6 +132,67 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Mobile / touch improvements ─────────────────────────────────────────── */
+
+/* Prevent iOS double-tap zoom on interactive elements */
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Prevent text size adjustment on orientation change (iOS) */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Remove tap highlight flicker on iOS */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Minimum 44×44px touch target helper */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Prevent inputs from zooming the viewport on iOS (font-size must be ≥16px) */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="time"],
+input[type="date"],
+textarea,
+select {
+  font-size: max(16px, 1rem);
+}
+
+/* Smooth momentum scrolling on iOS */
+.overflow-y-auto,
+.overflow-y-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area utilities — used inline via style= for dynamic values */
+/* These let components use env() in their own style props */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+/* Mobile scrollbar — hide on touch devices (finger scroll, no bar needed) */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }

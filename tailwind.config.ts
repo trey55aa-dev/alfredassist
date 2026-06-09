@@ -122,4 +122,9 @@ export default {
     },
   },
   plugins: [require("tailwindcss-animate")],
+
+  // Add landscape/portrait orientation variants
+  future: {
+    hoverOnlyWhenSupported: true, // disable hover on touch devices
+  },
 } satisfies Config;

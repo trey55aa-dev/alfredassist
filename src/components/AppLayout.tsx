@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { AmbientPattern } from "@/components/AmbientPattern";
 import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { FocusModeBanner } from "@/components/FocusModeBanner";
@@ -15,15 +16,12 @@ import { useEventsSync } from "@/hooks/useEventsSync";
 import { initAppIcon } from "@/lib/appIcon";
 
 export default function AppLayout() {
-  // Mirror manual agenda events to the cloud + hydrate on sign-in.
   useEventsSync();
 
-  // Apply the user's custom app icon (favicon + apple-touch-icon) on load.
   useEffect(() => {
     initAppIcon();
   }, []);
 
-  // Initialize saved theme on mount
   useEffect(() => {
     const saved = localStorage.getItem("alfred-theme-color");
     if (saved) {
@@ -33,16 +31,32 @@ export default function AppLayout() {
       document.documentElement.style.setProperty("--foreground", theme.foreground);
     }
   }, []);
+
   return (
     <SidebarProvider>
-      <div className="relative min-h-screen flex w-full bg-background">
+      <div className="relative min-h-screen flex w-full bg-background overflow-x-hidden">
         <AmbientPattern />
+
+        {/* Sidebar — desktop/tablet only; on mobile it still works as a sheet
+            drawer (tap the hamburger), but the bottom nav is the primary nav. */}
         <AppSidebar />
 
+        {/* Main column */}
         <div className="relative z-10 flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-md sticky top-0 z-30">
+
+          {/* Top header bar */}
+          <header
+            className="
+              h-14 flex items-center justify-between
+              border-b border-border/60
+              bg-background/80 backdrop-blur-md
+              sticky top-0 z-30
+            "
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+          >
             <div className="flex items-center gap-3 px-3">
-              <SidebarTrigger className="text-muted-foreground hover:text-gold" />
+              {/* Hamburger — always available as a fallback; primary on desktop */}
+              <SidebarTrigger className="text-muted-foreground hover:text-gold touch-target" />
               <div className="hidden sm:block h-5 w-px bg-border" />
               <div className="hidden sm:block font-mono text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
                 {formatLongDate()}
@@ -51,20 +65,36 @@ export default function AppLayout() {
             <div className="flex items-center gap-3 px-3">
               <FocusModeStarter />
               <div className="hidden md:block font-display italic text-sm text-gold/80">
-                Tiimo Command Center
+                Alfred
               </div>
             </div>
           </header>
 
           <FocusModeBanner />
 
-          <main className="flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 pb-32 fade-in">
+          {/* Page content — extra bottom padding for mobile bottom nav + home bar */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+            <div
+              className="
+                max-w-6xl mx-auto
+                px-4 sm:px-6 lg:px-8
+                py-6 sm:py-8
+                fade-in
+              "
+              style={{
+                paddingBottom:
+                  "calc(max(2rem, 5rem + env(safe-area-inset-bottom, 0px)))",
+              }}
+            >
               <Outlet />
             </div>
           </main>
         </div>
 
+        {/* Mobile bottom nav (hidden on md+) */}
+        <MobileBottomNav />
+
+        {/* Floating overlays */}
         <ActiveTimerBar />
         <XpFlash />
         <BadgeToast />

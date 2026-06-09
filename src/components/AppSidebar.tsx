@@ -13,26 +13,14 @@ import {
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { useGamification } from "@/hooks/useGamification";
 import {
-  LayoutDashboard,
-  CheckSquare,
-  Timer,
-  Brain,
-  CalendarDays,
-  BookOpen,
-  Mic,
-  Target,
-  ListChecks,
   LogOut,
   Palette,
-  Repeat,
   Sparkles,
-  Activity,
   Pencil,
-  Trophy,
   ChevronDown,
   ChevronRight,
-  CalendarRange,
 } from "lucide-react";
+import { NAV_CATEGORIES, FOCUS_SAFE } from "@/lib/navConfig";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,72 +44,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 
-interface NavItem {
-  title: string;
-  url: string;
-  icon: React.ElementType;
-}
-
-interface NavCategory {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  items: NavItem[];
-}
-
-const NAV_CATEGORIES: NavCategory[] = [
-  {
-    id: "home",
-    label: "Home",
-    icon: LayoutDashboard,
-    items: [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
-    ],
-  },
-  {
-    id: "today",
-    label: "Today",
-    icon: CalendarDays,
-    items: [
-      { title: "Agenda",          url: "/agenda",    icon: CalendarDays },
-      { title: "Daily Schedule",  url: "/schedule",  icon: Repeat },
-      { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
-      { title: "Focus Timer",     url: "/focus",     icon: Timer },
-    ],
-  },
-  {
-    id: "capture",
-    label: "Capture",
-    icon: Brain,
-    items: [
-      { title: "Brain Dump",    url: "/brain-dump", icon: Brain },
-      { title: "Audio Journal", url: "/journal",    icon: Mic },
-      { title: "Custom Lists",  url: "/lists",      icon: ListChecks },
-    ],
-  },
-  {
-    id: "goals",
-    label: "Goals",
-    icon: Target,
-    items: [
-      { title: "2026 Goals",      url: "/goals-2026",   icon: Target },
-      { title: "Weekly Planner",  url: "/planner",      icon: CalendarRange },
-      { title: "Health",          url: "/health",       icon: Activity },
-      { title: "Achievements",    url: "/achievements", icon: Trophy },
-    ],
-  },
-  {
-    id: "guide",
-    label: "Guide",
-    icon: BookOpen,
-    items: [
-      { title: "Feature Guide", url: "/guide", icon: BookOpen },
-    ],
-  },
-];
-
-/** Routes accessible without focus-mode confirmation. */
-const FOCUS_SAFE = new Set<string>(["/agenda", "/schedule"]);
 
 export function AppSidebar() {
   const { state } = useSidebar();
