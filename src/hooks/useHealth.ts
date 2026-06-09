@@ -256,6 +256,7 @@ export function useHealth() {
 
   return {
     snapshot,
+    setSnapshot,
     available,
     isNative,
     granted,
