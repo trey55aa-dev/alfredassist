@@ -1,9 +1,20 @@
 import { useState } from "react";
-import { Link2, Loader2, Music, Pause, Play, Volume1, Volume2, VolumeX } from "lucide-react";
+import {
+  Link2,
+  Loader2,
+  Music,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { CUSTOM_SOUND_ID } from "@/lib/focusSounds";
+import { CUSTOM_STATION_ID } from "@/lib/focusSounds";
 import type { FocusAudio } from "@/hooks/useFocusAudio";
 
 /** Animated "now playing" equalizer bars. */
@@ -22,97 +33,142 @@ function Equalizer() {
 }
 
 export function FocusSoundboard({ audio }: { audio: FocusAudio }) {
-  const [showCustom, setShowCustom] = useState(audio.selectedId === CUSTOM_SOUND_ID);
-
-  const radio = audio.sounds.filter((s) => s.kind === "radio");
-  const ambient = audio.sounds.filter((s) => s.kind === "ambient");
+  const [showCustom, setShowCustom] = useState(audio.stationId === CUSTOM_STATION_ID);
 
   const VolIcon = audio.volume === 0 ? VolumeX : audio.volume < 0.5 ? Volume1 : Volume2;
-
-  const Chip = ({ id, emoji, label, sub }: { id: string; emoji: string; label: string; sub: string }) => {
-    const active = audio.selectedId === id;
-    return (
-      <button
-        type="button"
-        onClick={() => audio.select(id)}
-        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
-          active
-            ? "border-gold/60 bg-gold/15"
-            : "border-border bg-background/30 hover:border-gold/40 hover:bg-background/50"
-        }`}
-      >
-        <span className="text-lg shrink-0">{emoji}</span>
-        <span className="min-w-0 flex-1">
-          <span className={`block text-sm font-medium truncate ${active ? "text-gold" : "text-foreground"}`}>
-            {label}
-          </span>
-          <span className="block font-mono text-[9px] tracking-wider text-muted-foreground truncate">
-            {sub}
-          </span>
-        </span>
-        {active && audio.isPlaying && <Equalizer />}
-      </button>
-    );
-  };
+  const stationsInVibe =
+    audio.currentVibe?.stationIds
+      .map((id) => audio.stations.find((s) => s.id === id))
+      .filter((s): s is NonNullable<typeof s> => !!s) ?? [];
+  const isCustom = audio.stationId === CUSTOM_STATION_ID;
 
   return (
     <Card className="p-6 bg-gradient-card border-border">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display text-2xl flex items-center gap-2">
-          <Music className="h-5 w-5 text-gold" /> Focus Sounds
-        </h3>
+      <h3 className="font-display text-2xl flex items-center gap-2 mb-4">
+        <Music className="h-5 w-5 text-gold" /> Focus Sounds
+      </h3>
+
+      {/* Vibe selector */}
+      <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground mb-2">
+        Pick a vibe
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {audio.vibes.map((v) => {
+          const active = audio.vibeId === v.id && !isCustom;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => audio.selectVibe(v.id)}
+              title={v.blurb}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                active
+                  ? "border-gold/60 bg-gold/15 text-gold"
+                  : "border-border bg-background/30 text-muted-foreground hover:border-gold/40"
+              }`}
+            >
+              <span>{v.emoji}</span>
+              {v.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Now playing / status */}
+      <div className="mt-4 mb-3 min-h-[20px] flex items-center gap-2">
+        {audio.error ? (
+          <p className="font-mono text-[11px] text-destructive">{audio.error}</p>
+        ) : audio.current ? (
+          <>
+            {audio.isPlaying && <Equalizer />}
+            <p className="font-mono text-[11px] text-muted-foreground truncate">
+              {audio.isPlaying ? "Now playing" : "Selected"}:{" "}
+              <span className="text-gold">{audio.current.label}</span>
+              {audio.current.credit && (
+                <span className="text-muted-foreground/60"> · {audio.current.credit}</span>
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="font-mono text-[11px] text-muted-foreground/60">
+            Pick a vibe to start the music.
+          </p>
+        )}
+      </div>
+
+      {/* Transport controls */}
+      <div className="flex items-center justify-center gap-4">
+        <button
+          type="button"
+          onClick={() => audio.skip(-1)}
+          disabled={!audio.currentVibe || isCustom}
+          className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-foreground hover:border-gold/50 hover:text-gold disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          aria-label="Previous station"
+          title="Previous"
+        >
+          <SkipBack className="h-4 w-4" />
+        </button>
+
         <button
           type="button"
           onClick={audio.toggle}
           disabled={!audio.current}
-          className="h-10 w-10 rounded-full bg-gradient-gold text-primary-foreground flex items-center justify-center hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+          className="h-14 w-14 rounded-full bg-gradient-gold text-primary-foreground flex items-center justify-center hover:opacity-90 shadow-gold disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
           aria-label={audio.isPlaying ? "Pause" : "Play"}
         >
           {audio.loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : audio.isPlaying ? (
-            <Pause className="h-4 w-4" />
+            <Pause className="h-5 w-5" />
           ) : (
-            <Play className="h-4 w-4 ml-0.5" />
+            <Play className="h-5 w-5 ml-0.5" />
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => audio.skip(1)}
+          disabled={!audio.currentVibe || isCustom}
+          className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-foreground hover:border-gold/50 hover:text-gold disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          aria-label="Skip to next station"
+          title="Skip"
+        >
+          <SkipForward className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Now playing / status */}
-      <div className="mb-4 min-h-[20px]">
-        {audio.error ? (
-          <p className="font-mono text-[11px] text-destructive">{audio.error}</p>
-        ) : audio.current ? (
-          <p className="font-mono text-[11px] text-muted-foreground">
-            {audio.isPlaying ? "Now playing" : "Selected"}:{" "}
-            <span className="text-gold">{audio.current.label}</span>
-            {audio.current.credit && <span className="text-muted-foreground/60"> · {audio.current.credit}</span>}
-          </p>
-        ) : (
-          <p className="font-mono text-[11px] text-muted-foreground/60">Pick a sound to play while you work.</p>
-        )}
-      </div>
-
-      {/* Music stations */}
-      <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground mb-2">Music · radio</div>
-      <div className="grid grid-cols-2 gap-2">
-        {radio.map((s) => (
-          <Chip key={s.id} id={s.id} emoji={s.emoji} label={s.label} sub={s.sub} />
-        ))}
-      </div>
-
-      {/* Ambient */}
-      <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground mt-4 mb-2">
-        Ambient · offline
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {ambient.map((s) => (
-          <Chip key={s.id} id={s.id} emoji={s.emoji} label={s.label} sub={s.sub} />
-        ))}
-      </div>
+      {/* Stations within the current vibe — jump directly */}
+      {stationsInVibe.length > 0 && !isCustom && (
+        <>
+          <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground mt-5 mb-2">
+            {audio.currentVibe?.label} · {stationsInVibe.length} stations
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {stationsInVibe.map((s) => {
+              const active = audio.stationId === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => audio.selectStation(s.id)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-all ${
+                    active
+                      ? "border-gold/60 bg-gold/15 text-gold"
+                      : "border-border bg-background/30 text-muted-foreground hover:border-gold/40"
+                  }`}
+                  title={s.sub}
+                >
+                  <span>{s.emoji}</span>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Custom stream */}
-      <div className="mt-4">
+      <div className="mt-5">
         {!showCustom ? (
           <button
             type="button"
@@ -138,7 +194,11 @@ export function FocusSoundboard({ audio }: { audio: FocusAudio }) {
                 type="button"
                 onClick={audio.applyCustom}
                 disabled={!audio.customUrl.trim()}
-                className="shrink-0 rounded-lg border border-gold/50 bg-gold/15 px-3 text-sm font-medium text-gold hover:bg-gold/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className={`shrink-0 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                  isCustom
+                    ? "border-gold/60 bg-gold/20 text-gold"
+                    : "border-gold/50 bg-gold/15 text-gold hover:bg-gold/25"
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
               >
                 Play
               </button>

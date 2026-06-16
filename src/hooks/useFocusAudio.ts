@@ -1,22 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CUSTOM_SOUND_ID,
+  CUSTOM_STATION_ID,
   FOCUS_AUDIO_KEY,
-  FOCUS_SOUNDS,
-  resolveSound,
+  STATIONS,
+  VIBES,
+  getVibe,
+  resolveStation,
+  vibeOfStation,
   type AmbientKind,
-  type FocusSound,
+  type Station,
+  type Vibe,
 } from "@/lib/focusSounds";
 
 interface Persisted {
-  soundId: string | null;
+  vibeId: string | null;
+  stationId: string | null;
   volume: number;
   autoWithTimer: boolean;
   customUrl: string;
 }
 
 function loadPersisted(): Persisted {
-  const fallback: Persisted = { soundId: null, volume: 0.5, autoWithTimer: true, customUrl: "" };
+  const fallback: Persisted = {
+    vibeId: null,
+    stationId: null,
+    volume: 0.5,
+    autoWithTimer: true,
+    customUrl: "",
+  };
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(FOCUS_AUDIO_KEY);
@@ -112,16 +123,21 @@ function buildAmbient(ctx: AudioContext, kind: AmbientKind, out: AudioNode): Amb
 /* ---------- Hook ---------- */
 
 export interface FocusAudio {
-  sounds: FocusSound[];
-  current: FocusSound | null;
-  selectedId: string | null;
+  stations: Station[];
+  vibes: Vibe[];
+  current: Station | null;
+  currentVibe: Vibe | null;
+  vibeId: string | null;
+  stationId: string | null;
   customUrl: string;
   volume: number;
   autoWithTimer: boolean;
   isPlaying: boolean;
   loading: boolean;
   error: string | null;
-  select: (id: string) => void;
+  selectVibe: (id: string) => void;
+  selectStation: (id: string) => void;
+  skip: (dir: 1 | -1) => void;
   setCustomUrl: (url: string) => void;
   applyCustom: () => void;
   play: () => void;
@@ -133,7 +149,8 @@ export interface FocusAudio {
 
 export function useFocusAudio(): FocusAudio {
   const initial = useRef(loadPersisted());
-  const [selectedId, setSelectedId] = useState<string | null>(initial.current.soundId);
+  const [vibeId, setVibeId] = useState<string | null>(initial.current.vibeId);
+  const [stationId, setStationId] = useState<string | null>(initial.current.stationId);
   const [customUrl, setCustomUrlState] = useState(initial.current.customUrl);
   const [volume, setVolumeState] = useState(initial.current.volume);
   const [autoWithTimer, setAutoWithTimer] = useState(initial.current.autoWithTimer);
@@ -146,9 +163,11 @@ export function useFocusAudio(): FocusAudio {
   const ambientRef = useRef<AmbientNodes | null>(null);
   const ambientGainRef = useRef<GainNode | null>(null);
 
-  // Refs mirror state so the imperative play/pause closures never go stale.
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
+  // Refs mirror state so imperative play/skip closures never go stale.
+  const vibeIdRef = useRef(vibeId);
+  vibeIdRef.current = vibeId;
+  const stationIdRef = useRef(stationId);
+  stationIdRef.current = stationId;
   const customUrlRef = useRef(customUrl);
   customUrlRef.current = customUrl;
   const volumeRef = useRef(volume);
@@ -156,19 +175,20 @@ export function useFocusAudio(): FocusAudio {
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
 
-  const current = resolveSound(selectedId, customUrl);
+  const current = resolveStation(stationId, customUrl);
+  const currentVibe = getVibe(vibeId) ?? null;
 
   /* persist */
   useEffect(() => {
     try {
       localStorage.setItem(
         FOCUS_AUDIO_KEY,
-        JSON.stringify({ soundId: selectedId, volume, autoWithTimer, customUrl }),
+        JSON.stringify({ vibeId, stationId, volume, autoWithTimer, customUrl }),
       );
     } catch {
       /* quota or disabled */
     }
-  }, [selectedId, volume, autoWithTimer, customUrl]);
+  }, [vibeId, stationId, volume, autoWithTimer, customUrl]);
 
   const ensureAudioEl = useCallback(() => {
     if (!audioRef.current) {
@@ -176,9 +196,11 @@ export function useFocusAudio(): FocusAudio {
       el.preload = "none";
       el.addEventListener("playing", () => { setIsPlaying(true); setLoading(false); setError(null); });
       el.addEventListener("waiting", () => setLoading(true));
-      el.addEventListener("pause", () => setIsPlaying(false));
+      // Ignore the radio element's pause event while ambient audio is active —
+      // switching radio→ambient pauses the element but ambient is still playing.
+      el.addEventListener("pause", () => { if (ambientRef.current) return; setIsPlaying(false); });
       el.addEventListener("error", () => {
-        setError("Stream unavailable — try another station or your own URL.");
+        setError("Stream unavailable — skip to the next station or try your own URL.");
         setIsPlaying(false);
         setLoading(false);
       });
@@ -208,7 +230,7 @@ export function useFocusAudio(): FocusAudio {
   // Stable imperative handlers via refs (state read fresh each call).
   const playRef = useRef<() => Promise<void>>(async () => {});
   playRef.current = async () => {
-    const snd = resolveSound(selectedIdRef.current, customUrlRef.current);
+    const snd = resolveStation(stationIdRef.current, customUrlRef.current);
     if (!snd) return;
     stopInternal();
     setError(null);
@@ -259,11 +281,35 @@ export function useFocusAudio(): FocusAudio {
     else void playRef.current();
   }, []);
 
-  const select = useCallback((id: string) => {
-    selectedIdRef.current = id; // so the immediate play() sees it
-    setSelectedId(id);
+  const selectStation = useCallback((id: string) => {
+    stationIdRef.current = id;
+    setStationId(id);
+    // keep the vibe in sync with whatever vibe owns this station
+    const v = vibeOfStation(id);
+    if (v) { vibeIdRef.current = v.id; setVibeId(v.id); }
     void playRef.current();
   }, []);
+
+  const selectVibe = useCallback((id: string) => {
+    const vibe = getVibe(id);
+    if (!vibe || vibe.stationIds.length === 0) return;
+    vibeIdRef.current = id;
+    setVibeId(id);
+    // if the current station already belongs to this vibe, keep it; else start at first
+    const cur = stationIdRef.current;
+    const next = cur && vibe.stationIds.includes(cur) ? cur : vibe.stationIds[0];
+    selectStation(next);
+  }, [selectStation]);
+
+  const skip = useCallback((dir: 1 | -1) => {
+    const vibe = getVibe(vibeIdRef.current);
+    if (!vibe || vibe.stationIds.length === 0) return;
+    const ids = vibe.stationIds;
+    const idx = ids.indexOf(stationIdRef.current ?? "");
+    const start = idx < 0 ? 0 : idx;
+    const next = ids[(start + dir + ids.length) % ids.length];
+    selectStation(next);
+  }, [selectStation]);
 
   const setCustomUrl = useCallback((url: string) => {
     customUrlRef.current = url;
@@ -272,8 +318,10 @@ export function useFocusAudio(): FocusAudio {
 
   const applyCustom = useCallback(() => {
     if (!customUrlRef.current.trim()) return;
-    select(CUSTOM_SOUND_ID);
-  }, [select]);
+    stationIdRef.current = CUSTOM_STATION_ID;
+    setStationId(CUSTOM_STATION_ID);
+    void playRef.current();
+  }, []);
 
   const setVolume = useCallback((v: number) => {
     volumeRef.current = v;
@@ -292,16 +340,21 @@ export function useFocusAudio(): FocusAudio {
   }, []);
 
   return {
-    sounds: FOCUS_SOUNDS,
+    stations: STATIONS,
+    vibes: VIBES,
     current,
-    selectedId,
+    currentVibe,
+    vibeId,
+    stationId,
     customUrl,
     volume,
     autoWithTimer,
     isPlaying,
     loading,
     error,
-    select,
+    selectVibe,
+    selectStation,
+    skip,
     setCustomUrl,
     applyCustom,
     play,

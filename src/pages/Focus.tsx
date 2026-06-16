@@ -59,7 +59,7 @@ export default function Focus() {
 
   // Tie background audio to the timer when "Play when timer starts" is on.
   useEffect(() => {
-    if (!audio.autoWithTimer || !audio.selectedId) return;
+    if (!audio.autoWithTimer || !audio.stationId) return;
     if (running) audio.play();
     else audio.pause();
     // eslint-disable-next-line react-hooks/exhaustive-deps
