@@ -4,6 +4,14 @@ export type GoalQuarter = "Q1" | "Q2" | "Q3" | "Q4" | null;
 /** "metric" = track a number toward a target (default). "streak" = N consecutive days. */
 export type GoalType = "metric" | "streak";
 
+/**
+ * Sub-type for Money-category goals.
+ * - "debt"    → paying something off (credit card, loan). current = amount paid, target = original balance.
+ * - "savings" → building toward a target amount. current = saved so far.
+ * - "budget"  → capped spending. current = spent so far, target = monthly/annual cap.
+ */
+export type FinancialType = "debt" | "savings" | "budget";
+
 export interface DailyEntry {
   done: boolean;
   /** HH:MM when the user marked it done. */
@@ -99,6 +107,12 @@ export interface Goal {
   lastCheckIn?: string;
   /** "metric" (default) or "streak" — drives the analytics panel behaviour. */
   goalType?: GoalType;
+  /**
+   * For Money-category goals: "debt" (payoff), "savings" (build toward target),
+   * or "budget" (spending cap). Drives the financial editor UI and progress labels.
+   * Stored locally only — no Supabase column yet.
+   */
+  financialType?: FinancialType;
   /** YYYY-MM-DD when the current streak challenge started (streak goals). */
   streakStart?: string;
   /** Per-day completion log (streak goals). */

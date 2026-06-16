@@ -73,6 +73,7 @@ import {
   GoalQuarter,
   GoalSubStep,
   GoalTimeframe,
+  FinancialType,
   PACE_META,
   QUARTERS,
   QUARTER_RANGES,
@@ -390,6 +391,9 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
   const [target, setTarget] = useState("");
   const [unit, setUnit] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const [finType, setFinType] = useState<FinancialType>("savings");
+
+  const isMoney = category === "Money";
 
   const submit = () => {
     if (!title.trim()) return;
@@ -401,7 +405,8 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
       deadline: deadline ? deadline.toISOString() : undefined,
       target: target ? Number(target) : undefined,
       current: target ? 0 : undefined,
-      unit: unit.trim() || undefined,
+      unit: isMoney ? "$" : (unit.trim() || undefined),
+      financialType: isMoney ? finType : undefined,
       done: false,
     });
     setTitle("");
@@ -417,14 +422,15 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="A new ambition…"
+          placeholder={isMoney ? "e.g. Pay off credit card, Save for vacation…" : "A new ambition…"}
           className="bg-background/40 border-border focus-visible:ring-gold/40 focus-visible:border-gold/40"
         />
         <Button onClick={submit} className="bg-gold text-primary-foreground hover:bg-gold-soft">
           <Plus className="h-4 w-4 mr-1" /> Add Goal
         </Button>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Select value={category} onChange={(v) => setCategory(v as GoalCategory)} options={CATEGORIES} />
         <Select
           value={timeframe}
@@ -461,22 +467,71 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
             />
           </PopoverContent>
         </Popover>
+      </div>
+
+      {/* Money-specific fields */}
+      {isMoney ? (
+        <div className="space-y-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-emerald-400">
+            💳 Financial Goal Type
+          </div>
+          <div className="flex gap-2">
+            {(["debt", "savings", "budget"] as FinancialType[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setFinType(t)}
+                className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-all ${
+                  finType === t
+                    ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400"
+                    : "border-border text-muted-foreground hover:border-emerald-500/30"
+                }`}
+              >
+                {FIN_TYPE_LABELS[t].icon} {FIN_TYPE_LABELS[t].label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400 font-mono text-sm">$</span>
+              <input
+                type="number"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+                placeholder={
+                  finType === "debt" ? "Total owed (e.g. 5200)" :
+                  finType === "savings" ? "Savings target (e.g. 15000)" :
+                  "Budget cap (e.g. 2000)"
+                }
+                className="w-full rounded-lg border border-border bg-background/50 py-2 pl-7 pr-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+              />
+            </div>
+            <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
+              {FIN_TYPE_LABELS[finType].targetLabel}
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground/60 font-mono">
+            After adding, tap the goal to open the financial editor and log payments or deposits.
+          </div>
+        </div>
+      ) : (
         <div className="flex gap-1">
           <Input
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            placeholder="Target"
+            placeholder="Target (optional)"
             type="number"
             className="bg-background/40 border-border text-xs"
           />
           <Input
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
-            placeholder="unit"
-            className="bg-background/40 border-border text-xs w-20"
+            placeholder="unit (reps, mi…)"
+            className="bg-background/40 border-border text-xs w-36"
           />
         </div>
-      </div>
+      )}
     </Card>
   );
 }
@@ -622,6 +677,217 @@ function QuarterCard({
   );
 }
 
+/* ---------- Currency helpers ---------- */
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/** Parse a dollar-string like "$1,200" or "1200" → number */
+function parseDollar(raw: string): number {
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+/* ---------- Financial Goal Panel ---------- */
+
+const FIN_TYPE_LABELS: Record<FinancialType, { label: string; icon: string; currentLabel: string; targetLabel: string; addLabel: string; subtractLabel: string }> = {
+  debt:    { label: "Debt Payoff",     icon: "💳", currentLabel: "Amount Paid",    targetLabel: "Total Owed",      addLabel: "Made a payment",    subtractLabel: "Added to balance" },
+  savings: { label: "Savings",         icon: "🏦", currentLabel: "Amount Saved",   targetLabel: "Savings Target",  addLabel: "Deposit",           subtractLabel: "Withdrawal" },
+  budget:  { label: "Spending Budget", icon: "📊", currentLabel: "Amount Spent",   targetLabel: "Budget Cap",      addLabel: "Logged expense",    subtractLabel: "Removed expense"  },
+};
+
+function FinancialGoalPanel({
+  goal,
+  onChange,
+}: {
+  goal: Goal;
+  onChange: (patch: Partial<Goal>) => void;
+}) {
+  const ftype: FinancialType = goal.financialType ?? "savings";
+  const meta = FIN_TYPE_LABELS[ftype];
+
+  // local draft states for the dollar inputs
+  const [targetDraft, setTargetDraft] = useState(goal.target ? String(goal.target) : "");
+  const [currentDraft, setCurrentDraft] = useState(goal.current ? String(goal.current) : "");
+  const [amountDraft, setAmountDraft] = useState("");
+
+  const target = goal.target ?? 0;
+  const current = goal.current ?? 0;
+  const remaining = Math.max(0, target - current);
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+
+  // For debt: "Balance remaining", for savings: "Still needed", for budget: "Budget left"
+  const remainingLabel =
+    ftype === "debt" ? "Balance remaining" :
+    ftype === "savings" ? "Still needed" :
+    "Budget remaining";
+
+  const quickAmounts = [100, 500, 1000, 5000];
+
+  const applyAmount = (delta: number) => {
+    const next = Math.max(0, current + delta);
+    onChange({ current: next, lastCheckIn: new Date().toISOString().slice(0, 10), localUpdatedAt: Date.now() } as Partial<Goal>);
+    setCurrentDraft(String(next));
+  };
+
+  return (
+    <div className="space-y-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+      {/* Type selector */}
+      <div className="flex gap-2">
+        {(["debt", "savings", "budget"] as FinancialType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => onChange({ financialType: t, unit: "$" })}
+            className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-all ${
+              ftype === t
+                ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400"
+                : "border-border text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400/70"
+            }`}
+          >
+            {FIN_TYPE_LABELS[t].icon} {FIN_TYPE_LABELS[t].label}
+          </button>
+        ))}
+      </div>
+
+      {/* Target + Current inputs */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+            {meta.targetLabel}
+          </div>
+          <div className="relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400 font-mono text-sm">$</span>
+            <input
+              type="number"
+              value={targetDraft}
+              onChange={(e) => setTargetDraft(e.target.value)}
+              onBlur={() => {
+                const n = parseDollar(targetDraft);
+                onChange({ target: n || undefined, unit: "$" });
+              }}
+              placeholder="0"
+              className="w-full rounded-lg border border-border bg-background/50 py-2 pl-7 pr-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+            {meta.currentLabel}
+          </div>
+          <div className="relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400 font-mono text-sm">$</span>
+            <input
+              type="number"
+              value={currentDraft}
+              onChange={(e) => setCurrentDraft(e.target.value)}
+              onBlur={() => {
+                const n = parseDollar(currentDraft);
+                onChange({ current: n, lastCheckIn: new Date().toISOString().slice(0, 10) });
+              }}
+              placeholder="0"
+              className="w-full rounded-lg border border-border bg-background/50 py-2 pl-7 pr-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary bar */}
+      {target > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[11px] font-mono">
+            <span className="text-muted-foreground">{remainingLabel}</span>
+            <span className="text-emerald-400 font-semibold">{formatCurrency(remaining)}</span>
+          </div>
+          <div className="h-2 rounded-full bg-background/60 border border-border overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+            <span>{formatCurrency(current)} {ftype === "debt" ? "paid" : ftype === "savings" ? "saved" : "spent"}</span>
+            <span className="text-emerald-400">{pct}% {ftype === "budget" ? "used" : "complete"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Quick-log transaction */}
+      <div className="space-y-2">
+        <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+          Log a transaction
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {quickAmounts.map((amt) => (
+            <button
+              key={amt}
+              onClick={() => applyAmount(amt)}
+              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-mono text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+            >
+              +{formatCurrency(amt)}
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              const n = parseDollar(amountDraft);
+              if (n > 0) { applyAmount(n); setAmountDraft(""); }
+            }}
+            className="rounded-lg border border-border bg-background/50 px-3 py-1.5 text-[11px] font-mono text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400 transition-colors"
+          >
+            + Custom
+          </button>
+        </div>
+
+        {/* Custom amount + subtract row */}
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+            <input
+              type="number"
+              value={amountDraft}
+              onChange={(e) => setAmountDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const n = parseDollar(amountDraft);
+                  if (n > 0) { applyAmount(n); setAmountDraft(""); }
+                }
+              }}
+              placeholder="Enter amount"
+              className="w-full rounded-lg border border-border bg-background/50 py-2 pl-7 pr-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+            />
+          </div>
+          <button
+            onClick={() => {
+              const n = parseDollar(amountDraft);
+              if (n > 0) { applyAmount(n); setAmountDraft(""); }
+            }}
+            className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono text-emerald-400 hover:bg-emerald-500/25 transition-colors whitespace-nowrap"
+          >
+            + Add
+          </button>
+          <button
+            onClick={() => {
+              const n = parseDollar(amountDraft);
+              if (n > 0) { applyAmount(-n); setAmountDraft(""); }
+            }}
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] font-mono text-destructive hover:bg-destructive/20 transition-colors whitespace-nowrap"
+          >
+            − Subtract
+          </button>
+        </div>
+        <div className="text-[10px] text-muted-foreground/60 font-mono">
+          {meta.addLabel} → tap +Add &nbsp;·&nbsp; {meta.subtractLabel} → tap −Subtract
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Goal row ---------- */
 
 function GoalRow({
@@ -702,8 +968,9 @@ function GoalRow({
                   />
                 </div>
                 <span className="font-mono text-[10px] tracking-wider text-gold whitespace-nowrap">
-                  {goal.current ?? 0}/{goal.target}
-                  {goal.unit ? ` ${goal.unit}` : ""}
+                  {goal.category === "Money" && goal.unit === "$"
+                    ? `${formatCurrency(goal.current ?? 0)} / ${formatCurrency(goal.target ?? 0)}`
+                    : `${goal.current ?? 0}/${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`}
                 </span>
               </div>
             )}
@@ -760,7 +1027,10 @@ function GoalRow({
                   />
                 </PopoverContent>
               </Popover>
-              {measurable && (
+              {/* Financial goals get the rich money editor; others get the plain number input */}
+              {goal.category === "Money" ? (
+                <FinancialGoalPanel goal={goal} onChange={onChange} />
+              ) : measurable && (
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"

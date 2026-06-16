@@ -76,6 +76,9 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
   //
   // NOTE: localUpdatedAt is also intentionally omitted — it's a local-only
   // field used by the merge-on-load strategy and has no DB column.
+  //
+  // NOTE: financialType is local-only (no DB column yet). It drives the Money
+  // category goal editor UI and is persisted only via localStorage.
   const row: GoalInsert = {
     user_id: userId,
     client_id: goal.id,
