@@ -7,6 +7,8 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey, formatTime } from "@/lib/alfred";
 import { toast } from "sonner";
 import { awardXp, XP_VALUES } from "@/lib/gamification";
+import { useFocusAudio } from "@/hooks/useFocusAudio";
+import { FocusSoundboard } from "@/components/FocusSoundboard";
 
 const PRESETS = [10, 25, 45, 60];
 
@@ -15,6 +17,7 @@ export default function Focus() {
   const [remaining, setRemaining] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const tickRef = useRef<number | null>(null);
+  const audio = useFocusAudio();
 
   const [stats, setStats] = useLocalStorage("alfred.focus.stats", {
     date: todayKey(),
@@ -53,6 +56,14 @@ export default function Focus() {
       if (tickRef.current) window.clearInterval(tickRef.current);
     };
   }, [running, duration, setStats]);
+
+  // Tie background audio to the timer when "Play when timer starts" is on.
+  useEffect(() => {
+    if (!audio.autoWithTimer || !audio.selectedId) return;
+    if (running) audio.play();
+    else audio.pause();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
 
   const choose = (mins: number) => {
     setRunning(false);
@@ -153,6 +164,7 @@ export default function Focus() {
           </div>
         </Card>
 
+        <div className="space-y-6">
         <Card className="p-6 bg-gradient-card border-border h-fit">
           <h3 className="font-display text-2xl mb-4">Today's Tally</h3>
           <div className="space-y-4">
@@ -173,6 +185,9 @@ export default function Focus() {
             "Discipline is choosing between what you want now and what you want most."
           </p>
         </Card>
+
+        <FocusSoundboard audio={audio} />
+        </div>
       </div>
     </div>
   );
