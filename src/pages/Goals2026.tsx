@@ -564,6 +564,64 @@ function Select({
 
 /* ---------- Group / Quarter cards ---------- */
 
+/** Summary strip shown inside the Money GroupCard header */
+function MoneyTotalsStrip({ items }: { items: Goal[] }) {
+  const debtGoals    = items.filter((g) => g.financialType === "debt"    || (!g.financialType && g.unit === "$" && typeof g.target === "number"));
+  const savingsGoals = items.filter((g) => g.financialType === "savings");
+  const budgetGoals  = items.filter((g) => g.financialType === "budget");
+
+  // For debt: remaining = target - current (what's still owed)
+  const totalDebt      = debtGoals.reduce((s, g) => s + (g.target ?? 0), 0);
+  const totalDebtPaid  = debtGoals.reduce((s, g) => s + (g.current ?? 0), 0);
+  const totalDebtLeft  = Math.max(0, totalDebt - totalDebtPaid);
+
+  const totalSavTarget = savingsGoals.reduce((s, g) => s + (g.target ?? 0), 0);
+  const totalSaved     = savingsGoals.reduce((s, g) => s + (g.current ?? 0), 0);
+
+  const totalBudget    = budgetGoals.reduce((s, g) => s + (g.target ?? 0), 0);
+  const totalSpent     = budgetGoals.reduce((s, g) => s + (g.current ?? 0), 0);
+
+  const hasAny = totalDebt > 0 || totalSavTarget > 0 || totalBudget > 0;
+  if (!hasAny) return null;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+      {totalDebt > 0 && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 space-y-0.5">
+          <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-red-400/80">💳 Debt Remaining</div>
+          <div className="font-mono text-lg font-bold text-red-300">{formatCurrency(totalDebtLeft)}</div>
+          <div className="font-mono text-[10px] text-muted-foreground">of {formatCurrency(totalDebt)} total</div>
+          {totalDebt > 0 && (
+            <div className="h-1 mt-1 rounded-full bg-background/60 overflow-hidden">
+              <div className="h-full rounded-full bg-red-500/60" style={{ width: `${Math.min(100, Math.round((totalDebtPaid / totalDebt) * 100))}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+      {totalSavTarget > 0 && (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 space-y-0.5">
+          <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-emerald-400/80">🏦 Savings</div>
+          <div className="font-mono text-lg font-bold text-emerald-300">{formatCurrency(totalSaved)}</div>
+          <div className="font-mono text-[10px] text-muted-foreground">of {formatCurrency(totalSavTarget)} target</div>
+          <div className="h-1 mt-1 rounded-full bg-background/60 overflow-hidden">
+            <div className="h-full rounded-full bg-emerald-500/60" style={{ width: `${Math.min(100, totalSavTarget > 0 ? Math.round((totalSaved / totalSavTarget) * 100) : 0)}%` }} />
+          </div>
+        </div>
+      )}
+      {totalBudget > 0 && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 space-y-0.5">
+          <div className="font-mono text-[9px] tracking-[0.25em] uppercase text-amber-400/80">📊 Budget Used</div>
+          <div className="font-mono text-lg font-bold text-amber-300">{formatCurrency(totalSpent)}</div>
+          <div className="font-mono text-[10px] text-muted-foreground">of {formatCurrency(totalBudget)} budget</div>
+          <div className="h-1 mt-1 rounded-full bg-background/60 overflow-hidden">
+            <div className="h-full rounded-full bg-amber-500/60" style={{ width: `${Math.min(100, totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0)}%` }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GroupCard({
   title,
   icon: Icon,
@@ -603,6 +661,10 @@ function GroupCard({
         <Sparkles className="h-4 w-4 text-gold/60" />
       </div>
       <Progress value={pct} className="h-1.5 mb-4" />
+
+      {/* Financial totals strip — only for Money category */}
+      {title === "Money" && <MoneyTotalsStrip items={items} />}
+
       <ul className="space-y-3">
         {items.map((g) => (
           <GoalRow
@@ -711,13 +773,17 @@ function FinancialGoalPanel({
   const ftype: FinancialType = goal.financialType ?? "savings";
   const meta = FIN_TYPE_LABELS[ftype];
 
-  // local draft states for the dollar inputs
-  const [targetDraft, setTargetDraft] = useState(goal.target ? String(goal.target) : "");
-  const [currentDraft, setCurrentDraft] = useState(goal.current ? String(goal.current) : "");
-  const [amountDraft, setAmountDraft] = useState("");
-
   const target = goal.target ?? 0;
   const current = goal.current ?? 0;
+
+  // local draft states for the dollar inputs — sync with goal prop
+  const [targetDraft, setTargetDraft] = useState(target > 0 ? String(target) : "");
+  const [currentDraft, setCurrentDraft] = useState(current > 0 ? String(current) : "");
+  const [amountDraft, setAmountDraft] = useState("");
+
+  // Keep drafts in sync if goal changes externally (e.g. quick-log from dashboard)
+  useEffect(() => { if (document.activeElement?.tagName !== "INPUT") setTargetDraft(target > 0 ? String(target) : ""); }, [target]);
+  useEffect(() => { if (document.activeElement?.tagName !== "INPUT") setCurrentDraft(current > 0 ? String(current) : ""); }, [current]);
   const remaining = Math.max(0, target - current);
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
 
@@ -959,7 +1025,7 @@ function GoalRow({
                 </Badge>
               ))}
             </div>
-            {measurable && (
+            {(measurable || goal.category === "Money") && (
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                   <div
@@ -968,8 +1034,10 @@ function GoalRow({
                   />
                 </div>
                 <span className="font-mono text-[10px] tracking-wider text-gold whitespace-nowrap">
-                  {goal.category === "Money" && goal.unit === "$"
-                    ? `${formatCurrency(goal.current ?? 0)} / ${formatCurrency(goal.target ?? 0)}`
+                  {goal.category === "Money"
+                    ? (measurable
+                        ? `${formatCurrency(goal.current ?? 0)} / ${formatCurrency(goal.target ?? 0)}`
+                        : "Tap to set amount")
                     : `${goal.current ?? 0}/${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`}
                 </span>
               </div>
