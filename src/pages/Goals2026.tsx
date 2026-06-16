@@ -770,20 +770,22 @@ function FinancialGoalPanel({
   goal: Goal;
   onChange: (patch: Partial<Goal>) => void;
 }) {
-  const ftype: FinancialType = goal.financialType ?? "savings";
+  // Guard: ensure ftype is always a valid key
+  const rawFtype = goal.financialType;
+  const ftype: FinancialType =
+    rawFtype === "debt" || rawFtype === "savings" || rawFtype === "budget"
+      ? rawFtype
+      : "savings";
   const meta = FIN_TYPE_LABELS[ftype];
 
   const target = goal.target ?? 0;
   const current = goal.current ?? 0;
 
-  // local draft states for the dollar inputs — sync with goal prop
-  const [targetDraft, setTargetDraft] = useState(target > 0 ? String(target) : "");
-  const [currentDraft, setCurrentDraft] = useState(current > 0 ? String(current) : "");
+  // Uncontrolled-style: initialize from goal, update only on blur
+  const [targetDraft, setTargetDraft] = useState(() => target > 0 ? String(target) : "");
+  const [currentDraft, setCurrentDraft] = useState(() => current > 0 ? String(current) : "");
   const [amountDraft, setAmountDraft] = useState("");
 
-  // Keep drafts in sync if goal changes externally (e.g. quick-log from dashboard)
-  useEffect(() => { if (document.activeElement?.tagName !== "INPUT") setTargetDraft(target > 0 ? String(target) : ""); }, [target]);
-  useEffect(() => { if (document.activeElement?.tagName !== "INPUT") setCurrentDraft(current > 0 ? String(current) : ""); }, [current]);
   const remaining = Math.max(0, target - current);
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
 
@@ -808,6 +810,7 @@ function FinancialGoalPanel({
         {(["debt", "savings", "budget"] as FinancialType[]).map((t) => (
           <button
             key={t}
+            type="button"
             onClick={() => onChange({ financialType: t, unit: "$" })}
             className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-all ${
               ftype === t
@@ -1099,7 +1102,7 @@ function GoalRow({
               </Popover>
               {/* Financial goals get the rich money editor; others get the plain number input */}
               {goal.category === "Money" ? (
-                <FinancialGoalPanel goal={goal} onChange={onChange} />
+                <FinancialGoalPanel key={goal.id} goal={goal} onChange={onChange} />
               ) : measurable && (
                 <div className="flex items-center gap-2">
                   <Input
