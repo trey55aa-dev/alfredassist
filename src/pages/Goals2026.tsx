@@ -169,24 +169,8 @@ export default function Goals2026() {
     ]);
   };
 
-  /* ── Debug: read directly from localStorage to show ground truth ── */
-  const _lsRaw = typeof window !== "undefined" ? localStorage.getItem("alfred.goals2026") : null;
-  const _lsGoals: Goal[] = _lsRaw ? (() => { try { return JSON.parse(_lsRaw); } catch { return []; } })() : [];
-  const _lsDone = _lsGoals.filter((g) => g.done).length;
-
   return (
     <div className="space-y-8">
-      {/* ── TEMPORARY DEBUG BANNER — remove once bug is confirmed fixed ── */}
-      <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 font-mono text-[11px] text-yellow-300 space-y-1">
-        <div className="font-bold text-yellow-400">🔍 Save Debug (remove after fix)</div>
-        <div>React state: <b>{goals.length}</b> goals, <b>{goals.filter(g=>g.done).length}</b> done</div>
-        <div>localStorage: <b>{_lsGoals.length}</b> goals, <b>{_lsDone}</b> done</div>
-        <div>Signed in: <b>{signedIn ? "yes" : "NO — cloud sync disabled"}</b></div>
-        <div>Syncing: <b>{syncing ? "yes" : "no"}</b></div>
-        {cloudError && <div className="text-red-400">⚠️ Sync error: {cloudError}</div>}
-        <div className="text-yellow-200/60 text-[10px]">After checking a goal: localStorage done count should go up immediately. After refresh: React state should match localStorage.</div>
-      </div>
-
       <PageHeader
         eyebrow="The year ahead"
         title="2026 Goals"
