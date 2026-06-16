@@ -9,26 +9,21 @@ import {
 import { GOALS_KEY, type Goal, SEED_GOALS } from "@/lib/goals";
 
 /**
- * Cloud-backed goals hook with an ownership-aware localStorage cache.
+ * Cloud-backed goals hook — LOCAL CACHE IS THE SOURCE OF TRUTH.
  *
- * Behavior:
- *  - Mount: fetch from Supabase if signed in. The local cache is only trusted
- *    when it was written by the *current* user (or by the anonymous browser
- *    session if no one has signed in yet on this device).
- *  - First sign-in:
- *      • cloud has data → use cloud (cache is replaced).
- *      • cloud empty + cache belongs to current user → push the cache up.
- *      • cloud empty + cache belongs to someone else (or no one) → start empty.
- *        We do NOT auto-seed with SEED_GOALS — that's opt-in via loadStarterTemplate.
- *  - Mutations: optimistic local update + cache, then a debounced diff/upsert/delete
- *    against the last-known cloud state. Last-write-wins; fine for single-user.
- *  - Offline / not signed in: returns the cached data (if any) or empty;
- *    syncing flag stays false.
+ * Design principles:
+ *  1. Local cache is shown IMMEDIATELY on mount (no blank flash).
+ *  2. Cloud is loaded in the background to pick up goals added on other devices.
+ *  3. For the same user on the same device, LOCAL ALWAYS WINS over cloud.
+ *     Cloud can only ADD goals that don't exist locally.
+ *  4. Every mutation writes to localStorage synchronously, then queues a
+ *     debounced cloud upsert (500 ms). Even if the upsert never fires
+ *     (tab killed, offline), the next load finds local data and pushes it.
+ *  5. We never write [] to localStorage unless the user explicitly clears goals.
  */
 export function useCloudGoals(): {
   goals: Goal[];
   setGoals: (next: Goal[]) => void;
-  /** Append SEED_GOALS to the current list, skipping client_ids the user already has. */
   loadStarterTemplate: () => void;
   loading: boolean;
   syncing: boolean;
@@ -36,31 +31,25 @@ export function useCloudGoals(): {
   signedIn: boolean;
 } {
   const { user, loading: authLoading } = useAuth();
-  // Show cache immediately only if it belongs to no-one yet (pre-login) — we
-  // can't know the new user's id at this point, so we just start empty when
-  // there's an owner and let the effect resolve it.
-  const [goals, setGoalsState] = useState<Goal[]>(() =>
-    getCacheOwner() === null ? readCache() : [],
-  );
+
+  // Always start with whatever is in the local cache — no blank flash.
+  const [goals, setGoalsState] = useState<Goal[]>(() => readCache());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Last known cloud snapshot — used to compute the diff on each save.
   const cloudRef = useRef<Goal[]>([]);
   const debounceRef = useRef<number | null>(null);
   const pendingRef = useRef<Goal[] | null>(null);
 
-  /* ---------- initial fetch + first-sign-in migration ---------- */
+  /* ---------- initial fetch + background cloud sync ---------- */
 
   useEffect(() => {
     let alive = true;
     if (authLoading) return;
+
     if (!user) {
-      // Not signed in. Trust the cache only if no owner is stamped on it
-      // (i.e. this browser hasn't been used by a signed-in account yet).
-      const cached = getCacheOwner() === null ? readCache() : [];
-      setGoalsState(cached);
+      // Not signed in — local cache is all we have.
       setLoading(false);
       return;
     }
@@ -73,46 +62,82 @@ export function useCloudGoals(): {
         if (!alive) return;
         cloudRef.current = cloud;
 
-        if (cloud.length > 0) {
-          setGoalsState(cloud);
-          writeCache(cloud);
-          setCacheOwner(user.id);
-          markSynced(user.id);
+        const local = readCache();
+        const localById = new Map(local.map((g) => [g.id, g]));
+
+        console.log(`[Goals] Loaded ${cloud.length} cloud / ${local.length} local goals`);
+
+        if (cloud.length === 0 && local.length === 0) {
+          // Brand-new account with no data anywhere.
+          setLoading(false);
           return;
         }
 
-        // Cloud is empty. Decide if we should migrate the local cache:
-        // only if it was written by THIS user (or by no one — pre-login data).
-        const owner = getCacheOwner();
-        const cached = readCache();
-        const cacheBelongsHere =
-          (owner === null || owner === user.id) && cached.length > 0;
+        if (cloud.length === 0) {
+          // Cloud is empty but local has goals → push them up.
+          console.log(`[Goals] Cloud empty — pushing ${local.length} local goals to cloud`);
+          setGoalsState(local);
+          writeCache(local);
+          setCacheOwner(user.id);
+          bulkUpsertGoals(user.id, local)
+            .then(() => { setLastSyncTime(user.id); console.log("[Goals] Initial push to cloud ✓"); })
+            .catch((e) => { console.error("[Goals] Initial push FAILED:", e); });
+          cloudRef.current = local;
+          setLoading(false);
+          return;
+        }
 
-        if (cacheBelongsHere && !hasSyncedFlag(user.id)) {
-          await bulkUpsertGoals(user.id, cached);
-          cloudRef.current = cached;
-          setGoalsState(cached);
-          writeCache(cached);
-          setCacheOwner(user.id);
-          markSynced(user.id);
-        } else {
-          // Brand-new account, or this browser belongs to a different user.
-          // Start empty; the empty-state UI offers SEED_GOALS as an opt-in template.
-          setGoalsState([]);
-          writeCache([]);
-          setCacheOwner(user.id);
+        // ── Merge strategy: LOCAL ALWAYS WINS for goals on this device. ──
+        //
+        // Cloud can only ADD goals that don't exist locally (from another device).
+        // We never replace a local goal with a cloud version — local is always the
+        // source of truth for this device. Any differences get pushed to cloud in
+        // the background so cloud catches up.
+        //
+        // Why this is safe: setGoals() synchronously writes to localStorage before
+        // the cloud upsert fires. So localStorage always has the latest state, and
+        // we can trust it unconditionally.
+        const cloudOnlyGoals = cloud.filter((g) => !localById.has(g.id));
+        const finalGoals = cloudOnlyGoals.length > 0
+          ? [...local, ...cloudOnlyGoals]
+          : local;
+
+        console.log(`[Goals] Merge done → ${finalGoals.length} goals. Local: ${local.length}, cloud-only additions: ${cloudOnlyGoals.length}. Done count: ${finalGoals.filter(g=>g.done).length}`);
+        setGoalsState(finalGoals);
+        writeCache(finalGoals);
+        setCacheOwner(user.id);
+        cloudRef.current = cloud;
+
+        // Push any local goals that differ from cloud (including newly done ones
+        // that haven't synced yet, or goals modified before last flush).
+        const cloudById = new Map(cloud.map((g) => [g.id, g]));
+        const toSync = local.filter((g) => {
+          const cloudGoal = cloudById.get(g.id);
+          if (!cloudGoal) return true; // not in cloud yet
+          // Check key fields that matter for persistence
+          if (g.done !== cloudGoal.done) return true;
+          if ((g.current ?? null) !== (cloudGoal.current ?? null)) return true;
+          if ((g.lastCheckIn ?? null) !== (cloudGoal.lastCheckIn ?? null)) return true;
+          return false;
+        });
+        if (toSync.length > 0) {
+          console.log(`[Goals] Pushing ${toSync.length} locally-newer goals to cloud…`);
+          bulkUpsertGoals(user.id, toSync)
+            .then(() => { setLastSyncTime(user.id); console.log("[Goals] Back-sync ✓"); })
+            .catch((e) => { console.error("[Goals] Back-sync FAILED:", e); });
         }
       } catch (err) {
         if (!alive) return;
-        setError(err instanceof Error ? err.message : String(err));
+        // On any cloud error — keep showing local cache, don't touch it.
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Sync error: ${msg}`);
+        console.error("[useCloudGoals] load failed:", err);
       } finally {
         if (alive) setLoading(false);
       }
     })();
 
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [user, authLoading]);
 
   /* ---------- debounced sync to cloud ---------- */
@@ -130,6 +155,7 @@ export function useCloudGoals(): {
     const toUpsert: Goal[] = [];
     for (const g of next) {
       const prior = prevById.get(g.id);
+      // Always upsert goals with unconfirmed local mutations, or any changed goal.
       if (!prior || JSON.stringify(prior) !== JSON.stringify(g)) {
         toUpsert.push(g);
       }
@@ -141,18 +167,24 @@ export function useCloudGoals(): {
 
     if (toUpsert.length === 0 && toDelete.length === 0) return;
 
+    console.log(`[Goals] Syncing ${toUpsert.length} upserts, ${toDelete.length} deletes to cloud…`);
     setSyncing(true);
     setError(null);
     try {
       for (const g of toUpsert) {
         await upsertGoal(user.id, g);
+        console.log(`[Goals] ✓ Upserted "${g.title}" — done:${g.done} current:${g.current ?? "n/a"}`);
       }
       for (const id of toDelete) {
         await deleteGoalByClientId(user.id, id);
       }
       cloudRef.current = next;
+      setLastSyncTime(user.id);
+      console.log("[Goals] Cloud sync complete ✓");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Save failed: ${msg}`);
+      console.error("[Goals] ❌ Cloud sync FAILED:", err);
     } finally {
       setSyncing(false);
     }
@@ -160,12 +192,18 @@ export function useCloudGoals(): {
 
   const setGoals = useCallback(
     (next: Goal[]) => {
+      const doneCount = next.filter(g => g.done).length;
+      console.log(`[Goals] setGoals called — ${next.length} goals, ${doneCount} done`);
       setGoalsState(next);
       writeCache(next);
+      // Verify the write landed
+      const cached = localStorage.getItem(GOALS_KEY);
+      const cachedParsed = cached ? JSON.parse(cached) : [];
+      console.log(`[Goals] localStorage written — ${cachedParsed.length} goals cached`);
       if (user) setCacheOwner(user.id);
       pendingRef.current = next;
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
-      if (!user) return; // no-op cloud sync when signed out
+      if (!user) return;
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
         flush();
@@ -175,8 +213,6 @@ export function useCloudGoals(): {
   );
 
   const loadStarterTemplate = useCallback(() => {
-    // Merge SEED_GOALS into current goals, skipping any client_ids the user
-    // already has. Lets you tap "load template" without nuking existing goals.
     const existing = new Set(goals.map((g) => g.id));
     const additions = SEED_GOALS.filter((g) => !existing.has(g.id)).map((g) => ({
       ...g,
@@ -186,13 +222,12 @@ export function useCloudGoals(): {
     setGoals([...goals, ...additions]);
   }, [goals, setGoals]);
 
-  // Flush on unload so a quick close doesn't lose the last edit.
+  // Flush on unload — best-effort; browser may cancel the fetch.
   useEffect(() => {
     const onBeforeUnload = () => {
       if (debounceRef.current) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;
-        // Best-effort; fetch may be cancelled mid-flight.
         flush();
       }
     };
@@ -200,18 +235,10 @@ export function useCloudGoals(): {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [flush]);
 
-  return {
-    goals,
-    setGoals,
-    loadStarterTemplate,
-    loading,
-    syncing,
-    error,
-    signedIn: !!user,
-  };
+  return { goals, setGoals, loadStarterTemplate, loading, syncing, error, signedIn: !!user };
 }
 
-/* ---------- helpers ---------- */
+/* ---------- localStorage helpers ---------- */
 
 function readCache(): Goal[] {
   if (typeof window === "undefined") return [];
@@ -230,22 +257,8 @@ function writeCache(goals: Goal[]): void {
   try {
     localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
   } catch {
-    /* quota or disabled — ignore */
+    /* quota or disabled */
   }
-}
-
-function syncedKey(userId: string): string {
-  return `alfred.goals.synced:${userId}`;
-}
-
-function hasSyncedFlag(userId: string): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(syncedKey(userId)) === "1";
-}
-
-function markSynced(userId: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(syncedKey(userId), "1");
 }
 
 const CACHE_OWNER_KEY = "alfred.goals.cacheOwner";
@@ -258,4 +271,26 @@ function getCacheOwner(): string | null {
 function setCacheOwner(userId: string): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CACHE_OWNER_KEY, userId);
+}
+
+function lastSyncKey(userId: string): string {
+  return `alfred.goals.lastSync:${userId}`;
+}
+
+function getLastSyncTime(userId: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return parseInt(localStorage.getItem(lastSyncKey(userId)) ?? "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setLastSyncTime(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(lastSyncKey(userId), String(Date.now()));
+  } catch {
+    /* quota or disabled */
+  }
 }

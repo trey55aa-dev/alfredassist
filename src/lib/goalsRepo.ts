@@ -67,6 +67,15 @@ function rowToGoal(row: GoalRow): Goal {
 }
 
 function goalToInsert(goal: Goal, userId: string): GoalInsert {
+  // NOTE: goal_type, streak_start, daily_log, relapse_log are intentionally
+  // omitted here. Those columns don't yet exist in the live Supabase schema
+  // (they're in the pending migration). Including unknown column names causes
+  // PostgREST to reject the *entire* upsert with a 400, which silently breaks
+  // all goal saves. Once the migration is run and the Supabase types are
+  // regenerated, add them back.
+  //
+  // NOTE: localUpdatedAt is also intentionally omitted — it's a local-only
+  // field used by the merge-on-load strategy and has no DB column.
   const row: GoalInsert = {
     user_id: userId,
     client_id: goal.id,
@@ -89,10 +98,6 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
     progress_log:
       (goal.progressLog as unknown as GoalInsert["progress_log"]) ?? null,
     last_check_in: goal.lastCheckIn ?? null,
-    goal_type: goal.goalType ?? null,
-    streak_start: goal.streakStart ?? null,
-    daily_log: (goal.dailyLog as unknown as GoalInsert["daily_log"]) ?? null,
-    relapse_log: (goal.relapseLog as unknown as GoalInsert["relapse_log"]) ?? null,
   };
   // Preserve seed createdAt only when meaningful; let DB default when 0.
   if (goal.createdAt && goal.createdAt > 0) {

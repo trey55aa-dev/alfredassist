@@ -1,12 +1,14 @@
-// Daily progress history + projection for goals.
+// Daily + weekly progress history and projection for goals.
 //
 // A "check-in" stamps a YYYY-MM-DD key in goal.progressLog with the post-bump
-// current value, and updates goal.lastCheckIn. The 14-day grid renders those
-// keys back into a visible "days hit / days missed" strip on the goal card.
+// current value, and updates goal.lastCheckIn.
 //
-// Projection compares the rate you're *actually* making progress against the
-// rate you'd *need* to hit the goal by its (real or quarter-inferred) deadline,
-// and translates the gap into something direct: "Behind 4 days" / "On pace".
+// lastNWeeks() aggregates that same log by calendar week (Mon–Sun) so the UI
+// can display a rate-vs-required bar chart alongside the 14-day dot grid.
+//
+// computeProjection() compares your actual rate against the rate you need to
+// hit the deadline, and exposes requiredDailyRate, weeksLeft, and daysLeft so
+// the UI can render "Need $288/wk · 26 weeks left" style rate headlines.
 
 import type { Goal } from "./goals";
 import { todayKey } from "./alfred";
@@ -58,13 +60,109 @@ export function last14Days(goal: Goal, today = new Date(), n = 14): DaySnapshot[
     const key = todayKey(d);
     const v = log[key];
     if (v !== undefined) {
-      const delta = Math.max(0, v - running);
+      const delta = v - running; // can be negative (setback/spend)
       out.push({ date: key, logged: true, delta, value: v });
       running = v;
     } else {
       out.push({ date: key, logged: false, delta: 0, value: running });
     }
   }
+  return out;
+}
+
+/* ---------- weekly aggregation ---------- */
+
+export interface WeekSnapshot {
+  /** Monday of the week, YYYY-MM-DD */
+  weekStart: string;
+  /** Sunday of the week, YYYY-MM-DD */
+  weekEnd: string;
+  /** Human label: "Jun 2" (first day) */
+  label: string;
+  /** True for the calendar week that contains today */
+  isCurrentWeek: boolean;
+  /** Any log entry exists this week */
+  logged: boolean;
+  /** Net change during the week (can be negative) */
+  delta: number;
+  /** Running value at end of week (carry-forward when no entries) */
+  endValue: number;
+  /** How many individual days had entries this week */
+  daysLogged: number;
+}
+
+const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/**
+ * Returns the most recent n calendar weeks (Mon–Sun), oldest first.
+ * Each snapshot shows the *net change* logged during that week,
+ * derived from the absolute values in goal.progressLog.
+ */
+export function lastNWeeks(goal: Goal, today = new Date(), n = 8): WeekSnapshot[] {
+  const log = goal.progressLog ?? {};
+
+  // Monday of the current week
+  const dow = today.getDay(); // 0=Sun … 6=Sat
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  monday.setHours(0, 0, 0, 0);
+
+  // Find the running value just before the oldest week we'll display
+  const oldestMonday = new Date(monday);
+  oldestMonday.setDate(monday.getDate() - (n - 1) * 7);
+  const oldestKey = todayKey(oldestMonday);
+
+  const priorEntries = Object.entries(log)
+    .filter(([k]) => k < oldestKey)
+    .sort(([a], [b]) => a.localeCompare(b));
+  let runningValue: number =
+    priorEntries.length > 0 ? (priorEntries[priorEntries.length - 1][1] as number) : 0;
+
+  const todayKey_ = todayKey(today);
+  const out: WeekSnapshot[] = [];
+
+  for (let w = n - 1; w >= 0; w--) {
+    const wStart = new Date(monday);
+    wStart.setDate(monday.getDate() - w * 7);
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wStart.getDate() + 6);
+
+    const startKey = todayKey(wStart);
+    const endKey = todayKey(wEnd);
+
+    const weekStartValue = runningValue;
+    let weekEndValue = runningValue;
+    let daysLogged = 0;
+
+    // Walk each day of the week; stop at today to avoid future dates
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(wStart);
+      day.setDate(wStart.getDate() + d);
+      const key = todayKey(day);
+      if (key > todayKey_) break;
+      const v = log[key] as number | undefined;
+      if (v !== undefined) {
+        weekEndValue = v;
+        daysLogged++;
+      }
+    }
+
+    const label = `${MONTH_SHORT[wStart.getMonth()]} ${wStart.getDate()}`;
+
+    out.push({
+      weekStart: startKey,
+      weekEnd: endKey,
+      label,
+      isCurrentWeek: w === 0,
+      logged: daysLogged > 0,
+      delta: weekEndValue - weekStartValue,
+      endValue: weekEndValue,
+      daysLogged,
+    });
+
+    runningValue = weekEndValue; // carry forward
+  }
+
   return out;
 }
 
@@ -93,6 +191,10 @@ export interface ProjectionResult {
   requiredDailyRate: number | null;
   /** Observed units/day so far. */
   actualDailyRate: number | null;
+  /** Calendar days remaining to the effective deadline. */
+  daysLeft: number | null;
+  /** Full calendar weeks remaining (ceil). */
+  weeksLeft: number | null;
 }
 
 const MS_PER_DAY = 86_400_000;
@@ -136,6 +238,8 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
       daysLate: null,
       requiredDailyRate: null,
       actualDailyRate: null,
+      daysLeft: null,
+      weeksLeft: null,
     };
   }
   if (typeof goal.target !== "number" || goal.target <= 0) {
@@ -146,6 +250,8 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
       daysLate: null,
       requiredDailyRate: null,
       actualDailyRate: null,
+      daysLeft: null,
+      weeksLeft: null,
     };
   }
 
@@ -158,6 +264,8 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
       daysLate: null,
       requiredDailyRate: 0,
       actualDailyRate: null,
+      daysLeft: null,
+      weeksLeft: null,
     };
   }
 
@@ -225,5 +333,7 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
     daysLate: daysLate || null,
     requiredDailyRate,
     actualDailyRate,
+    daysLeft: Math.ceil(daysLeft),
+    weeksLeft: Math.ceil(daysLeft / 7),
   };
 }

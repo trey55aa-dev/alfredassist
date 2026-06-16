@@ -44,12 +44,11 @@ export default function AppLayout() {
         {/* Main column */}
         <div className="relative z-10 flex-1 flex flex-col min-w-0">
 
-          {/* Top header bar */}
+          {/* Top header bar — iOS 26 / macOS 15 Liquid Glass */}
           <header
             className="
               h-14 flex items-center justify-between
-              border-b border-border/60
-              bg-background/80 backdrop-blur-md
+              glass-nav glass-rim
               sticky top-0 z-30
             "
             style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}

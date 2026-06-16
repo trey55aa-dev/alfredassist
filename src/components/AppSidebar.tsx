@@ -17,8 +17,6 @@ import {
   Palette,
   Sparkles,
   Pencil,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { NAV_CATEGORIES, FOCUS_SAFE } from "@/lib/navConfig";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
@@ -31,9 +29,11 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -55,25 +55,6 @@ export function AppSidebar() {
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
 
-  // Determine which category the current route belongs to
-  const activeCategoryId = NAV_CATEGORIES.find((cat) =>
-    cat.items.some((item) =>
-      item.url === "/" ? location.pathname === "/" : location.pathname.startsWith(item.url)
-    )
-  )?.id ?? "home";
-
-  // Expanded state: active category starts open; others start closed
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(NAV_CATEGORIES.map((c) => [c.id, c.id === activeCategoryId]))
-  );
-
-  // Auto-expand when navigating to a new category
-  useEffect(() => {
-    setExpanded((prev) => ({ ...prev, [activeCategoryId]: true }));
-  }, [activeCategoryId]);
-
-  const toggleCategory = (id: string) =>
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // First run after sign-in with no name set: gently prompt once.
   useEffect(() => {
@@ -139,8 +120,8 @@ export function AppSidebar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarContent className="bg-sidebar">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border/60">
+      <SidebarContent className="glass-sidebar">
         {/* Brand */}
         <div className="px-4 pt-6 pb-4">
           <div className="flex items-center gap-2">
@@ -160,141 +141,72 @@ export function AppSidebar() {
 
         <div className="divider-gold mx-3" />
 
-        <SidebarGroup className="mt-1">
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              {NAV_CATEGORIES.map((cat) => {
-                const isCatActive = cat.id === activeCategoryId;
-                const isOpen = expanded[cat.id];
-                const CatIcon = cat.icon;
+        {/* ── Navigation — section-label style ── */}
+        {NAV_CATEGORIES.map((cat, catIdx) => {
+          const CatIcon = cat.icon;
+          return (
+            <SidebarGroup key={cat.id} className="py-0 mt-1">
+              {/* Section sub-heading — hidden automatically in icon-collapsed mode */}
+              <SidebarGroupLabel className="
+                flex items-center gap-1.5
+                font-mono text-[9px] tracking-[0.28em] uppercase
+                text-muted-foreground/55
+                px-3 h-7
+              ">
+                <CatIcon className="h-3 w-3 shrink-0" />
+                {cat.label}
+              </SidebarGroupLabel>
 
-                return (
-                  <div key={cat.id}>
-                    {/* ── Category header ── */}
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // If collapsed, navigate to first item directly
-                            if (collapsed) {
-                              const first = cat.items[0];
-                              const dimmed = focus.active && !FOCUS_SAFE.has(first.url) && !isCatActive;
-                              if (dimmed) { setPendingUrl(first.url); return; }
-                              navigate(first.url);
-                            } else {
-                              toggleCategory(cat.id);
-                            }
-                          }}
-                          className={`group w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all ${
-                            isCatActive
-                              ? "bg-sidebar-accent/70 text-gold"
-                              : "text-sidebar-foreground hover:bg-sidebar-accent/40 hover:text-gold"
-                          }`}
-                        >
-                          <CatIcon
-                            className={`h-4 w-4 shrink-0 transition-colors ${
-                              isCatActive ? "text-gold" : "text-muted-foreground group-hover:text-gold"
-                            }`}
-                          />
-                          {!collapsed && (
-                            <>
-                              <span className="flex-1 font-mono text-[11px] tracking-[0.2em] uppercase font-semibold text-left">
-                                {cat.label}
-                              </span>
-                              {cat.items.length > 1 && (
-                                isOpen
-                                  ? <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                                  : <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                              )}
-                            </>
-                          )}
-                        </button>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+              <SidebarGroupContent>
+                <SidebarMenu className="gap-px">
+                  {cat.items.map((item) => {
+                    const isActive =
+                      item.url === "/"
+                        ? location.pathname === "/"
+                        : location.pathname.startsWith(item.url);
+                    const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild tooltip={item.title}>
+                          <NavLink
+                            to={item.url}
+                            end={item.url === "/"}
+                            onClick={(e) => {
+                              if (dimmed) { e.preventDefault(); setPendingUrl(item.url); }
+                            }}
+                            className={`
+                              group flex items-center gap-2.5
+                              rounded-md px-3 py-2 transition-all
+                              ${isActive
+                                ? "bg-sidebar-accent text-gold shadow-inset-gold"
+                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-gold"
+                              }
+                              ${dimmed ? "opacity-40" : ""}
+                            `}
+                          >
+                            <item.icon
+                              className={`h-4 w-4 shrink-0 transition-colors ${
+                                isActive ? "text-gold" : "text-muted-foreground/70 group-hover:text-gold"
+                              }`}
+                            />
+                            <span className="font-mono text-[11px] tracking-wider uppercase">
+                              {item.title}
+                            </span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
 
-                    {/* ── Sub-items (expanded only, hidden when sidebar collapsed) ── */}
-                    {!collapsed && isOpen && cat.items.length > 1 && (
-                      <div className="ml-3 pl-3 border-l border-border/40 mb-1 space-y-0.5">
-                        {cat.items.map((item) => {
-                          const isActive =
-                            item.url === "/"
-                              ? location.pathname === "/"
-                              : location.pathname.startsWith(item.url);
-                          const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
-                          return (
-                            <SidebarMenuItem key={item.title}>
-                              <SidebarMenuButton asChild>
-                                <NavLink
-                                  to={item.url}
-                                  end={item.url === "/"}
-                                  onClick={(e) => {
-                                    if (dimmed) {
-                                      e.preventDefault();
-                                      setPendingUrl(item.url);
-                                    }
-                                  }}
-                                  className={`group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-all text-left ${
-                                    isActive
-                                      ? "bg-sidebar-accent text-gold shadow-inset-gold"
-                                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-gold"
-                                  } ${dimmed ? "opacity-40" : ""}`}
-                                >
-                                  <item.icon
-                                    className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                                      isActive ? "text-gold" : "text-muted-foreground/70 group-hover:text-gold"
-                                    }`}
-                                  />
-                                  <span className="font-mono text-[11px] tracking-wider uppercase">
-                                    {item.title}
-                                  </span>
-                                </NavLink>
-                              </SidebarMenuButton>
-                            </SidebarMenuItem>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Single-item category: navigate directly on click (already handled above),
-                        but also render as a visible sub-item row when expanded */}
-                    {!collapsed && isOpen && cat.items.length === 1 && (() => {
-                      const item = cat.items[0];
-                      const isActive =
-                        item.url === "/"
-                          ? location.pathname === "/"
-                          : location.pathname.startsWith(item.url);
-                      const dimmed = focus.active && !FOCUS_SAFE.has(item.url) && !isActive;
-                      return (
-                        <div className="ml-3 pl-3 border-l border-border/40 mb-1">
-                          <SidebarMenuItem>
-                            <SidebarMenuButton asChild>
-                              <NavLink
-                                to={item.url}
-                                end={item.url === "/"}
-                                onClick={(e) => {
-                                  if (dimmed) { e.preventDefault(); setPendingUrl(item.url); }
-                                }}
-                                className={`group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-all ${
-                                  isActive
-                                    ? "bg-sidebar-accent text-gold shadow-inset-gold"
-                                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-gold"
-                                } ${dimmed ? "opacity-40" : ""}`}
-                              >
-                                <item.icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-gold" : "text-muted-foreground/70 group-hover:text-gold"}`} />
-                                <span className="font-mono text-[11px] tracking-wider uppercase">{item.title}</span>
-                              </NavLink>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              {/* Thin separator between sections (not after the last one) */}
+              {catIdx < NAV_CATEGORIES.length - 1 && (
+                <SidebarSeparator className="mx-3 mt-1 opacity-40" />
+              )}
+            </SidebarGroup>
+          );
+        })}
 
         <div className="mt-auto p-3 space-y-3">
           <div className="divider-gold mx-1" />

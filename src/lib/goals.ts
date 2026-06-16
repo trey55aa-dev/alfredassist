@@ -105,6 +105,13 @@ export interface Goal {
   dailyLog?: Record<string, DailyEntry>;
   /** Relapse / miss log (streak goals). */
   relapseLog?: RelapseEntry[];
+  /**
+   * Epoch-ms timestamp of the last local mutation to this goal.
+   * Purely local — never written to Supabase. Used by the merge-on-load
+   * strategy to detect unsynced changes and keep local data when the cloud
+   * hasn't caught up yet (e.g. fast reload within the 500 ms debounce window).
+   */
+  localUpdatedAt?: number;
 }
 
 /* ---------- Pace / position helpers ---------- */

@@ -41,7 +41,8 @@
     --input: 220 25% 14%;
     --ring: 42 55% 62%;
 
-    --radius: 0.5rem;
+    /* iOS 26 / macOS 15 — increased corner radius throughout */
+    --radius: 0.75rem;
 
     /* Sidebar */
     --sidebar-background: 220 38% 5%;
@@ -65,11 +66,15 @@
     --gradient-luxe: linear-gradient(135deg, hsl(220 38% 5%) 0%, hsl(220 30% 10%) 50%, hsl(220 35% 7%) 100%);
     --gradient-gold: linear-gradient(135deg, hsl(42 55% 62%) 0%, hsl(38 60% 50%) 100%);
     --gradient-teal: linear-gradient(135deg, hsl(180 40% 50%) 0%, hsl(180 35% 35%) 100%);
-    --gradient-card: linear-gradient(160deg, hsl(220 30% 10%) 0%, hsl(220 32% 8%) 100%);
+    /* iOS 26 — glass card: slightly lighter + subtle inner highlight */
+    --gradient-card: linear-gradient(160deg, hsl(220 28% 12% / 0.85) 0%, hsl(220 30% 9% / 0.9) 100%);
 
-    --shadow-luxe: 0 20px 60px -20px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(42 55% 62% / 0.05);
-    --shadow-gold: 0 10px 40px -10px hsl(42 55% 62% / 0.35);
-    --shadow-inset-gold: inset 0 1px 0 0 hsl(42 55% 62% / 0.15);
+    /* iOS 26 — diffuse shadows with colour tint */
+    --shadow-luxe: 0 24px 64px -16px hsl(0 0% 0% / 0.55), 0 0 0 1px hsl(42 55% 62% / 0.07);
+    --shadow-gold: 0 12px 48px -8px hsl(42 55% 62% / 0.4);
+    --shadow-inset-gold: inset 0 1px 0 0 hsl(42 55% 62% / 0.18);
+    /* Floating-element shadow (pill nav, popovers) */
+    --shadow-float: 0 32px 80px -12px hsl(0 0% 0% / 0.7), 0 0 0 1px hsl(220 25% 16% / 0.6);
 
     --transition-smooth: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -130,6 +135,55 @@
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── iOS 26 / macOS 15 Liquid Glass utilities ────────────────────────────── */
+
+/**
+ * glass-surface  — general translucent surface (cards, panels)
+ * glass-nav      — navigation chrome (header, sidebar)
+ * glass-float    — floating elements (bottom pill, popovers, toasts)
+ *
+ * All use backdrop-filter: blur + saturate so the dark background shows
+ * through with vibrancy, exactly like the Apple Liquid Glass spec.
+ */
+.glass-surface {
+  background: hsl(var(--card) / 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.glass-nav {
+  background: hsl(var(--background) / 0.65);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-bottom: 1px solid hsl(var(--border) / 0.35);
+}
+
+.glass-sidebar {
+  background: hsl(var(--sidebar-background) / 0.75);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+}
+
+.glass-float {
+  background: hsl(var(--background) / 0.78);
+  backdrop-filter: blur(36px) saturate(200%) brightness(1.08);
+  -webkit-backdrop-filter: blur(36px) saturate(200%) brightness(1.08);
+  box-shadow: var(--shadow-float);
+}
+
+/* iOS 26 pill active-tab indicator */
+.glass-pill-active {
+  background: hsl(var(--gold) / 0.15);
+  border: 1px solid hsl(var(--gold) / 0.25);
+  border-radius: 9999px;
+}
+
+/* Subtle inner top-edge highlight (iOS 26 "glass rim" look) */
+.glass-rim {
+  box-shadow: inset 0 1px 0 0 hsl(255 100% 100% / 0.07);
 }
 
 /* ─── Mobile / touch improvements ─────────────────────────────────────────── */

@@ -99,6 +99,7 @@ export default function Checklist() {
     // Auto-increment linked goal
     if (habit.goalId && nowComplete && !wasDone) {
       const inc = habit.goalIncrement ?? 1;
+      const now = Date.now();
       setGoals(
         goals.map((g) =>
           g.id === habit.goalId
@@ -108,16 +109,18 @@ export default function Checklist() {
                   typeof g.target === "number"
                     ? Math.min(g.target, (g.current ?? 0) + inc)
                     : (g.current ?? 0) + inc,
+                localUpdatedAt: now,
               }
             : g
         )
       );
     } else if (habit.goalId && !nowComplete && wasDone) {
       const inc = habit.goalIncrement ?? 1;
+      const now = Date.now();
       setGoals(
         goals.map((g) =>
           g.id === habit.goalId
-            ? { ...g, current: Math.max(0, (g.current ?? 0) - inc) }
+            ? { ...g, current: Math.max(0, (g.current ?? 0) - inc), localUpdatedAt: now }
             : g
         )
       );

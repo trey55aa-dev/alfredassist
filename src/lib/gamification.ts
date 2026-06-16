@@ -20,10 +20,12 @@ export const XP_VALUES = {
  * Awards (delta / target) * 100 XP, so a goal completed entirely through
  * progress logs earns ~100 XP from logs + another 100 XP on GOAL_DONE.
  * Falls back to the flat PROGRESS_LOGGED value when target is missing.
+ * Returns 0 for negative or zero deltas — going backwards earns no XP.
  */
 export function progressXp(delta: number, target: number | undefined): number {
+  if (delta <= 0) return 0; // no XP for setbacks or zero-progress logs
   if (!target || target <= 0) return XP_VALUES.PROGRESS_LOGGED;
-  const pct = Math.abs(delta) / target;
+  const pct = delta / target;
   return Math.max(1, Math.min(100, Math.round(pct * 100)));
 }
 
@@ -251,6 +253,11 @@ export function awardXp(
   reason: string,
   extra?: Partial<BadgeCheckArgs>,
 ): AwardResult {
+  // 0 XP (e.g. logging negative progress) — skip all side-effects silently.
+  if (amount <= 0) {
+    return { xp: 0, reason, newBadges: [], leveledUp: false, newLevel: null };
+  }
+
   if (typeof window === "undefined") {
     return { xp: amount, reason, newBadges: [], leveledUp: false, newLevel: null };
   }

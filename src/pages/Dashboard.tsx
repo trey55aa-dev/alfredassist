@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckSquare, Timer, Brain, Mic, ArrowRight, Flame, Target } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
+import {
+  CheckSquare,
+  Timer,
+  Brain,
+  Mic,
+  ArrowRight,
+  Flame,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle2,
+  Circle,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { greeting, todayKey } from "@/lib/alfred";
-import { GOALS_KEY, Goal, SEED_GOALS, progressPct, daysUntil } from "@/lib/goals";
+import { Goal, progressPct, daysUntil } from "@/lib/goals";
 import {
   STREAK_KEY,
   StreakState,
@@ -32,8 +43,134 @@ import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { HealthSummaryCard } from "@/components/HealthSummaryCard";
 import { useAuth } from "@/hooks/useAuth";
+import { computeProjection } from "@/lib/goalsHistory";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
+
+const SNAP_KEY = "alfred.goals.dailySnap";
+
+/** Format a rate/value with units — mirrors the helper in Goals2026. */
+function fmtGoalVal(n: number, unit: string | undefined): string {
+  if (!isFinite(n) || n === 0) return "—";
+  const isMonetary = unit === "$" || unit?.toLowerCase() === "usd";
+  if (isMonetary) return `$${Math.round(n).toLocaleString()}`;
+  const str = n >= 10 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, "");
+  return unit ? `${str} ${unit}` : str;
+}
+
+/** Today at a Glance — one row per measurable goal. */
+function TodayGoalsCard({
+  goals,
+  onQuickLog,
+}: {
+  goals: Goal[];
+  onQuickLog: (goalId: string, delta: number) => void;
+}) {
+  const today = todayKey();
+  const measurable = goals.filter(
+    (g) => !g.done && typeof g.target === "number" && (g.target ?? 0) > 0,
+  );
+  if (measurable.length === 0) return null;
+
+  return (
+    <Card className="p-5 bg-gradient-card border-border">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-display text-2xl">Today's Targets</h3>
+          <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-0.5">
+            {new Date().toLocaleDateString(undefined, { month: "long", day: "numeric" })} · what to log today
+          </p>
+        </div>
+        <Link to="/goals-2026" className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-gold hover:text-gold-soft">
+          All goals <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      <div className="space-y-2.5">
+        {measurable.map((g) => {
+          const projection = computeProjection(g);
+          const loggedToday = (g.progressLog ?? {})[today] !== undefined;
+          const reqDay = projection.requiredDailyRate ?? 0;
+          const pct = progressPct(g);
+          const isAhead = (projection.actualDailyRate ?? 0) >= reqDay && reqDay > 0;
+
+          return (
+            <div
+              key={g.id}
+              className="flex items-center gap-3 rounded-md px-3 py-2.5 bg-background/40 border border-border/50 hover:border-gold/30 transition-all"
+            >
+              {/* Logged indicator */}
+              <div className="shrink-0">
+                {loggedToday ? (
+                  <CheckCircle2 className="h-4 w-4 text-teal" />
+                ) : (
+                  <Circle className="h-4 w-4 text-muted-foreground/40" />
+                )}
+              </div>
+
+              {/* Goal info */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-foreground leading-tight line-clamp-1">
+                    {g.title}
+                  </span>
+                  {loggedToday && (
+                    <span className="font-mono text-[8px] tracking-[0.2em] uppercase text-teal shrink-0">
+                      logged ✓
+                    </span>
+                  )}
+                </div>
+                {/* Progress bar */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-muted/60 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-gold transition-all duration-700"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-[9px] text-muted-foreground shrink-0 tabular-nums">
+                    {fmtGoalVal(g.current ?? 0, g.unit)}&nbsp;/&nbsp;{fmtGoalVal(g.target!, g.unit)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Required-today + pace icon */}
+              <div className="shrink-0 text-right min-w-[4rem]">
+                {isFinite(reqDay) && reqDay > 0 ? (
+                  <>
+                    <div className="flex items-center justify-end gap-0.5 mb-0.5">
+                      {isAhead ? (
+                        <TrendingUp className="h-3 w-3 text-teal" />
+                      ) : (
+                        <TrendingDown className="h-3 w-3 text-orange-400" />
+                      )}
+                    </div>
+                    <div className="font-mono text-[10px] text-muted-foreground leading-none">need/day</div>
+                    <div className={`font-display text-lg leading-tight ${isAhead ? "text-teal" : "text-gold"}`}>
+                      {fmtGoalVal(reqDay, g.unit)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="font-mono text-[9px] text-muted-foreground">no target</div>
+                )}
+              </div>
+
+              {/* Quick +1 log button */}
+              <button
+                type="button"
+                onClick={() => onQuickLog(g.id, reqDay > 0 ? Math.round(reqDay) || 1 : 1)}
+                title={`Log ${fmtGoalVal(reqDay > 0 ? Math.round(reqDay) : 1, g.unit)} toward ${g.title}`}
+                className="shrink-0 h-8 w-8 rounded-md border border-gold/30 bg-gold/10 text-gold hover:bg-gold/20 transition-colors flex items-center justify-center font-mono text-sm"
+              >
+                +
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 export default function Dashboard() {
   const { profile, user } = useAuth();
@@ -52,7 +189,58 @@ export default function Dashboard() {
     minutes: 0,
   });
   const [journal] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
-  const { goals } = useCloudGoals();
+  const { goals, setGoals } = useCloudGoals();
+
+  /* ── Auto daily snapshot ───────────────────────────────────────────────────
+     Once per calendar day, stamp each active measurable goal's *current*
+     value into progressLog[today] if no entry exists yet. This fills the
+     weekly chart on days you don't manually log, so you always see where
+     the goal stood rather than a gap.
+  ─────────────────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (goals.length === 0) return;
+    const today = todayKey();
+    if (localStorage.getItem(SNAP_KEY) === today) return; // already done today
+
+    let changed = false;
+    const updated = goals.map((g) => {
+      // Only measurable, in-progress goals that have been started at some point
+      if (g.done) return g;
+      if (typeof g.target !== "number" || g.target <= 0) return g;
+      if (typeof g.current !== "number") return g;
+      if ((g.progressLog ?? {})[today] !== undefined) return g; // already has today
+
+      changed = true;
+      return {
+        ...g,
+        progressLog: { ...(g.progressLog ?? {}), [today]: g.current },
+      };
+    });
+
+    if (changed) setGoals(updated);
+    localStorage.setItem(SNAP_KEY, today);
+  // Run once when goals finish loading (goals.length flips from 0 → N)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals.length > 0]);
+
+  /* ── Quick-log from Today's Targets card ─────────────────────────────── */
+  const handleQuickLog = (goalId: string, delta: number) => {
+    const today = todayKey();
+    const now = Date.now();
+    const updated = goals.map((g) => {
+      if (g.id !== goalId) return g;
+      const prev = g.current ?? 0;
+      const next = prev + delta;
+      return {
+        ...g,
+        current: next,
+        progressLog: { ...(g.progressLog ?? {}), [today]: next },
+        lastCheckIn: today,
+        localUpdatedAt: now,
+      };
+    });
+    setGoals(updated);
+  };
 
   const goalStats = useMemo(() => {
     const total = goals.length;
@@ -88,7 +276,7 @@ export default function Dashboard() {
   const tasksTotal = dailyHabits.length;
   const dailyPct = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
-  // Streak — keep in sync if user lands here without visiting Checklist
+  // Streak
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   useEffect(() => {
     const isComplete = tasksTotal > 0 && tasksDone === tasksTotal;
@@ -106,13 +294,10 @@ export default function Dashboard() {
     [habits, habitLogs]
   );
 
-  // Habit summary: brain dumps by category
   const habitSummary = useMemo(() => {
     const cats = ["career", "body", "money", "skill", "life"] as const;
     const out: Record<string, number> = {};
-    cats.forEach((c) => {
-      out[c] = brain.filter((b) => b.label === c).length;
-    });
+    cats.forEach((c) => { out[c] = brain.filter((b) => b.label === c).length; });
     return out;
   }, [brain]);
 
@@ -123,12 +308,38 @@ export default function Dashboard() {
     { icon: Mic, label: "Journal entries", value: journal.length, to: "/journal" },
   ];
 
+  /* ── Date display helpers ─────────────────────────────────────────────── */
+  const dayOfWeek = now.toLocaleDateString(undefined, { weekday: "long" });
+  const monthDay  = now.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+  const fullYear  = now.getFullYear();
+  const timeStr   = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   return (
     <div className="space-y-10">
-      <div className="space-y-2">
-        <div className="font-mono text-[11px] tracking-[0.3em] uppercase text-gold">
-          {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+
+      {/* ── Date + Greeting hero ── */}
+      <div className="space-y-1">
+        {/* Date banner */}
+        <div className="flex items-center gap-3 mb-2">
+          <div className="h-10 w-10 rounded-lg bg-gradient-gold flex flex-col items-center justify-center shadow-gold shrink-0">
+            <span className="font-mono text-[8px] uppercase tracking-widest text-primary-foreground/80 leading-none">
+              {now.toLocaleDateString(undefined, { month: "short" })}
+            </span>
+            <span className="font-display text-xl text-primary-foreground leading-none font-bold">
+              {now.getDate()}
+            </span>
+          </div>
+          <div>
+            <div className="font-mono text-[11px] tracking-[0.3em] uppercase text-gold">
+              {dayOfWeek} · {monthDay}, {fullYear}
+            </div>
+            <div className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground">
+              {timeStr}
+            </div>
+          </div>
         </div>
+
+        {/* Greeting */}
         <h1 className="font-display text-5xl sm:text-6xl leading-[1.05]">
           {greeting(now)},
           <span className="block italic text-gold">{userName}.</span>
@@ -160,6 +371,11 @@ export default function Dashboard() {
         ))}
       </section>
 
+      {/* ── Today's Targets (goals that need a daily log) ── */}
+      <section>
+        <TodayGoalsCard goals={goals} onQuickLog={handleQuickLog} />
+      </section>
+
       {/* Daily streak */}
       <section>
         <Card className="p-6 bg-gradient-card border-border">
@@ -180,9 +396,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="text-right">
-              <div className="font-display text-6xl text-gold leading-none">
-                {current}
-              </div>
+              <div className="font-display text-6xl text-gold leading-none">{current}</div>
               <div className="font-mono text-[9px] tracking-[0.3em] uppercase text-muted-foreground mt-1">
                 day{current === 1 ? "" : "s"}
               </div>
@@ -315,16 +529,11 @@ export default function Dashboard() {
                     </div>
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-gold"
-                          style={{ width: `${pct}%` }}
-                        />
+                        <div className="h-full bg-gradient-gold" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="font-mono text-[9px] text-muted-foreground whitespace-nowrap">
                         {days !== null
-                          ? days < 0
-                            ? "overdue"
-                            : `${days}d left`
+                          ? days < 0 ? "overdue" : `${days}d left`
                           : g.category.toLowerCase()}
                       </span>
                     </div>

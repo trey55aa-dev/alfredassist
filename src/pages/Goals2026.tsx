@@ -19,6 +19,7 @@ import {
   GanttChartSquare,
   AlertTriangle,
   TrendingUp,
+  TrendingDown,
   Clock,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -46,6 +47,7 @@ import { Cloud, CloudOff, Minus, History } from "lucide-react";
 import {
   computeProjection,
   last14Days,
+  lastNWeeks,
   logProgress,
 } from "@/lib/goalsHistory";
 import {
@@ -146,7 +148,9 @@ export default function Goals2026() {
     : 0;
 
   const update = (id: string, patch: Partial<Goal>) =>
-    setGoals(safeGoals.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+    setGoals(safeGoals.map((g) =>
+      g.id === id ? { ...g, ...patch, localUpdatedAt: Date.now() } : g,
+    ));
   const toggle = (id: string) => {
     const goal = safeGoals.find((g) => g.id === id);
     if (!goal) return;
@@ -157,14 +161,31 @@ export default function Goals2026() {
   const remove = (id: string) => setGoals(safeGoals.filter((g) => g.id !== id));
 
   const addGoal = (g: Omit<Goal, "id" | "createdAt">) => {
+    const now = Date.now();
     setGoals([
       ...safeGoals,
-      { ...g, id: crypto.randomUUID(), createdAt: Date.now() },
+      { ...g, id: crypto.randomUUID(), createdAt: now, localUpdatedAt: now },
     ]);
   };
 
+  /* ── Debug: read directly from localStorage to show ground truth ── */
+  const _lsRaw = typeof window !== "undefined" ? localStorage.getItem("alfred.goals2026") : null;
+  const _lsGoals: Goal[] = _lsRaw ? (() => { try { return JSON.parse(_lsRaw); } catch { return []; } })() : [];
+  const _lsDone = _lsGoals.filter((g) => g.done).length;
+
   return (
     <div className="space-y-8">
+      {/* ── TEMPORARY DEBUG BANNER — remove once bug is confirmed fixed ── */}
+      <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 font-mono text-[11px] text-yellow-300 space-y-1">
+        <div className="font-bold text-yellow-400">🔍 Save Debug (remove after fix)</div>
+        <div>React state: <b>{goals.length}</b> goals, <b>{goals.filter(g=>g.done).length}</b> done</div>
+        <div>localStorage: <b>{_lsGoals.length}</b> goals, <b>{_lsDone}</b> done</div>
+        <div>Signed in: <b>{signedIn ? "yes" : "NO — cloud sync disabled"}</b></div>
+        <div>Syncing: <b>{syncing ? "yes" : "no"}</b></div>
+        {cloudError && <div className="text-red-400">⚠️ Sync error: {cloudError}</div>}
+        <div className="text-yellow-200/60 text-[10px]">After checking a goal: localStorage done count should go up immediately. After refresh: React state should match localStorage.</div>
+      </div>
+
       <PageHeader
         eyebrow="The year ahead"
         title="2026 Goals"
@@ -1828,6 +1849,18 @@ function OnboardingEmptyState({
   );
 }
 
+/** Format a rate/value nicely. "$1,250" for monetary, "5.5 reps" otherwise. */
+function fmtRate(n: number, unit: string | undefined): string {
+  if (!isFinite(n)) return "—";
+  const isMonetary = unit === "$" || unit?.toLowerCase() === "usd" || unit?.toLowerCase() === "dollars";
+  if (isMonetary) {
+    return `$${Math.round(Math.abs(n)).toLocaleString()}`;
+  }
+  const abs = Math.abs(n);
+  const str = abs >= 100 ? String(Math.round(abs)) : abs.toFixed(1).replace(/\.0$/, "");
+  return unit ? `${str} ${unit}` : str;
+}
+
 function ProgressInsight({
   goal,
   onChange,
@@ -1835,11 +1868,43 @@ function ProgressInsight({
   goal: Goal;
   onChange: (patch: Partial<Goal>) => void;
 }) {
+  const [view, setView] = useState<"days" | "weeks">("days");
+
   const projection = computeProjection(goal);
   const grid = last14Days(goal);
+  const weeks = lastNWeeks(goal);
   const log = goal.progressLog ?? {};
   const todayStr = new Date().toISOString().slice(0, 10);
   const loggedToday = log[todayStr] !== undefined;
+
+  // Rate numbers
+  const hasTarget =
+    typeof goal.target === "number" && goal.target > 0 && !goal.done;
+  const needed = hasTarget ? Math.max(0, (goal.target ?? 0) - (goal.current ?? 0)) : 0;
+  const requiredWeeklyRate =
+    hasTarget && projection.requiredDailyRate != null
+      ? projection.requiredDailyRate * 7
+      : 0;
+  const actualWeeklyRate =
+    hasTarget && projection.actualDailyRate != null
+      ? projection.actualDailyRate * 7
+      : 0;
+  const weeksLeft = projection.weeksLeft;
+
+  // Bar chart scale: max bar height 68px
+  const BAR_H = 68;
+  const maxDelta = Math.max(
+    requiredWeeklyRate > 0 && isFinite(requiredWeeklyRate)
+      ? requiredWeeklyRate * 1.5
+      : 0,
+    ...weeks.map((w) => Math.max(0, w.delta)),
+    1,
+  );
+  const scale = BAR_H / maxDelta;
+  const reqLineH =
+    requiredWeeklyRate > 0 && isFinite(requiredWeeklyRate)
+      ? Math.min(BAR_H - 2, Math.round(requiredWeeklyRate * scale))
+      : 0;
 
   const apply = (delta: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1849,10 +1914,22 @@ function ProgressInsight({
       progressLog: next.progressLog,
       lastCheckIn: next.lastCheckIn,
     });
-    awardXp(progressXp(delta, goal.target as number), "progress", {
-      goalCurrent: next.current,
-      unit: goal.unit ?? "",
-    });
+    const xp = progressXp(delta, goal.target as number);
+    awardXp(xp, "progress", { goalCurrent: next.current, unit: goal.unit ?? "" });
+
+    const u = goal.unit ? ` ${goal.unit}` : "";
+    const remaining =
+      goal.target != null
+        ? ` · ${fmtRate(Math.max(0, goal.target - next.current), goal.unit)} remaining`
+        : "";
+    if (delta > 0) {
+      toast.success(`+${delta}${u} logged${remaining}`, { duration: 2500 });
+    } else {
+      toast(`${delta}${u} logged${remaining}`, {
+        description: "Progress adjusted — no XP for setbacks.",
+        duration: 3000,
+      });
+    }
   };
 
   return (
@@ -1860,12 +1937,10 @@ function ProgressInsight({
       className="mt-2 rounded-md border border-border/40 bg-background/30 p-2 space-y-2"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Projection line */}
+      {/* Projection status line */}
       {projection.label && (
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
-          <span
-            className={`font-mono text-[10px] tracking-[0.2em] uppercase ${projection.tone}`}
-          >
+          <span className={`font-mono text-[10px] tracking-[0.2em] uppercase ${projection.tone}`}>
             {projection.label}
           </span>
           {projection.detail && (
@@ -1876,41 +1951,205 @@ function ProgressInsight({
         </div>
       )}
 
-      {/* 14-day grid */}
-      <div className="flex items-center gap-2">
-        <History className="h-3 w-3 text-muted-foreground/60" aria-hidden />
-        <div className="flex gap-0.5">
-          {grid.map((d) => (
+      {/* ── Rate headline ── */}
+      {hasTarget && isFinite(requiredWeeklyRate) && requiredWeeklyRate > 0 && (
+        <div className="flex items-center justify-between gap-2 flex-wrap rounded bg-muted/20 px-2 py-1.5">
+          <div className="flex items-center gap-1.5">
+            {actualWeeklyRate >= requiredWeeklyRate ? (
+              <TrendingUp className="h-3 w-3 text-teal shrink-0" />
+            ) : (
+              <TrendingDown className="h-3 w-3 text-orange-400 shrink-0" />
+            )}
+            <span className="font-mono text-[10px] tracking-wider text-foreground/90">
+              Need{" "}
+              <span className="text-gold font-semibold">
+                {fmtRate(requiredWeeklyRate, goal.unit)}/wk
+              </span>
+              {weeksLeft != null && weeksLeft > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}· {weeksLeft} wk{weeksLeft === 1 ? "" : "s"} left
+                </span>
+              )}
+            </span>
+          </div>
+          <span className="font-mono text-[9px] text-muted-foreground">
+            avg{" "}
             <span
-              key={d.date}
-              title={
-                d.logged
-                  ? `${d.date}: +${d.delta} → ${d.value}`
-                  : `${d.date}: no entry`
+              className={
+                actualWeeklyRate >= requiredWeeklyRate
+                  ? "text-teal"
+                  : "text-orange-400"
               }
-              className={`h-3 w-3 rounded-sm transition-colors ${
-                d.logged
-                  ? d.delta > 0
-                    ? "bg-gold/80"
-                    : "bg-gold/30"
-                  : "bg-muted/40"
-              }`}
-            />
-          ))}
+            >
+              {fmtRate(actualWeeklyRate, goal.unit)}/wk
+            </span>{" "}
+            so far
+          </span>
         </div>
-        <span className="font-mono text-[9px] tracking-wider text-muted-foreground/70">
-          last 14 days
+      )}
+
+      {/* ── View toggle ── */}
+      <div className="flex items-center gap-2">
+        <div className="flex rounded overflow-hidden border border-border/50">
+          <button
+            type="button"
+            onClick={() => setView("days")}
+            className={`px-2 py-0.5 font-mono text-[9px] tracking-wider transition-colors ${
+              view === "days"
+                ? "bg-muted/60 text-foreground"
+                : "text-muted-foreground hover:text-foreground/70"
+            }`}
+          >
+            14 days
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("weeks")}
+            className={`px-2 py-0.5 font-mono text-[9px] tracking-wider transition-colors border-l border-border/50 ${
+              view === "weeks"
+                ? "bg-muted/60 text-foreground"
+                : "text-muted-foreground hover:text-foreground/70"
+            }`}
+          >
+            by week
+          </button>
+        </div>
+        <span className="font-mono text-[9px] text-muted-foreground/60">
+          {view === "days" ? "dot = day logged" : "bar = week total · dashed = needed"}
         </span>
       </div>
 
-      {/* Quick-log */}
+      {/* ── 14-day dot grid ── */}
+      {view === "days" && (
+        <div className="flex items-center gap-2">
+          <History className="h-3 w-3 text-muted-foreground/60 shrink-0" aria-hidden />
+          <div className="flex gap-0.5 flex-wrap">
+            {grid.map((d) => (
+              <span
+                key={d.date}
+                title={
+                  d.logged
+                    ? `${d.date}: ${d.delta >= 0 ? "+" : ""}${d.delta} → ${d.value}`
+                    : `${d.date}: no entry`
+                }
+                className={`h-3 w-3 rounded-sm transition-colors ${
+                  d.logged
+                    ? d.delta > 0
+                      ? "bg-gold/80"
+                      : d.delta < 0
+                        ? "bg-destructive/70"
+                        : "bg-gold/30"
+                    : "bg-muted/40"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Weekly bar chart ── */}
+      {view === "weeks" && (
+        <div>
+          {/* Bars */}
+          <div
+            className="relative flex items-end gap-0.5"
+            style={{ height: `${BAR_H}px` }}
+          >
+            {/* Required-rate dashed reference line */}
+            {reqLineH > 0 && (
+              <div
+                className="absolute left-0 right-0 border-t border-dashed border-gold/50 pointer-events-none z-10"
+                style={{ bottom: `${reqLineH}px` }}
+                aria-label={`Required: ${fmtRate(requiredWeeklyRate, goal.unit)}/week`}
+              />
+            )}
+
+            {weeks.map((w) => {
+              const barH =
+                w.delta > 0
+                  ? Math.max(3, Math.min(BAR_H, Math.round(w.delta * scale)))
+                  : w.delta < 0
+                    ? 4
+                    : 2;
+
+              const barColor =
+                !w.logged
+                  ? "bg-muted/25"
+                  : w.delta < 0
+                    ? "bg-destructive/70"
+                    : w.delta >= requiredWeeklyRate && requiredWeeklyRate > 0
+                      ? "bg-teal/70"
+                      : w.delta >= requiredWeeklyRate * 0.7
+                        ? "bg-gold/70"
+                        : w.delta > 0
+                          ? "bg-gold/35"
+                          : "bg-muted/25";
+
+              const sign = w.delta >= 0 ? "+" : "";
+              const tipVal = w.logged
+                ? `${sign}${fmtRate(w.delta, goal.unit)}`
+                : "no entries";
+              const tipLabel = w.isCurrentWeek
+                ? `This week: ${tipVal}`
+                : `${w.label}: ${tipVal}`;
+
+              return (
+                <div
+                  key={w.weekStart}
+                  className="flex-1 min-w-0 flex flex-col items-center justify-end"
+                  style={{ height: `${BAR_H}px` }}
+                >
+                  <div
+                    className={`w-full max-w-[22px] rounded-t-sm transition-all ${barColor} ${
+                      w.isCurrentWeek ? "ring-1 ring-gold/60" : ""
+                    }`}
+                    style={{ height: `${barH}px` }}
+                    title={tipLabel}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Week labels row */}
+          <div className="flex items-center gap-0.5 mt-0.5">
+            {weeks.map((w) => (
+              <div
+                key={w.weekStart}
+                className="flex-1 min-w-0 text-center font-mono text-[8px] text-muted-foreground/60 leading-none truncate"
+              >
+                {w.isCurrentWeek ? "now" : w.label.split(" ")[1]}
+              </div>
+            ))}
+          </div>
+
+          {/* Weekly summary below chart */}
+          {requiredWeeklyRate > 0 && isFinite(requiredWeeklyRate) && (
+            <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
+              <div className="flex items-center gap-2 text-[8px] font-mono text-muted-foreground/60">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-teal/70" /> on/above target
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-gold/40" /> below target
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-destructive/70" /> setback
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Quick-log controls ── */}
       <div className="flex items-center gap-1.5">
         <button
           type="button"
           onClick={(e) => apply(-1, e)}
-          disabled={(goal.current ?? 0) <= 0}
-          className="h-7 w-7 rounded border border-border bg-background/50 text-muted-foreground hover:text-destructive hover:border-destructive/40 disabled:opacity-30 transition-colors inline-flex items-center justify-center"
+          className="h-7 w-7 rounded border border-border bg-background/50 text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors inline-flex items-center justify-center"
           aria-label="Subtract 1"
+          title="Subtract 1 (setback / spending)"
         >
           <Minus className="h-3 w-3" />
         </button>
@@ -1937,10 +2176,21 @@ function ProgressInsight({
               progressLog: next.progressLog,
               lastCheckIn: next.lastCheckIn,
             });
-            awardXp(progressXp(v, goal.target as number), "progress", {
-              goalCurrent: next.current,
-              unit: goal.unit ?? "",
-            });
+            const xp = progressXp(v, goal.target as number);
+            awardXp(xp, "progress", { goalCurrent: next.current, unit: goal.unit ?? "" });
+            const u = goal.unit ? ` ${goal.unit}` : "";
+            const remaining =
+              goal.target != null
+                ? ` · ${fmtRate(Math.max(0, goal.target - next.current), goal.unit)} remaining`
+                : "";
+            if (v > 0) {
+              toast.success(`+${v}${u} logged${remaining}`, { duration: 2500 });
+            } else {
+              toast(`${v}${u} logged${remaining}`, {
+                description: "Progress adjusted — no XP for setbacks.",
+                duration: 3000,
+              });
+            }
             (e.target as HTMLInputElement).value = "";
           }}
           className="h-7 px-2 text-[11px] bg-background/50 border-border w-20"

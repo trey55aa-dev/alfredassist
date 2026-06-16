@@ -84,11 +84,16 @@ export default {
         luxe: "var(--shadow-luxe)",
         gold: "var(--shadow-gold)",
         "inset-gold": "var(--shadow-inset-gold)",
+        float: "var(--shadow-float)",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 2px)",
+        lg: "var(--radius)",
+        xl: "calc(var(--radius) + 4px)",
+        "2xl": "calc(var(--radius) + 10px)",
+        "3xl": "calc(var(--radius) + 18px)",
+        "4xl": "calc(var(--radius) + 26px)",
       },
       keyframes: {
         "accordion-down": {
