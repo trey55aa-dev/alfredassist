@@ -883,71 +883,73 @@ function FinancialGoalPanel({
         </div>
       )}
 
-      {/* Quick-log transaction */}
-      <div className="space-y-2">
+      {/* Quick-log transaction — amount field FIRST, then confirm buttons */}
+      <div className="space-y-3">
         <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
           Log a transaction
         </div>
+
+        {/* Amount input — large and obvious */}
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 font-bold text-xl pointer-events-none">$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={amountDraft}
+            onChange={(e) => setAmountDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const n = parseDollar(amountDraft);
+                if (n > 0) { applyAmount(n); setAmountDraft(""); }
+              }
+            }}
+            placeholder="0"
+            className="w-full rounded-xl border-2 border-emerald-500/30 bg-background/70 py-3 pl-9 pr-4 text-2xl font-bold text-foreground placeholder:text-muted-foreground/30 focus:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+          />
+        </div>
+
+        {/* Quick-fill presets — tap to fill the input above */}
         <div className="flex gap-1.5 flex-wrap">
           {quickAmounts.map((amt) => (
             <button
               key={amt}
-              onClick={() => applyAmount(amt)}
-              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-mono text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+              type="button"
+              onClick={() => setAmountDraft(String(amt))}
+              className={`rounded-lg border px-3 py-1.5 text-[11px] font-mono transition-all ${
+                amountDraft === String(amt)
+                  ? "border-emerald-500/60 bg-emerald-500/25 text-emerald-300"
+                  : "border-emerald-500/25 bg-emerald-500/8 text-emerald-500 hover:bg-emerald-500/15"
+              }`}
             >
-              +{formatCurrency(amt)}
+              {formatCurrency(amt)}
             </button>
           ))}
-          <button
-            onClick={() => {
-              const n = parseDollar(amountDraft);
-              if (n > 0) { applyAmount(n); setAmountDraft(""); }
-            }}
-            className="rounded-lg border border-border bg-background/50 px-3 py-1.5 text-[11px] font-mono text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400 transition-colors"
-          >
-            + Custom
-          </button>
         </div>
 
-        {/* Custom amount + subtract row */}
-        <div className="flex gap-2 items-center">
-          <div className="relative flex-1">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-            <input
-              type="number"
-              value={amountDraft}
-              onChange={(e) => setAmountDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const n = parseDollar(amountDraft);
-                  if (n > 0) { applyAmount(n); setAmountDraft(""); }
-                }
-              }}
-              placeholder="Enter amount"
-              className="w-full rounded-lg border border-border bg-background/50 py-2 pl-7 pr-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-            />
-          </div>
+        {/* Add / Subtract action buttons */}
+        <div className="grid grid-cols-2 gap-2">
           <button
+            type="button"
             onClick={() => {
               const n = parseDollar(amountDraft);
               if (n > 0) { applyAmount(n); setAmountDraft(""); }
             }}
-            className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono text-emerald-400 hover:bg-emerald-500/25 transition-colors whitespace-nowrap"
+            disabled={parseDollar(amountDraft) <= 0}
+            className="rounded-xl border border-emerald-500/50 bg-emerald-500/20 py-3 text-sm font-bold text-emerald-400 hover:bg-emerald-500/30 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            + Add
+            + {meta.addLabel}
           </button>
           <button
+            type="button"
             onClick={() => {
               const n = parseDollar(amountDraft);
               if (n > 0) { applyAmount(-n); setAmountDraft(""); }
             }}
-            className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] font-mono text-destructive hover:bg-destructive/20 transition-colors whitespace-nowrap"
+            disabled={parseDollar(amountDraft) <= 0}
+            className="rounded-xl border border-destructive/40 bg-destructive/10 py-3 text-sm font-bold text-destructive hover:bg-destructive/20 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            − Subtract
+            − {meta.subtractLabel}
           </button>
-        </div>
-        <div className="text-[10px] text-muted-foreground/60 font-mono">
-          {meta.addLabel} → tap +Add &nbsp;·&nbsp; {meta.subtractLabel} → tap −Subtract
         </div>
       </div>
     </div>
