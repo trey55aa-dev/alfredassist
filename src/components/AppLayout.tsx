@@ -9,6 +9,8 @@ import { FocusModeStarter } from "@/components/FocusModeStarter";
 import { XpFlash } from "@/components/XpFlash";
 import { LevelUpModal } from "@/components/LevelUpModal";
 import { BadgeToast } from "@/components/BadgeToast";
+import { FocusAudioProvider } from "@/components/FocusAudioProvider";
+import { FocusMiniPlayer } from "@/components/FocusMiniPlayer";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -35,6 +37,7 @@ export default function AppLayout() {
   }, []);
 
   return (
+    <FocusAudioProvider>
     <SidebarProvider>
       <div className="relative min-h-screen flex w-full bg-background overflow-x-hidden">
         <AmbientPattern />
@@ -97,10 +100,12 @@ export default function AppLayout() {
 
         {/* Floating overlays */}
         <ActiveTimerBar />
+        <FocusMiniPlayer />
         <XpFlash />
         <BadgeToast />
         <LevelUpModal />
       </div>
     </SidebarProvider>
+    </FocusAudioProvider>
   );
 }

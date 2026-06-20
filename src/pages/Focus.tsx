@@ -7,7 +7,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey, formatTime } from "@/lib/alfred";
 import { toast } from "sonner";
 import { awardXp, XP_VALUES } from "@/lib/gamification";
-import { useFocusAudio } from "@/hooks/useFocusAudio";
+import { useFocusAudioContext } from "@/components/FocusAudioProvider";
 import { FocusSoundboard } from "@/components/FocusSoundboard";
 
 const PRESETS = [10, 25, 45, 60];
@@ -17,7 +17,7 @@ export default function Focus() {
   const [remaining, setRemaining] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const tickRef = useRef<number | null>(null);
-  const audio = useFocusAudio();
+  const audio = useFocusAudioContext();
 
   const [stats, setStats] = useLocalStorage("alfred.focus.stats", {
     date: todayKey(),
