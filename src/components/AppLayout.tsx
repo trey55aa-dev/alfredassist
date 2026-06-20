@@ -13,10 +13,12 @@ import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
 import { useEventsSync } from "@/hooks/useEventsSync";
+import { useCloudStateSync } from "@/hooks/useCloudStateSync";
 import { initAppIcon } from "@/lib/appIcon";
 
 export default function AppLayout() {
   useEventsSync();
+  useCloudStateSync();
 
   useEffect(() => {
     initAppIcon();

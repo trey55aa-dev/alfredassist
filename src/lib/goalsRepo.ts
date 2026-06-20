@@ -66,16 +66,64 @@ function rowToGoal(row: GoalRow): Goal {
   };
 }
 
+// The streak/log columns (goal_type, streak_start, daily_log, relapse_log) ship
+// in the 20260620 migration. To stay safe whether or not that migration has been
+// applied yet, the client includes them by default but, if the DB rejects them as
+// unknown columns, strips them and retries — then remembers to skip them so goal
+// saves never break. (Re-enable by clearing localStorage["alfred.goals.extCols"].)
+const EXTENDED_COLUMNS = ["goal_type", "streak_start", "daily_log", "relapse_log"] as const;
+const EXT_FLAG_KEY = "alfred.goals.extCols";
+
+function extendedColumnsAvailable(): boolean {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(EXT_FLAG_KEY) !== "0";
+}
+
+function markExtendedColumnsMissing(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(EXT_FLAG_KEY, "0");
+  } catch {
+    /* quota or disabled */
+  }
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    code === "PGRST204" || // PostgREST: column not found in schema cache
+    code === "42703" || // Postgres: undefined_column
+    (msg.includes("column") && (msg.includes("does not exist") || msg.includes("schema cache"))) ||
+    msg.includes("could not find the")
+  );
+}
+
+function stripExtended(row: GoalInsert): GoalInsert {
+  const clone: Record<string, unknown> = { ...row };
+  for (const c of EXTENDED_COLUMNS) delete clone[c];
+  return clone as GoalInsert;
+}
+
+/** Upsert goal rows, transparently retrying without the extended columns if the
+ *  live schema doesn't have them yet. */
+async function upsertGoalRows(rows: GoalInsert[]): Promise<void> {
+  let { error } = await supabase
+    .from("goals")
+    .upsert(rows, { onConflict: "user_id,client_id" });
+  if (error && extendedColumnsAvailable() && isMissingColumnError(error)) {
+    markExtendedColumnsMissing();
+    ({ error } = await supabase
+      .from("goals")
+      .upsert(rows.map(stripExtended), { onConflict: "user_id,client_id" }));
+  }
+  if (error) throw new Error(error.message);
+}
+
 function goalToInsert(goal: Goal, userId: string): GoalInsert {
-  // NOTE: goal_type, streak_start, daily_log, relapse_log are intentionally
-  // omitted here. Those columns don't yet exist in the live Supabase schema
-  // (they're in the pending migration). Including unknown column names causes
-  // PostgREST to reject the *entire* upsert with a 400, which silently breaks
-  // all goal saves. Once the migration is run and the Supabase types are
-  // regenerated, add them back.
-  //
-  // NOTE: localUpdatedAt is also intentionally omitted — it's a local-only
-  // field used by the merge-on-load strategy and has no DB column.
+  // NOTE: localUpdatedAt is intentionally omitted — it's a local-only field used
+  // by the merge-on-load strategy and has no DB column.
   //
   // NOTE: financialType is local-only (no DB column yet). It drives the Money
   // category goal editor UI and is persisted only via localStorage.
@@ -102,6 +150,13 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
       (goal.progressLog as unknown as GoalInsert["progress_log"]) ?? null,
     last_check_in: goal.lastCheckIn ?? null,
   };
+  // Streak / per-day-log columns — included only when the live schema has them.
+  if (extendedColumnsAvailable()) {
+    row.goal_type = goal.goalType ?? null;
+    row.streak_start = goal.streakStart ?? null;
+    row.daily_log = (goal.dailyLog as unknown as GoalInsert["daily_log"]) ?? null;
+    row.relapse_log = (goal.relapseLog as unknown as GoalInsert["relapse_log"]) ?? null;
+  }
   // Preserve seed createdAt only when meaningful; let DB default when 0.
   if (goal.createdAt && goal.createdAt > 0) {
     row.created_at = new Date(goal.createdAt).toISOString();
@@ -124,18 +179,11 @@ export async function bulkUpsertGoals(
   goals: Goal[],
 ): Promise<void> {
   if (goals.length === 0) return;
-  const rows = goals.map((g) => goalToInsert(g, userId));
-  const { error } = await supabase
-    .from("goals")
-    .upsert(rows, { onConflict: "user_id,client_id" });
-  if (error) throw new Error(error.message);
+  await upsertGoalRows(goals.map((g) => goalToInsert(g, userId)));
 }
 
 export async function upsertGoal(userId: string, goal: Goal): Promise<void> {
-  const { error } = await supabase
-    .from("goals")
-    .upsert(goalToInsert(goal, userId), { onConflict: "user_id,client_id" });
-  if (error) throw new Error(error.message);
+  await upsertGoalRows([goalToInsert(goal, userId)]);
 }
 
 export async function deleteGoalByClientId(

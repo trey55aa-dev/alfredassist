@@ -96,6 +96,10 @@ export type Database = {
           timeframe: string
           title: string
           unit: string | null
+          daily_log: Json | null
+          goal_type: string | null
+          relapse_log: Json | null
+          streak_start: string | null
           updated_at: string
           user_id: string
         }
@@ -119,6 +123,10 @@ export type Database = {
           timeframe?: string
           title: string
           unit?: string | null
+          daily_log?: Json | null
+          goal_type?: string | null
+          relapse_log?: Json | null
+          streak_start?: string | null
           updated_at?: string
           user_id: string
         }
@@ -142,8 +150,33 @@ export type Database = {
           timeframe?: string
           title?: string
           unit?: string | null
+          daily_log?: Json | null
+          goal_type?: string | null
+          relapse_log?: Json | null
+          streak_start?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_state: {
+        Row: {
+          key: string
+          updated_at: string
+          user_id: string
+          value: Json | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          user_id: string
+          value?: Json | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json | null
         }
         Relationships: []
       }
