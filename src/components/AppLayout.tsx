@@ -13,6 +13,8 @@ import { FocusAudioProvider } from "@/components/FocusAudioProvider";
 import { FocusMiniPlayer } from "@/components/FocusMiniPlayer";
 import { ButlerButton } from "@/components/ButlerButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { MoodPromptBanner } from "@/components/MoodPromptBanner";
+import { useMoodPrompt } from "@/hooks/useMoodPrompt";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -25,6 +27,7 @@ export default function AppLayout() {
   useEventsSync();
   useCloudStateSync();
   useReminders();
+  const [moodPrompt, dismissMoodPrompt] = useMoodPrompt();
 
   useEffect(() => {
     initAppIcon();
@@ -79,6 +82,9 @@ export default function AppLayout() {
           </header>
 
           <FocusModeBanner />
+          {moodPrompt && (
+            <MoodPromptBanner type={moodPrompt.type} onDismiss={dismissMoodPrompt} />
+          )}
 
           {/* Page content — extra bottom padding for mobile bottom nav + home bar */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">

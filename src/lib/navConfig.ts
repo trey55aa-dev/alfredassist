@@ -18,6 +18,7 @@ import {
   Trophy,
   CalendarRange,
   LineChart,
+  Smile,
 } from "lucide-react";
 
 export interface NavItem {
@@ -72,6 +73,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
       { title: "Weekly Review",  url: "/review",       icon: LineChart },
       { title: "Weekly Planner", url: "/planner",      icon: CalendarRange },
       { title: "Health",         url: "/health",       icon: Activity },
+      { title: "Mood",           url: "/mood",         icon: Smile },
       { title: "Achievements",   url: "/achievements", icon: Trophy },
     ],
   },
