@@ -59,6 +59,17 @@ export default {
           DEFAULT: "hsl(var(--teal))",
           soft: "hsl(var(--teal-soft))",
         },
+        violet: {
+          DEFAULT: "hsl(var(--violet))",
+          soft: "hsl(var(--violet-soft))",
+        },
+        coral: {
+          DEFAULT: "hsl(var(--coral))",
+          soft: "hsl(var(--coral-soft))",
+        },
+        emerald: {
+          DEFAULT: "hsl(var(--emerald))",
+        },
         ink: {
           DEFAULT: "hsl(var(--ink))",
           soft: "hsl(var(--ink-soft))",
