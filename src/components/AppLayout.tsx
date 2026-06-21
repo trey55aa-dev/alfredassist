@@ -11,6 +11,7 @@ import { LevelUpModal } from "@/components/LevelUpModal";
 import { BadgeToast } from "@/components/BadgeToast";
 import { FocusAudioProvider } from "@/components/FocusAudioProvider";
 import { FocusMiniPlayer } from "@/components/FocusMiniPlayer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
@@ -92,7 +93,9 @@ export default function AppLayout() {
                   "calc(max(2rem, 5rem + env(safe-area-inset-bottom, 0px)))",
               }}
             >
-              <Outlet />
+              <ErrorBoundary>
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </main>
         </div>
