@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Smile, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MoodCheckIn } from "./MoodCheckIn";
+import { MoodFace } from "./MoodFace";
 import { type CheckInType } from "@/lib/mood";
 
 interface Props {
@@ -29,8 +30,11 @@ export function MoodPromptBanner({ type, onDismiss }: Props) {
 
   return (
     <>
-      <div className="mx-4 mt-2 mb-0 rounded-xl border border-border/50 bg-white/3 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
-        <Smile className="h-4 w-4 text-gold shrink-0" />
+      <div className="mx-4 mt-2 mb-0 rounded-xl border border-border/50 bg-white/3 backdrop-blur-sm px-3 py-2 flex items-center gap-3">
+        {/* Animated neutral face as the banner icon */}
+        <div className="shrink-0">
+          <MoodFace value={4} size={36} />
+        </div>
         <div className="flex-1 min-w-0">
           <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-foreground/80">
             {label}
@@ -57,7 +61,7 @@ export function MoodPromptBanner({ type, onDismiss }: Props) {
       </div>
 
       <Dialog open={open} onOpenChange={(o) => { if (!o) setOpen(false); }}>
-        <DialogContent className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl">
+        <DialogContent className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display text-xl">
               {type === "morning" ? "Morning" : "Evening"} Check-In
