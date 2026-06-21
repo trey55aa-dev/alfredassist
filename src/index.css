@@ -262,3 +262,70 @@ select {
 .animate-slide-up-fade {
   animation: slide-up-fade 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* ─── Glass card — richer frosted surface for content cards ─────────────── */
+.glass-card {
+  background: linear-gradient(160deg, hsl(220 28% 12% / 0.9) 0%, hsl(220 30% 9% / 0.95) 100%);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow:
+    inset 0 1px 0 0 hsl(255 100% 100% / 0.06),
+    0 4px 24px -4px hsl(0 0% 0% / 0.35);
+  border-radius: var(--radius);
+}
+.glass-card:hover {
+  border-color: hsl(var(--gold) / 0.18);
+  box-shadow:
+    inset 0 1px 0 0 hsl(255 100% 100% / 0.08),
+    0 8px 32px -8px hsl(0 0% 0% / 0.4),
+    0 0 0 1px hsl(var(--gold) / 0.06);
+}
+
+/* ─── Gold pip — small decorative accent dot ────────────────────────────── */
+.pip-gold::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: hsl(var(--gold));
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  box-shadow: 0 0 6px hsl(var(--gold) / 0.6);
+}
+
+/* ─── Stagger-fade — for list items entering in sequence ────────────────── */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger-in > * {
+  animation: stagger-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-in > *:nth-child(1)  { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2)  { animation-delay: 40ms; }
+.stagger-in > *:nth-child(3)  { animation-delay: 80ms; }
+.stagger-in > *:nth-child(4)  { animation-delay: 120ms; }
+.stagger-in > *:nth-child(5)  { animation-delay: 160ms; }
+.stagger-in > *:nth-child(6)  { animation-delay: 200ms; }
+.stagger-in > *:nth-child(7)  { animation-delay: 240ms; }
+.stagger-in > *:nth-child(8)  { animation-delay: 280ms; }
+
+/* ─── Gradient gold text ────────────────────────────────────────────────── */
+.text-gradient-gold {
+  background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(var(--gold-soft)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Subtle gold glow on interactive elements ──────────────────────────── */
+.glow-gold-hover {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.glow-gold-hover:hover {
+  box-shadow: 0 0 0 1px hsl(var(--gold) / 0.3), 0 0 12px hsl(var(--gold) / 0.12);
+  border-color: hsl(var(--gold) / 0.35) !important;
+}

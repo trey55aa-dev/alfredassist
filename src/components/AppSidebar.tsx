@@ -176,12 +176,12 @@ export function AppSidebar() {
                             }}
                             className={`
                               group flex items-center gap-2.5
-                              rounded-md px-3 py-2 transition-all
+                              rounded-md px-3 py-2 transition-all duration-150
                               ${isActive
-                                ? "bg-sidebar-accent text-gold shadow-inset-gold"
-                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-gold"
+                                ? "bg-sidebar-accent text-gold shadow-inset-gold border-l-2 border-gold/60"
+                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-gold border-l-2 border-transparent"
                               }
-                              ${dimmed ? "opacity-40" : ""}
+                              ${dimmed ? "opacity-35" : ""}
                             `}
                           >
                             <item.icon

@@ -17,17 +17,32 @@ import { MoodPromptBanner } from "@/components/MoodPromptBanner";
 import { useMoodPrompt } from "@/hooks/useMoodPrompt";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
 import { useEventsSync } from "@/hooks/useEventsSync";
 import { useCloudStateSync } from "@/hooks/useCloudStateSync";
 import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
+import { NAV_CATEGORIES } from "@/lib/navConfig";
+
+function usePageTitle(): string {
+  const { pathname } = useLocation();
+  for (const cat of NAV_CATEGORIES) {
+    for (const item of cat.items) {
+      if (item.url === "/" ? pathname === "/" : pathname.startsWith(item.url)) {
+        return item.title;
+      }
+    }
+  }
+  return "Alfred";
+}
 
 export default function AppLayout() {
   useEventsSync();
   useCloudStateSync();
   useReminders();
   const [moodPrompt, dismissMoodPrompt] = useMoodPrompt();
+  const pageTitle = usePageTitle();
 
   useEffect(() => {
     initAppIcon();
@@ -56,27 +71,31 @@ export default function AppLayout() {
         {/* Main column */}
         <div className="relative z-10 flex-1 flex flex-col min-w-0">
 
-          {/* Top header bar — iOS 26 / macOS 15 Liquid Glass */}
+          {/* Top header bar */}
           <header
-            className="
-              h-14 flex items-center justify-between
-              glass-nav glass-rim
-              sticky top-0 z-30
-            "
+            className="h-14 flex items-center justify-between glass-nav glass-rim sticky top-0 z-30"
             style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
           >
             <div className="flex items-center gap-3 px-3">
-              {/* Hamburger — always available as a fallback; primary on desktop */}
               <SidebarTrigger className="text-muted-foreground hover:text-gold touch-target" />
-              <div className="hidden sm:block h-5 w-px bg-border" />
-              <div className="hidden sm:block font-mono text-[11px] tracking-[0.2em] uppercase text-muted-foreground">
+              <div className="hidden sm:block h-5 w-px bg-border/60" />
+              <div className="hidden sm:block font-mono text-[10px] tracking-[0.22em] uppercase text-muted-foreground/60">
                 {formatLongDate()}
               </div>
             </div>
-            <div className="flex items-center gap-3 px-3">
+
+            {/* Current page title — centred on mobile, left-anchored on sm+ */}
+            <div className="absolute left-1/2 -translate-x-1/2 sm:static sm:translate-x-0 sm:ml-4 pointer-events-none sm:pointer-events-auto">
+              <span className="font-display text-base text-foreground/80 tracking-wide">
+                {pageTitle}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 px-3">
               <FocusModeStarter />
-              <div className="hidden md:block font-display italic text-sm text-gold/80">
-                Alfred
+              <div className="hidden md:flex items-center gap-1.5 border border-gold/20 rounded-full px-2.5 py-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
+                <span className="font-display italic text-xs text-gold/70">Alfred</span>
               </div>
             </div>
           </header>
