@@ -19,6 +19,7 @@ import {
   CalendarRange,
   LineChart,
   Smile,
+  Link2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -62,6 +63,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
       { title: "Brain Dump",    url: "/brain-dump", icon: Brain },
       { title: "Audio Journal", url: "/journal",    icon: Mic },
       { title: "Custom Lists",  url: "/lists",      icon: ListChecks },
+      { title: "Notion",        url: "/notion",     icon: Link2 },
     ],
   },
   {
