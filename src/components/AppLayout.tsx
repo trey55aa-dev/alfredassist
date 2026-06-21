@@ -11,6 +11,7 @@ import { LevelUpModal } from "@/components/LevelUpModal";
 import { BadgeToast } from "@/components/BadgeToast";
 import { FocusAudioProvider } from "@/components/FocusAudioProvider";
 import { FocusMiniPlayer } from "@/components/FocusMiniPlayer";
+import { ButlerButton } from "@/components/ButlerButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { formatLongDate } from "@/lib/alfred";
 import { useEffect } from "react";
@@ -106,6 +107,7 @@ export default function AppLayout() {
         {/* Floating overlays */}
         <ActiveTimerBar />
         <FocusMiniPlayer />
+        <ButlerButton />
         <XpFlash />
         <BadgeToast />
         <LevelUpModal />
