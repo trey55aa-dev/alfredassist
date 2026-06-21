@@ -268,6 +268,38 @@ select {
   animation: slide-up-fade 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ─── Mood face animations ──────────────────────────────────────────────── */
+
+@keyframes face-breathe {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50%       { transform: translateY(-3px) scale(1.015); }
+}
+.face-breathe {
+  animation: face-breathe 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes face-pop {
+  0%   { transform: scale(0.88); opacity: 0.6; }
+  65%  { transform: scale(1.06); }
+  100% { transform: scale(1);    opacity: 1;   }
+}
+.face-pop {
+  animation: face-pop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tear-fall {
+  0%   { transform: translateY(0);    opacity: 0.85; }
+  100% { transform: translateY(12px); opacity: 0;    }
+}
+
+@keyframes sparkle-float {
+  0%, 100% { transform: translateY(0)   rotate(0deg);   opacity: 1;   }
+  50%       { transform: translateY(-5px) rotate(20deg); opacity: 0.7; }
+}
+.sparkle-a { animation: sparkle-float 1.6s ease-in-out infinite; }
+.sparkle-b { animation: sparkle-float 1.6s ease-in-out 0.55s infinite; }
+
 /* ─── Bold stat tiles — habit/todo/meditation app style ────────────────── */
 
 .stat-tile {

@@ -1,23 +1,43 @@
 import { todayKey } from "./alfred";
 
-export const MOOD_KEY = "alfred.mood.log";
+export const MOOD_KEY     = "alfred.mood.log";
 export const MOOD_CHANGED = "alfred.mood:changed";
 
 export type CheckInType = "morning" | "evening" | "manual";
 
 export interface MoodEntry {
   id: string;
-  timestamp: number;       // ms since epoch
-  date: string;            // YYYY-MM-DD
+  timestamp: number;
+  date: string;
   type: CheckInType;
-  /** 1 (very unpleasant) → 10 (very pleasant) */
+  /** 1 (very unpleasant) → 7 (very pleasant) */
   valence: number;
-  labels: string[];        // mood descriptors
-  associations: string[];  // what influenced the mood
+  labels: string[];
+  associations: string[];
   note?: string;
+  /** What made this moment special (or what's weighing on you) */
+  special?: string;
 }
 
-/* ─── Descriptors ─────────────────────────────────────── */
+/* ─── 7-point scale labels ────────────────────────────── */
+
+export const VALENCE_LABELS = [
+  "",                   // 0 unused
+  "Very Unpleasant",    // 1
+  "Unpleasant",         // 2
+  "Slightly Unpleasant",// 3
+  "Neutral",            // 4
+  "Slightly Pleasant",  // 5
+  "Pleasant",           // 6
+  "Very Pleasant",      // 7
+] as const;
+
+export function moodLabel(v: number): string {
+  const idx = Math.min(7, Math.max(1, Math.round(v)));
+  return VALENCE_LABELS[idx];
+}
+
+/* ─── Descriptor chips per range ──────────────────────── */
 
 export const MOOD_LABELS: Record<"low" | "mid" | "high", string[]> = {
   low:  ["Anxious", "Sad", "Stressed", "Angry", "Tired", "Overwhelmed", "Lonely", "Frustrated", "Drained"],
@@ -26,10 +46,12 @@ export const MOOD_LABELS: Record<"low" | "mid" | "high", string[]> = {
 };
 
 export function labelsForValence(v: number): string[] {
-  if (v <= 3) return MOOD_LABELS.low;
-  if (v <= 6) return MOOD_LABELS.mid;
+  if (v <= 2) return MOOD_LABELS.low;
+  if (v <= 4) return MOOD_LABELS.mid;
   return MOOD_LABELS.high;
 }
+
+/* ─── Associations ────────────────────────────────────── */
 
 export const MOOD_ASSOCIATIONS = [
   { id: "work",          label: "Work",          emoji: "💼" },
@@ -44,25 +66,22 @@ export const MOOD_ASSOCIATIONS = [
   { id: "nature",        label: "Nature",        emoji: "🌿" },
 ] as const;
 
-/* ─── Emoji + color per valence ───────────────────────── */
-
-const EMOJIS = ["", "😣","😢","😞","😕","😐","🙂","😊","😄","😁","🤩"];
-export function moodEmoji(v: number): string { return EMOJIS[Math.round(v)] ?? "😐"; }
+/* ─── Color per valence (1–7) ─────────────────────────── */
 
 const COLORS = [
   "",
-  "#4A6CF7", // 1 — deep blue
+  "#4A6CF7", // 1 — deep blue (very unpleasant)
   "#6B5BF7", // 2 — indigo
-  "#8B55E0", // 3 — purple
-  "#AC50C8", // 4 — violet
-  "#64A8DC", // 5 — steel blue
-  "#2BB5B5", // 6 — teal
-  "#2DB574", // 7 — green
-  "#5EC96B", // 8 — light green
-  "#A8CC42", // 9 — yellow-green
-  "#D4AF37", // 10 — gold
+  "#9B59CC", // 3 — purple
+  "#3A9FC8", // 4 — steel blue (neutral)
+  "#2BB5B5", // 5 — teal
+  "#2DB574", // 6 — green
+  "#D4AF37", // 7 — gold (very pleasant)
 ];
-export function moodColor(v: number): string { return COLORS[Math.round(v)] ?? COLORS[5]; }
+
+export function moodColor(v: number): string {
+  return COLORS[Math.min(7, Math.max(1, Math.round(v)))] ?? COLORS[4];
+}
 
 export const MOOD_GRADIENT =
   `linear-gradient(to right, ${COLORS.slice(1).join(", ")})`;
@@ -81,7 +100,9 @@ export function loadMoods(): MoodEntry[] {
   } catch { return []; }
 }
 
-export function saveMoodEntry(entry: Omit<MoodEntry, "id" | "timestamp" | "date">): MoodEntry {
+export function saveMoodEntry(
+  entry: Omit<MoodEntry, "id" | "timestamp" | "date">,
+): MoodEntry {
   const full: MoodEntry = {
     ...entry,
     id: `mood-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -89,9 +110,8 @@ export function saveMoodEntry(entry: Omit<MoodEntry, "id" | "timestamp" | "date"
     date: todayKey(),
   };
   const all = loadMoods();
-  const updated = [...all, full];
   try {
-    localStorage.setItem(MOOD_KEY, JSON.stringify(updated));
+    localStorage.setItem(MOOD_KEY, JSON.stringify([...all, full]));
   } catch { /* quota */ }
   dispatch();
   return full;
@@ -106,7 +126,6 @@ export function hasTodayCheckIn(type: CheckInType): boolean {
   return getTodayMoods().some((e) => e.type === type);
 }
 
-/** Average valence for a given YYYY-MM-DD, or null if no entries. */
 export function dailyAverage(entries: MoodEntry[], date: string): number | null {
   const es = entries.filter((e) => e.date === date);
   if (!es.length) return null;
