@@ -41,6 +41,7 @@ import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
+import { TodayNowNext } from "@/components/TodayNowNext";
 import { HealthSummaryCard } from "@/components/HealthSummaryCard";
 import { useAuth } from "@/hooks/useAuth";
 import { computeProjection } from "@/lib/goalsHistory";
@@ -352,6 +353,11 @@ export default function Dashboard() {
           <BackupRestore />
         </div>
       </div>
+
+      {/* Right now / Up next — command-center glance */}
+      <section>
+        <TodayNowNext />
+      </section>
 
       {/* Stats */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
