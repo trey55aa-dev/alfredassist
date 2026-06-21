@@ -16,11 +16,13 @@ import { useEffect } from "react";
 import { PRESET_THEMES } from "@/hooks/useThemeColor";
 import { useEventsSync } from "@/hooks/useEventsSync";
 import { useCloudStateSync } from "@/hooks/useCloudStateSync";
+import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
 
 export default function AppLayout() {
   useEventsSync();
   useCloudStateSync();
+  useReminders();
 
   useEffect(() => {
     initAppIcon();

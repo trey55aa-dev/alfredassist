@@ -29,6 +29,50 @@ export function setEnabled(on: boolean) {
   localStorage.setItem(ENABLED_KEY, on ? "1" : "0");
 }
 
+/* ---------- Reminder preferences ---------- */
+
+const REMINDER_PREFS_KEY = "alfred.reminders.prefs";
+export const REMINDER_PREFS_CHANGED = "alfred.reminders:changed";
+
+export interface ReminderPrefs {
+  /** "Starting soon" alerts for routine blocks / agenda events. */
+  blockReminders: boolean;
+  /** Evening nudge when today's protocol isn't complete. */
+  streakNudge: boolean;
+  /** Afternoon nudge to log progress on measurable goals. */
+  goalNudge: boolean;
+  /** Lead time (minutes) before an event to fire its reminder. */
+  leadMinutes: number;
+}
+
+export const DEFAULT_REMINDER_PREFS: ReminderPrefs = {
+  blockReminders: true,
+  streakNudge: true,
+  goalNudge: true,
+  leadMinutes: 5,
+};
+
+export function getReminderPrefs(): ReminderPrefs {
+  if (typeof window === "undefined") return { ...DEFAULT_REMINDER_PREFS };
+  try {
+    const raw = localStorage.getItem(REMINDER_PREFS_KEY);
+    return raw
+      ? { ...DEFAULT_REMINDER_PREFS, ...(JSON.parse(raw) as Partial<ReminderPrefs>) }
+      : { ...DEFAULT_REMINDER_PREFS };
+  } catch {
+    return { ...DEFAULT_REMINDER_PREFS };
+  }
+}
+
+export function saveReminderPrefs(p: ReminderPrefs): void {
+  try {
+    localStorage.setItem(REMINDER_PREFS_KEY, JSON.stringify(p));
+    window.dispatchEvent(new CustomEvent(REMINDER_PREFS_CHANGED));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function requestPermission(): Promise<PermissionState> {
   if (!isSupported()) return "unsupported";
   if (Notification.permission === "granted") {
@@ -105,6 +149,16 @@ export function notifyCarryOver(count: number, day = new Date()): void {
   markShown(key);
 }
 
+/** Fire a once-per-day nudge (deduped by key + date). Returns true if delivered. */
+export function notifyDailyNudge(key: string, title: string, body: string): boolean {
+  if (!isEnabled()) return false;
+  const dayKey = `${key}:${new Date().toISOString().slice(0, 10)}`;
+  if (alreadyShown(dayKey)) return false;
+  deliver(title, { body, tag: dayKey });
+  markShown(dayKey);
+  return true;
+}
+
 /** Schedule a "starting soon" notification for a single timed event. */
 export function scheduleEventReminder(
   event: AgendaEvent,
@@ -131,5 +185,7 @@ export function scheduleEventReminder(
 /** Schedule reminders for everything happening in the next ~6 hours. */
 export function scheduleUpcomingReminders(events: AgendaEvent[], now = new Date()): void {
   if (!isEnabled()) return;
-  for (const e of events) scheduleEventReminder(e, 5, now);
+  const prefs = getReminderPrefs();
+  if (!prefs.blockReminders) return;
+  for (const e of events) scheduleEventReminder(e, prefs.leadMinutes, now);
 }

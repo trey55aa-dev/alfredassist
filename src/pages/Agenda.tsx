@@ -53,6 +53,7 @@ import {
 } from "@/lib/notifications";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
+import { ReminderSettings } from "@/components/ReminderSettings";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
 import {
   loadTemplates,
@@ -346,6 +347,7 @@ export default function Agenda() {
         actions={
           <div className="flex items-center gap-3 flex-wrap justify-end">
             <NotificationToggle />
+            <ReminderSettings />
             <FollowUpSettingsButton />
             <GoogleCalendarConnect onSynced={refresh} />
             <OutlookCalendarConnect onSynced={refresh} />
