@@ -1,21 +1,18 @@
 /**
- * Animated SVG face for the 7-point mood scale.
+ * Cute, child-friendly animated SVG face for the 7-point mood scale.
  *
- * Level 1 – Very Unpleasant : deep-blue face, steep frown, raised inner brows, tears
- * Level 2 – Unpleasant      : indigo, frown, worried brows
- * Level 3 – Slightly Unpl.  : purple, slight frown
- * Level 4 – Neutral         : steel-blue, flat mouth, neutral brows
- * Level 5 – Slightly Pleas. : teal, slight smile, rosy cheeks begin
- * Level 6 – Pleasant        : green, full smile, cheeks
- * Level 7 – Very Pleasant   : gold, big open smile, full cheeks, sparkles
+ * Design goals: big shiny blinking eyes, no harsh eyebrows, soft rounded
+ * mouths, always-present rosy cheeks, bright candy colors, gentle rocking
+ * bob + springy pop on change. Sad levels get cute puppy-eyes + teardrops;
+ * happy levels get closed ^^ eyes, sparkles, and floating hearts.
  *
- * Animated elements (all via CSS transition):
- *   – face fill color
- *   – mouth path (CSS `d` property — Chrome/Safari/FF modern)
- *   – eyebrow rotation (CSS transform)
- *   – eye scaleY (CSS transform → squint effect)
- *   – cheek opacity
- *   – outer glow (filter drop-shadow)
+ *   1 Very Unpleasant   – periwinkle, frown, big watery eyes, teardrops
+ *   2 Unpleasant        – soft indigo, small frown, big eyes
+ *   3 Slightly Unpl.    – lavender, tiny frown
+ *   4 Neutral           – sky blue, tiny flat mouth
+ *   5 Slightly Pleasant – mint, small smile, rosy cheeks
+ *   6 Pleasant          – green, happy ^^ eyes, smile, cheeks
+ *   7 Very Pleasant     – sunny yellow, big smile, sparkles + hearts
  */
 
 import { useEffect, useRef } from "react";
@@ -25,224 +22,184 @@ interface MoodFaceProps {
   size?: number;
 }
 
+type EyeStyle = "round" | "happy";
+
 interface FaceState {
   fill: string;
   glow: string;
-  /** SVG path for mouth — all use `M x1,y Q cx,cy x2,y` so CSS `d` can interpolate */
+  /** mouth path — all "M x1,y1 Q cx,cy x2,y2" so CSS `d` can interpolate */
   mouth: string;
-  /** eyebrow rotation in degrees — left brow; right brow mirrors */
-  browRot: number;
-  /** Y translation of both brows (negative = higher) */
-  browY: number;
-  /** Eye scaleY 0–1 (1 = round, 0.45 = happy squint) */
-  eyeScale: number;
-  /** Cheek opacity 0–1 */
+  eyes: EyeStyle;
+  /** cheek opacity 0–1 */
   cheek: number;
-  /** Show tear drops */
-  tear: boolean;
-  /** Show sparkles */
-  sparkle: boolean;
+  /** larger cheeks for the happiest faces */
+  cheekBig?: boolean;
+  tear?: boolean;
+  sparkle?: boolean;
+  hearts?: boolean;
 }
 
+const FEAT = "#46405E";   // soft dark indigo for eyes + mouth (warmer than black)
+const SHINE = "#FFFFFF";
+const CHEEK = "#FF9CB0";
+const TEAR  = "#A7D8FF";
+
 const STATES: (FaceState | null)[] = [
-  null, // 0 – unused
+  null, // 0 unused
   // 1 – Very Unpleasant
-  {
-    fill: "#3648C2", glow: "#4A6CF7",
-    mouth:   "M 30,70 Q 50,52 70,70",
-    browRot: -18, browY: 0,
-    eyeScale: 1, cheek: 0, tear: true, sparkle: false,
-  },
+  { fill: "#6E86E0", glow: "#9DB0F2", mouth: "M 38,71 Q 50,62 62,71", eyes: "round", cheek: 0.4, tear: true },
   // 2 – Unpleasant
-  {
-    fill: "#5046C8", glow: "#7060F0",
-    mouth:   "M 32,68 Q 50,55 68,68",
-    browRot: -11, browY: 0,
-    eyeScale: 0.9, cheek: 0, tear: false, sparkle: false,
-  },
+  { fill: "#8A82DD", glow: "#ADA6EC", mouth: "M 39,70 Q 50,64 61,70", eyes: "round", cheek: 0.4 },
   // 3 – Slightly Unpleasant
-  {
-    fill: "#7244BC", glow: "#9C5ED6",
-    mouth:   "M 34,67 Q 50,59 66,67",
-    browRot: -5, browY: 0,
-    eyeScale: 0.9, cheek: 0, tear: false, sparkle: false,
-  },
+  { fill: "#A985D8", glow: "#C4A6E8", mouth: "M 41,68 Q 50,65 59,68", eyes: "round", cheek: 0.45 },
   // 4 – Neutral
-  {
-    fill: "#2E7FB0", glow: "#4AA8DC",
-    mouth:   "M 35,66 Q 50,66 65,66",
-    browRot: 0, browY: 0,
-    eyeScale: 0.9, cheek: 0, tear: false, sparkle: false,
-  },
+  { fill: "#5BB0E4", glow: "#86C9F1", mouth: "M 42,67 Q 50,67 58,67", eyes: "round", cheek: 0.45 },
   // 5 – Slightly Pleasant
-  {
-    fill: "#169898", glow: "#2BB5B5",
-    mouth:   "M 35,65 Q 50,74 65,65",
-    browRot: 4, browY: -1,
-    eyeScale: 0.75, cheek: 0.35, tear: false, sparkle: false,
-  },
+  { fill: "#46C7B4", glow: "#71DBCB", mouth: "M 41,66 Q 50,72 59,66", eyes: "round", cheek: 0.7 },
   // 6 – Pleasant
-  {
-    fill: "#1A9050", glow: "#2DB574",
-    mouth:   "M 32,63 Q 50,80 68,63",
-    browRot: 7, browY: -2,
-    eyeScale: 0.6, cheek: 0.65, tear: false, sparkle: false,
-  },
+  { fill: "#62C96E", glow: "#8ADB94", mouth: "M 38,65 Q 50,76 62,65", eyes: "happy", cheek: 0.85, cheekBig: true },
   // 7 – Very Pleasant
-  {
-    fill: "#B8920A", glow: "#D4AF37",
-    mouth:   "M 28,61 Q 50,84 72,61",
-    browRot: 11, browY: -4,
-    eyeScale: 0.45, cheek: 0.9, tear: false, sparkle: true,
-  },
+  { fill: "#F5C24B", glow: "#FFD873", mouth: "M 35,64 Q 50,80 65,64", eyes: "happy", cheek: 1, cheekBig: true, sparkle: true, hearts: true },
 ];
 
-const TRANS = "0.4s cubic-bezier(0.22, 1, 0.36, 1)";
+const TRANS = "0.42s cubic-bezier(0.34, 1.56, 0.64, 1)";
+
+/** One big shiny round eye, centred at (cx, cy). Blinks on a timer. */
+function RoundEye({ cx, cy }: { cx: number; cy: number }) {
+  return (
+    <g transform={`translate(${cx}, ${cy})`}>
+      <g className="eye-blink">
+        <ellipse cx="0" cy="0" rx="7" ry="8.6" fill={FEAT} />
+        {/* big top-left shine + small bottom-right shine = sparkly cute eye */}
+        <circle cx="-2.4" cy="-3.2" r="2.8" fill={SHINE} />
+        <circle cx="2.6" cy="3" r="1.4" fill={SHINE} opacity="0.85" />
+      </g>
+    </g>
+  );
+}
+
+/** Closed happy ^^ eye (upward arch), centred at (cx, cy). */
+function HappyEye({ cx, cy }: { cx: number; cy: number }) {
+  return (
+    <path
+      d={`M ${cx - 6.5},${cy + 2} Q ${cx},${cy - 4.5} ${cx + 6.5},${cy + 2}`}
+      fill="none"
+      stroke={FEAT}
+      strokeWidth="3.4"
+      strokeLinecap="round"
+    />
+  );
+}
 
 export function MoodFace({ value, size = 130 }: MoodFaceProps) {
   const idx = Math.min(7, Math.max(1, Math.round(value)));
   const s = STATES[idx]!;
 
-  // Trigger face-pop animation whenever value changes
-  const faceRef = useRef<HTMLDivElement>(null);
+  // springy pop whenever the level changes
+  const popRef = useRef<HTMLDivElement>(null);
   const prevIdx = useRef(idx);
   useEffect(() => {
     if (prevIdx.current === idx) return;
     prevIdx.current = idx;
-    const el = faceRef.current;
+    const el = popRef.current;
     if (!el) return;
     el.classList.remove("face-pop");
-    void el.offsetWidth; // reflow
+    void el.offsetWidth; // reflow to restart animation
     el.classList.add("face-pop");
   }, [idx]);
 
-  // Brow transform strings
-  const browLT = `translateY(${s.browY}px) rotate(${s.browRot}deg)`;
-  const browRT = `translateY(${s.browY}px) rotate(${-s.browRot}deg)`;
+  const eyeCy = 49;
 
   return (
     <div
-      ref={faceRef}
-      className="face-breathe"
+      className="face-bob"
       style={{
         width: size,
         height: size,
-        filter: `drop-shadow(0 0 ${size * 0.14}px ${s.glow}99)`,
+        filter: `drop-shadow(0 4px ${size * 0.1}px ${s.glow}aa)`,
         transition: `filter ${TRANS}`,
       }}
     >
-      <svg
-        viewBox="0 0 100 100"
-        width={size}
-        height={size}
-        xmlns="http://www.w3.org/2000/svg"
-        overflow="visible"
-        aria-hidden
-      >
-        {/* ── Face circle ── */}
-        <circle
-          cx="50" cy="50" r="46"
-          fill={s.fill}
-          style={{ transition: `fill ${TRANS}` }}
-        />
+      <div ref={popRef} style={{ width: "100%", height: "100%" }}>
+        <svg
+          viewBox="0 0 100 100"
+          width={size}
+          height={size}
+          xmlns="http://www.w3.org/2000/svg"
+          overflow="visible"
+          aria-hidden
+        >
+          {/* Face */}
+          <circle cx="50" cy="50" r="46" fill={s.fill} style={{ transition: `fill ${TRANS}` }} />
 
-        {/* Inner gloss highlight */}
-        <ellipse cx="38" cy="32" rx="14" ry="10"
-          fill="rgba(255,255,255,0.09)"
-          style={{ transition: `fill ${TRANS}` }}
-        />
+          {/* Rosy cheeks — always present, bigger when happy */}
+          <ellipse
+            cx="22" cy="59"
+            rx={s.cheekBig ? 11 : 9} ry={s.cheekBig ? 7.5 : 6}
+            fill={CHEEK}
+            style={{ opacity: s.cheek, transition: `opacity ${TRANS}, rx ${TRANS}, ry ${TRANS}` }}
+          />
+          <ellipse
+            cx="78" cy="59"
+            rx={s.cheekBig ? 11 : 9} ry={s.cheekBig ? 7.5 : 6}
+            fill={CHEEK}
+            style={{ opacity: s.cheek, transition: `opacity ${TRANS}, rx ${TRANS}, ry ${TRANS}` }}
+          />
 
-        {/* ── Cheeks ── */}
-        <ellipse cx="20" cy="63" rx="11" ry="7"
-          fill="#FF8FA0"
-          style={{ opacity: s.cheek, transition: `opacity ${TRANS}` }}
-        />
-        <ellipse cx="80" cy="63" rx="11" ry="7"
-          fill="#FF8FA0"
-          style={{ opacity: s.cheek, transition: `opacity ${TRANS}` }}
-        />
+          {/* Eyes */}
+          {s.eyes === "happy" ? (
+            <>
+              <HappyEye cx={36} cy={eyeCy} />
+              <HappyEye cx={64} cy={eyeCy} />
+            </>
+          ) : (
+            <>
+              <RoundEye cx={36} cy={eyeCy} />
+              <RoundEye cx={64} cy={eyeCy} />
+            </>
+          )}
 
-        {/* ── Left eyebrow ── */}
-        <g transform="translate(34, 33)"
-          style={{ transform: `translate(34px, 33px)`, transition: `transform ${TRANS}` }}>
-          <g style={{ transform: browLT, transformOrigin: "0 0", transition: `transform ${TRANS}` }}>
-            <line x1="-9" y1="0" x2="9" y2="0"
-              stroke="rgba(255,255,255,0.88)"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-          </g>
-        </g>
+          {/* Teardrops (very unpleasant) */}
+          {s.tear && (
+            <>
+              <path
+                d="M 30,58 q -2.6,4 0,6.2 q 2.6,-2.2 0,-6.2 z"
+                fill={TEAR}
+                style={{ animation: "tear-fall 1.9s ease-in 0.2s infinite", transformOrigin: "30px 58px" }}
+              />
+              <path
+                d="M 70,58 q -2.6,4 0,6.2 q 2.6,-2.2 0,-6.2 z"
+                fill={TEAR}
+                style={{ animation: "tear-fall 1.9s ease-in 1s infinite", transformOrigin: "70px 58px" }}
+              />
+            </>
+          )}
 
-        {/* ── Right eyebrow ── */}
-        <g transform="translate(66, 33)"
-          style={{ transform: `translate(66px, 33px)`, transition: `transform ${TRANS}` }}>
-          <g style={{ transform: browRT, transformOrigin: "0 0", transition: `transform ${TRANS}` }}>
-            <line x1="-9" y1="0" x2="9" y2="0"
-              stroke="rgba(255,255,255,0.88)"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-            />
-          </g>
-        </g>
+          {/* Mouth */}
+          <path
+            d={s.mouth}
+            fill="none"
+            stroke={FEAT}
+            strokeWidth="4"
+            strokeLinecap="round"
+            style={{ ...({ d: `path("${s.mouth}")` } as object), transition: `d ${TRANS}` }}
+          />
 
-        {/* ── Left eye ── */}
-        <g transform="translate(34, 45)">
-          <g style={{ transform: `scaleY(${s.eyeScale})`, transformOrigin: "0 0", transition: `transform ${TRANS}` }}>
-            <ellipse cx="0" cy="0" rx="6.5" ry="6.5" fill="rgba(255,255,255,0.92)" />
-            <circle  cx="1"  cy="1"  r="3.2" fill={s.fill}
-              style={{ transition: `fill ${TRANS}` }} />
-            <circle  cx="3.5" cy="-2" r="1.6" fill="rgba(255,255,255,0.95)" />
-          </g>
-        </g>
-
-        {/* ── Right eye ── */}
-        <g transform="translate(66, 45)">
-          <g style={{ transform: `scaleY(${s.eyeScale})`, transformOrigin: "0 0", transition: `transform ${TRANS}` }}>
-            <ellipse cx="0" cy="0" rx="6.5" ry="6.5" fill="rgba(255,255,255,0.92)" />
-            <circle  cx="1"  cy="1"  r="3.2" fill={s.fill}
-              style={{ transition: `fill ${TRANS}` }} />
-            <circle  cx="3.5" cy="-2" r="1.6" fill="rgba(255,255,255,0.95)" />
-          </g>
-        </g>
-
-        {/* ── Mouth ── */}
-        <path
-          d={s.mouth}
-          fill="none"
-          stroke="rgba(255,255,255,0.92)"
-          strokeWidth="3.8"
-          strokeLinecap="round"
-          // CSS `d` property allows smooth path interpolation in modern browsers
-          style={{
-            ...({ d: `path("${s.mouth}")` } as object),
-            transition: `d ${TRANS}`,
-          }}
-        />
-
-        {/* ── Tears (level 1 only) ── */}
-        {s.tear && (
-          <>
-            <ellipse cx="28" cy="55" rx="2.2" ry="4"
-              fill="rgba(180,210,255,0.8)"
-              style={{ animation: "tear-fall 1.6s ease-in infinite" }}
-            />
-            <ellipse cx="60" cy="57" rx="2.2" ry="4"
-              fill="rgba(180,210,255,0.8)"
-              style={{ animation: "tear-fall 1.6s ease-in 0.75s infinite" }}
-            />
-          </>
-        )}
-
-        {/* ── Sparkles (level 7 only) ── */}
-        {s.sparkle && (
-          <>
-            <text x="4"  y="22" fontSize="13" className="sparkle-a" style={{ userSelect: "none" }}>✨</text>
-            <text x="78" y="18" fontSize="10" className="sparkle-b" style={{ userSelect: "none" }}>⭐</text>
-            <text x="72" y="88" fontSize="9"  className="sparkle-a" style={{ userSelect: "none", animationDelay: "0.3s" }}>✨</text>
-          </>
-        )}
-      </svg>
+          {/* Sparkles + hearts (very pleasant) */}
+          {s.sparkle && (
+            <>
+              <text x="4"  y="24" fontSize="13" className="sparkle-a" style={{ userSelect: "none" }}>✨</text>
+              <text x="80" y="20" fontSize="11" className="sparkle-b" style={{ userSelect: "none" }}>⭐</text>
+            </>
+          )}
+          {s.hearts && (
+            <>
+              <text x="-2" y="58" fontSize="11" className="sparkle-c" style={{ userSelect: "none" }}>💛</text>
+              <text x="88" y="66" fontSize="10" className="sparkle-a" style={{ userSelect: "none" }}>💛</text>
+            </>
+          )}
+        </svg>
+      </div>
     </div>
   );
 }
