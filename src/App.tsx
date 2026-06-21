@@ -20,6 +20,7 @@ import Auth from "./pages/Auth";
 import Health from "./pages/Health";
 import Achievements from "./pages/Achievements";
 import Schedule from "./pages/Schedule";
+import Review from "./pages/Review";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/health" element={<Health />} />
               <Route path="/achievements" element={<Achievements />} />
               <Route path="/schedule" element={<Schedule />} />
+              <Route path="/review" element={<Review />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
