@@ -2,7 +2,10 @@
 // Strategy: network-first for navigation (SPA shell), stale-while-revalidate
 // for static assets, pass-through for all external APIs.
 
-const CACHE = "alfred-v1";
+// Bump this version whenever cached behaviour changes — the activate handler
+// deletes every cache that isn't the current one, purging stale assets so a
+// restart can never serve an old bundle.
+const CACHE = "alfred-v2";
 const SHELL = ["/", "/index.html"];
 
 // External origins that must never be intercepted
@@ -43,10 +46,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (BYPASS_HOSTS.some((h) => url.hostname.includes(h))) return;
 
-  // SPA navigation: network-first, fall back to cached shell
+  // SPA navigation: always pull a fresh shell from the network (bypassing the
+  // HTTP cache) so new builds load immediately; fall back to cache when offline.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/index.html"))
+      fetch(request, { cache: "no-store" }).catch(() => caches.match("/index.html"))
     );
     return;
   }
