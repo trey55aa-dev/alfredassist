@@ -106,19 +106,84 @@ function stripExtended(row: GoalInsert): GoalInsert {
   return clone as GoalInsert;
 }
 
-/** Upsert goal rows, transparently retrying without the extended columns if the
- *  live schema doesn't have them yet. */
-async function upsertGoalRows(rows: GoalInsert[]): Promise<void> {
-  let { error } = await supabase
-    .from("goals")
-    .upsert(rows, { onConflict: "user_id,client_id" });
-  if (error && extendedColumnsAvailable() && isMissingColumnError(error)) {
-    markExtendedColumnsMissing();
-    ({ error } = await supabase
-      .from("goals")
-      .upsert(rows.map(stripExtended), { onConflict: "user_id,client_id" }));
+/* ---------- adaptive missing-column handling ----------
+   The live schema can be missing columns from un-applied migrations (e.g.
+   progress_log / last_check_in from 20260524). Previously a single unknown
+   column failed the ENTIRE goal upsert, silently dropping edits like deadlines.
+   Instead we strip whatever column the DB reports as missing and retry,
+   remembering it so later saves skip it. The core columns (title, deadline,
+   target, done, …) always exist since the initial migration, so the goal — and
+   its deadline — still saves even on an un-migrated database. */
+
+const MISSING_COLS_KEY = "alfred.goals.missingCols";
+
+function loadMissingCols(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(MISSING_COLS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
   }
-  if (error) throw new Error(error.message);
+}
+
+function rememberMissingCol(name: string): void {
+  if (typeof window === "undefined") return;
+  const set = loadMissingCols();
+  if (set.has(name)) return;
+  set.add(name);
+  try {
+    localStorage.setItem(MISSING_COLS_KEY, JSON.stringify([...set]));
+  } catch {
+    /* quota */
+  }
+}
+
+/** Pull the offending column name out of a missing-column error message.
+ *  Handles PostgREST ("…'progress_log' column of 'goals'…") and Postgres
+ *  ("column \"progress_log\" of relation \"goals\"…"). */
+function missingColumnName(error: { message?: string } | null): string | null {
+  const msg = error?.message ?? "";
+  const names = [...msg.matchAll(/['"]([a-z_][a-z0-9_]*)['"]/gi)]
+    .map((m) => m[1])
+    .filter((c) => c !== "goals"); // ignore the table name itself
+  return names[0] ?? null;
+}
+
+function stripCols(row: GoalInsert, cols: Set<string>): GoalInsert {
+  if (cols.size === 0) return row;
+  const clone: Record<string, unknown> = { ...row };
+  for (const c of cols) delete clone[c];
+  return clone as GoalInsert;
+}
+
+/** Upsert goal rows, transparently stripping (and remembering) any column the
+ *  live schema doesn't have — so a missing analytics column never blocks saving
+ *  the core goal. */
+async function upsertGoalRows(rows: GoalInsert[]): Promise<void> {
+  let attempt = rows.map((r) => stripCols(r, loadMissingCols()));
+  for (let i = 0; i < 12; i++) {
+    const { error } = await supabase
+      .from("goals")
+      .upsert(attempt, { onConflict: "user_id,client_id" });
+    if (!error) return;
+    if (!isMissingColumnError(error)) throw new Error(error.message);
+
+    const col = missingColumnName(error);
+    if (!col) {
+      // Couldn't parse the column name — fall back to dropping the known extended
+      // set once, then give up if it still fails.
+      markExtendedColumnsMissing();
+      const { error: e2 } = await supabase
+        .from("goals")
+        .upsert(attempt.map(stripExtended), { onConflict: "user_id,client_id" });
+      if (!e2) return;
+      throw new Error(e2.message);
+    }
+    rememberMissingCol(col);
+    attempt = attempt.map((r) => stripCols(r, new Set([col])));
+  }
+  throw new Error("Goal save failed: too many unknown columns in the live schema.");
 }
 
 function goalToInsert(goal: Goal, userId: string): GoalInsert {
