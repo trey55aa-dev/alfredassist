@@ -13,6 +13,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { QuickAddEvent } from "@/components/QuickAddEvent";
+import { SuggestedSchedule } from "@/components/SuggestedSchedule";
 import { EditEventForm } from "@/components/EditEventForm";
 import { DayTimeline } from "@/components/DayTimeline";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
@@ -398,6 +399,9 @@ export default function Agenda() {
 
       {/* Quick add */}
       <QuickAddEvent />
+
+      {/* Suggested schedule from goals — fills gaps around the calendar */}
+      <SuggestedSchedule events={events ?? []} now={now} onAdded={refresh} />
 
       {/* Day view */}
       <Card className="p-6 bg-gradient-card border-border">
