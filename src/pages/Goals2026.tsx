@@ -1296,11 +1296,14 @@ function GoalRow({
                 </span>
               </div>
             )}
-            {measurable && !goal.done && (
-              <ProgressInsight goal={goal} onChange={onChange} />
-            )}
-            {!goal.done && <SuggestedNextRow goal={goal} />}
           </button>
+          {/* Interactive panels live OUTSIDE the toggle button — they render their
+              own buttons (log progress, add to agenda) and must not nest inside a
+              <button> (invalid DOM + unreliable clicks). */}
+          {measurable && !goal.done && (
+            <ProgressInsight goal={goal} onChange={onChange} />
+          )}
+          {!goal.done && <SuggestedNextRow goal={goal} />}
 
           {open && (
             <div className="mt-3 space-y-3 fade-in">
