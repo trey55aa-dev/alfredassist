@@ -161,17 +161,42 @@ function goalToInsert(goal: Goal, userId: string): GoalInsert {
   if (goal.createdAt && goal.createdAt > 0) {
     row.created_at = new Date(goal.createdAt).toISOString();
   }
+  // Stamp updated_at with this goal's last *local* mutation time so cross-device
+  // merge-on-load can tell which side is newer. We set it explicitly (rather than
+  // relying on a DB trigger that may or may not exist) — matching how recurringRepo
+  // and userStateRepo persist their timestamps. Falls back to "now" for goals that
+  // were never stamped locally (e.g. seed goals on first push).
+  row.updated_at = new Date(
+    goal.localUpdatedAt && goal.localUpdatedAt > 0 ? goal.localUpdatedAt : Date.now(),
+  ).toISOString();
   return row;
 }
 
-export async function loadGoals(userId: string): Promise<Goal[]> {
+/** A goal loaded from the cloud, paired with the epoch-ms of its last update.
+ *  The timestamp lets the caller reconcile against a local goal's `localUpdatedAt`. */
+export interface LoadedGoal {
+  goal: Goal;
+  cloudUpdatedAt: number;
+}
+
+export async function loadGoalsWithMeta(userId: string): Promise<LoadedGoal[]> {
   const { data, error } = await supabase
     .from("goals")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => rowToGoal(r as unknown as GoalRow));
+  return (data ?? []).map((r) => {
+    const row = r as unknown as GoalRow;
+    return {
+      goal: rowToGoal(row),
+      cloudUpdatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,
+    };
+  });
+}
+
+export async function loadGoals(userId: string): Promise<Goal[]> {
+  return (await loadGoalsWithMeta(userId)).map((l) => l.goal);
 }
 
 export async function bulkUpsertGoals(

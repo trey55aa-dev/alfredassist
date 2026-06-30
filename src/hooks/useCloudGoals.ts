@@ -3,10 +3,78 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   bulkUpsertGoals,
   deleteGoalByClientId,
-  loadGoals,
+  loadGoalsWithMeta,
   upsertGoal,
+  type LoadedGoal,
 } from "@/lib/goalsRepo";
 import { GOALS_KEY, type Goal, SEED_GOALS } from "@/lib/goals";
+
+/* ---------- cross-device reconcile (pure, exported for testing) ---------- */
+
+/** Compare a goal's content, ignoring the local-only `localUpdatedAt` stamp. */
+function stableGoalJson(g: Goal): string {
+  const { localUpdatedAt: _omit, ...rest } = g;
+  return JSON.stringify(rest);
+}
+
+export function goalContentChanged(a: Goal, b: Goal): boolean {
+  return stableGoalJson(a) !== stableGoalJson(b);
+}
+
+/**
+ * Reconcile local goals against the cloud using per-goal last-write-wins.
+ *
+ * Each local goal carries `localUpdatedAt` (epoch-ms of its last edit on THIS
+ * device); each cloud goal carries `cloudUpdatedAt` (epoch-ms of the last edit
+ * pushed from ANY device). For a goal present on both sides we keep whichever is
+ * newer. Crucially, a goal the local device never edited (localUpdatedAt = 0/old)
+ * yields to the cloud — so a goal you crossed off on another device finally shows
+ * as done here, instead of the old "local always wins" rule silently dropping it.
+ *
+ * Returns the merged list plus the goals whose local copy is newer and therefore
+ * needs pushing back up to the cloud.
+ */
+export function reconcileGoals(
+  local: Goal[],
+  cloud: LoadedGoal[],
+): { finalGoals: Goal[]; toSync: Goal[] } {
+  const localById = new Map(local.map((g) => [g.id, g]));
+  const cloudMetaById = new Map(cloud.map((l) => [l.goal.id, l]));
+
+  const finalGoals: Goal[] = [];
+  const toSync: Goal[] = [];
+
+  for (const lg of local) {
+    const meta = cloudMetaById.get(lg.id);
+    if (!meta) {
+      // Exists only on this device (added locally, not yet pushed) → keep & push.
+      finalGoals.push(lg);
+      toSync.push(lg);
+      continue;
+    }
+    const localTs = lg.localUpdatedAt ?? 0;
+    if (localTs > meta.cloudUpdatedAt && goalContentChanged(lg, meta.goal)) {
+      // Local edit is strictly newer than cloud → local wins, push it up.
+      finalGoals.push(lg);
+      toSync.push(lg);
+    } else {
+      // Cloud is newer (or this device never edited it) → adopt cloud, but keep
+      // local-only fields the DB doesn't persist (financialType).
+      finalGoals.push({
+        ...meta.goal,
+        financialType: lg.financialType,
+        localUpdatedAt: meta.cloudUpdatedAt,
+      });
+    }
+  }
+
+  // Goals that exist only in the cloud (added/owned by another device).
+  for (const { goal } of cloud) {
+    if (!localById.has(goal.id)) finalGoals.push(goal);
+  }
+
+  return { finalGoals, toSync };
+}
 
 /**
  * Cloud-backed goals hook — LOCAL CACHE IS THE SOURCE OF TRUTH.
@@ -41,6 +109,9 @@ export function useCloudGoals(): {
   const cloudRef = useRef<Goal[]>([]);
   const debounceRef = useRef<number | null>(null);
   const pendingRef = useRef<Goal[] | null>(null);
+  // Last goals we handed out — baseline for detecting which goals changed so we
+  // can stamp localUpdatedAt on them (drives cross-device last-write-wins).
+  const lastGoalsRef = useRef<Goal[]>(goals);
 
   /* ---------- initial fetch + background cloud sync ---------- */
 
@@ -58,12 +129,12 @@ export function useCloudGoals(): {
       try {
         setLoading(true);
         setError(null);
-        const cloud = await loadGoals(user.id);
+        const loaded = await loadGoalsWithMeta(user.id);
         if (!alive) return;
+        const cloud = loaded.map((l) => l.goal);
         cloudRef.current = cloud;
 
         const local = readCache();
-        const localById = new Map(local.map((g) => [g.id, g]));
 
         console.log(`[Goals] Loaded ${cloud.length} cloud / ${local.length} local goals`);
 
@@ -79,6 +150,7 @@ export function useCloudGoals(): {
           setGoalsState(local);
           writeCache(local);
           setCacheOwner(user.id);
+          lastGoalsRef.current = local;
           bulkUpsertGoals(user.id, local)
             .then(() => { setLastSyncTime(user.id); console.log("[Goals] Initial push to cloud ✓"); })
             .catch((e) => { console.error("[Goals] Initial push FAILED:", e); });
@@ -87,44 +159,26 @@ export function useCloudGoals(): {
           return;
         }
 
-        // ── Merge strategy: LOCAL ALWAYS WINS for goals on this device. ──
-        //
-        // Cloud can only ADD goals that don't exist locally (from another device).
-        // We never replace a local goal with a cloud version — local is always the
-        // source of truth for this device. Any differences get pushed to cloud in
-        // the background so cloud catches up.
-        //
-        // Why this is safe: setGoals() synchronously writes to localStorage before
-        // the cloud upsert fires. So localStorage always has the latest state, and
-        // we can trust it unconditionally.
-        const cloudOnlyGoals = cloud.filter((g) => !localById.has(g.id));
-        const finalGoals = cloudOnlyGoals.length > 0
-          ? [...local, ...cloudOnlyGoals]
-          : local;
+        // ── Cross-device merge: per-goal last-write-wins by timestamp. ──
+        // Unlike the old "local always wins" rule (which silently dropped edits
+        // made on other devices, e.g. a goal crossed off on your computer never
+        // showing as done on your phone), we keep whichever side edited a goal
+        // most recently. See reconcileGoals() for details.
+        const { finalGoals, toSync } = reconcileGoals(local, loaded);
 
-        console.log(`[Goals] Merge done → ${finalGoals.length} goals. Local: ${local.length}, cloud-only additions: ${cloudOnlyGoals.length}. Done count: ${finalGoals.filter(g=>g.done).length}`);
+        console.log(`[Goals] Merge done → ${finalGoals.length} goals (${finalGoals.filter(g=>g.done).length} done). ${toSync.length} local-newer to push.`);
         setGoalsState(finalGoals);
         writeCache(finalGoals);
         setCacheOwner(user.id);
-        cloudRef.current = cloud;
+        lastGoalsRef.current = finalGoals;
 
-        // Push any local goals that differ from cloud (including newly done ones
-        // that haven't synced yet, or goals modified before last flush).
-        const cloudById = new Map(cloud.map((g) => [g.id, g]));
-        const toSync = local.filter((g) => {
-          const cloudGoal = cloudById.get(g.id);
-          if (!cloudGoal) return true; // not in cloud yet
-          // Check key fields that matter for persistence
-          if (g.done !== cloudGoal.done) return true;
-          if ((g.current ?? null) !== (cloudGoal.current ?? null)) return true;
-          if ((g.lastCheckIn ?? null) !== (cloudGoal.lastCheckIn ?? null)) return true;
-          return false;
-        });
         if (toSync.length > 0) {
           console.log(`[Goals] Pushing ${toSync.length} locally-newer goals to cloud…`);
           bulkUpsertGoals(user.id, toSync)
-            .then(() => { setLastSyncTime(user.id); console.log("[Goals] Back-sync ✓"); })
+            .then(() => { cloudRef.current = finalGoals; setLastSyncTime(user.id); console.log("[Goals] Back-sync ✓"); })
             .catch((e) => { console.error("[Goals] Back-sync FAILED:", e); });
+        } else {
+          cloudRef.current = finalGoals;
         }
       } catch (err) {
         if (!alive) return;
@@ -192,16 +246,25 @@ export function useCloudGoals(): {
 
   const setGoals = useCallback(
     (next: Goal[]) => {
-      const doneCount = next.filter(g => g.done).length;
-      console.log(`[Goals] setGoals called — ${next.length} goals, ${doneCount} done`);
-      setGoalsState(next);
-      writeCache(next);
-      // Verify the write landed
-      const cached = localStorage.getItem(GOALS_KEY);
-      const cachedParsed = cached ? JSON.parse(cached) : [];
-      console.log(`[Goals] localStorage written — ${cachedParsed.length} goals cached`);
+      // Stamp localUpdatedAt on any goal whose content changed since we last
+      // handed it out, so the cross-device merge can tell which side is newer.
+      // This is a safety net independent of call sites, so every mutation gets a
+      // fresh timestamp even if a caller forgets to set one.
+      const now = Date.now();
+      const prevById = new Map(lastGoalsRef.current.map((g) => [g.id, g]));
+      const stamped = next.map((g) => {
+        const before = prevById.get(g.id);
+        if (before && !goalContentChanged(before, g)) return g;
+        return { ...g, localUpdatedAt: now };
+      });
+      lastGoalsRef.current = stamped;
+
+      const doneCount = stamped.filter((g) => g.done).length;
+      console.log(`[Goals] setGoals called — ${stamped.length} goals, ${doneCount} done`);
+      setGoalsState(stamped);
+      writeCache(stamped);
       if (user) setCacheOwner(user.id);
-      pendingRef.current = next;
+      pendingRef.current = stamped;
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       if (!user) return;
       debounceRef.current = window.setTimeout(() => {
