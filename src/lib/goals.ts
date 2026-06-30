@@ -195,6 +195,37 @@ export function quarterFromDate(d: Date): Exclude<GoalQuarter, null> {
   return "Q4";
 }
 
+/** Last calendar day of a quarter (local end-of-day). */
+export function quarterEnd(quarter: Exclude<GoalQuarter, null>, year: number): Date {
+  switch (quarter) {
+    case "Q1": return new Date(year, 2, 31, 23, 59, 59);
+    case "Q2": return new Date(year, 5, 30, 23, 59, 59);
+    case "Q3": return new Date(year, 8, 30, 23, 59, 59);
+    case "Q4": return new Date(year, 11, 31, 23, 59, 59);
+  }
+}
+
+/**
+ * The quarter a goal belongs to. Once a deadline is set, the deadline's quarter
+ * wins — so quarters always follow the plan. The manual `quarter` field is only
+ * a fallback for goals without a deadline.
+ */
+export function effectiveQuarter(goal: Goal): GoalQuarter {
+  if (goal.deadline) {
+    const d = new Date(goal.deadline);
+    if (!isNaN(d.getTime())) return quarterFromDate(d);
+  }
+  return goal.quarter ?? null;
+}
+
+/** "Q4 2026" style label for a goal's effective quarter, or null. */
+export function effectiveQuarterLabel(goal: Goal): string | null {
+  const q = effectiveQuarter(goal);
+  if (!q) return null;
+  const year = goal.deadline ? new Date(goal.deadline).getFullYear() : new Date().getFullYear();
+  return `${q} ${year}`;
+}
+
 export function progressPct(g: Goal): number {
   if (g.done) return 100;
   if (typeof g.target === "number" && g.target > 0) {

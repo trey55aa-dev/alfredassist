@@ -228,6 +228,22 @@ function effectiveDeadline(goal: Goal, now: Date): Date {
   return new Date(now.getFullYear(), 11, 31, 23, 59, 59);
 }
 
+/**
+ * Where a measurable goal *should* be by a given date to stay on pace for its
+ * deadline — linear interpolation from start → deadline. Returns null unless the
+ * goal has a numeric target and a deadline. Used for quarterly on-pace checkpoints.
+ */
+export function paceTargetByDate(goal: Goal, date: Date): number | null {
+  if (typeof goal.target !== "number" || goal.target <= 0) return null;
+  if (!goal.deadline) return null;
+  const start = effectiveStart(goal).getTime();
+  const end = new Date(goal.deadline).getTime();
+  if (!isFinite(end)) return null;
+  if (end <= start) return goal.target;
+  const frac = Math.min(1, Math.max(0, (date.getTime() - start) / (end - start)));
+  return Math.round(goal.target * frac);
+}
+
 /** Compute pace + projection. Only meaningful for measurable goals (target set). */
 export function computeProjection(goal: Goal, now = new Date()): ProjectionResult {
   if (goal.done) {

@@ -49,6 +49,7 @@ import {
   last14Days,
   lastNWeeks,
   logProgress,
+  paceTargetByDate,
 } from "@/lib/goalsHistory";
 import {
   isSuggestionAdded,
@@ -83,10 +84,14 @@ import {
   appendStatusEvent,
   collectTags,
   daysUntil,
+  effectiveQuarter,
+  effectiveQuarterLabel,
+  quarterEnd,
+  quarterFromDate,
   paceStatus,
   progressPct,
 } from "@/lib/goals";
-import { deadlineQuarterLabel, computeStreakStats } from "@/lib/goalsAnalytics";
+import { computeStreakStats } from "@/lib/goalsAnalytics";
 import { buildSchedule, STATUS_META } from "@/lib/planSchedule";
 import type { BrainEntry } from "./BrainDump";
 import { cn } from "@/lib/utils";
@@ -142,6 +147,9 @@ export default function Goals2026() {
       return activeTags.every((t) => all.has(t));
     });
   }, [safeGoals, activeTags]);
+
+  // Year used to anchor quarter-end checkpoint dates in the Quarters view.
+  const quartersYear = new Date().getFullYear();
 
   const totalDone = filteredGoals.filter((g) => g.done).length;
   const overallPct = filteredGoals.length
@@ -312,12 +320,30 @@ export default function Goals2026() {
         <TabsContent value="quarters" className="mt-6">
           <div className="grid lg:grid-cols-2 gap-6">
             {QUARTERS.map((q) => {
-              const items = filteredGoals.filter((g) => g.quarter === q);
+              // Goals belong to the quarter their DEADLINE falls in (manual
+              // quarter is only a fallback for deadline-less goals).
+              const items = filteredGoals.filter((g) => effectiveQuarter(g) === q);
+              const qEnd = quarterEnd(q, quartersYear);
+              // On-pace checkpoints: measurable goals due in a LATER quarter,
+              // showing where you should be by the end of THIS quarter.
+              const checkpoints = filteredGoals
+                .filter(
+                  (g) =>
+                    !g.done &&
+                    typeof g.target === "number" &&
+                    g.target > 0 &&
+                    g.deadline &&
+                    new Date(g.deadline).getTime() > qEnd.getTime(),
+                )
+                .map((g) => ({ goal: g, target: paceTargetByDate(g, qEnd) }))
+                .filter((c): c is { goal: Goal; target: number } => c.target !== null);
               return (
                 <QuarterCard
                   key={q}
                   quarter={q}
                   items={items}
+                  checkpoints={checkpoints}
+                  quarterEndDate={qEnd}
                   brain={brain}
                   onToggle={toggle}
                   onUpdate={update}
@@ -325,11 +351,12 @@ export default function Goals2026() {
                 />
               );
             })}
-            {/* Unassigned */}
-            {filteredGoals.some((g) => !g.quarter) && (
+            {/* Unassigned — goals with neither deadline nor manual quarter */}
+            {filteredGoals.some((g) => !effectiveQuarter(g)) && (
               <QuarterCard
                 quarter={null}
-                items={filteredGoals.filter((g) => !g.quarter)}
+                items={filteredGoals.filter((g) => !effectiveQuarter(g))}
+                checkpoints={[]}
                 brain={brain}
                 onToggle={toggle}
                 onUpdate={update}
@@ -422,12 +449,21 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
           options={TIMEFRAMES}
           render={(t) => TIMEFRAME_LABEL[t as GoalTimeframe]}
         />
-        <Select
-          value={quarter ?? ""}
-          onChange={(v) => setQuarter((v || null) as GoalQuarter)}
-          options={["", ...QUARTERS]}
-          render={(q) => (q === "" ? "No quarter" : q)}
-        />
+        {deadline ? (
+          <div
+            className="bg-background/40 border border-border rounded-md px-2 py-2 text-xs font-mono uppercase tracking-wider text-gold/80 flex items-center justify-center text-center"
+            title="Quarter follows the deadline you picked"
+          >
+            {quarterFromDate(deadline)} · from date
+          </div>
+        ) : (
+          <Select
+            value={quarter ?? ""}
+            onChange={(v) => setQuarter((v || null) as GoalQuarter)}
+            options={["", ...QUARTERS]}
+            render={(q) => (q === "" ? "No quarter" : q)}
+          />
+        )}
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -668,6 +704,8 @@ function GroupCard({
 function QuarterCard({
   quarter,
   items,
+  checkpoints,
+  quarterEndDate,
   brain,
   onToggle,
   onUpdate,
@@ -675,14 +713,22 @@ function QuarterCard({
 }: {
   quarter: GoalQuarter;
   items: Goal[];
+  checkpoints: { goal: Goal; target: number }[];
+  quarterEndDate?: Date;
   brain: BrainEntry[];
   onToggle: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Goal>) => void;
   onDelete: (id: string) => void;
 }) {
-  const meta = quarter ? QUARTER_RANGES[quarter] : { label: "Unscheduled", months: "Assign a quarter" };
+  const meta = quarter ? QUARTER_RANGES[quarter] : { label: "Unscheduled", months: "No deadline set" };
   const done = items.filter((g) => g.done).length;
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  const empty = items.length === 0 && checkpoints.length === 0;
+  const qEndPast = quarterEndDate ? quarterEndDate.getTime() <= Date.now() : false;
+  const endLabel = quarterEndDate ? format(quarterEndDate, "MMM d") : "";
+
+  const fmtVal = (g: Goal, n: number) =>
+    g.unit === "$" ? formatCurrency(n) : `${n}${g.unit ? ` ${g.unit}` : ""}`;
 
   return (
     <Card className="p-6 bg-gradient-card border-border">
@@ -693,7 +739,7 @@ function QuarterCard({
           </div>
           <h3 className="font-display text-2xl mt-1">{meta.label}</h3>
           <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mt-1">
-            {items.length === 0 ? "No goals yet" : `${done}/${items.length} · ${pct}%`}
+            {items.length === 0 ? "Nothing due this quarter" : `${done}/${items.length} due · ${pct}%`}
           </p>
         </div>
         {quarter && (
@@ -701,23 +747,62 @@ function QuarterCard({
         )}
       </div>
       <Progress value={pct} className="h-1.5 mb-4" />
-      {items.length === 0 ? (
+
+      {empty ? (
         <p className="font-display italic text-muted-foreground text-sm text-center py-6">
-          The slate is open. Assign a goal to this quarter.
+          The slate is open. Set a deadline this quarter to schedule a goal here.
         </p>
       ) : (
-        <ul className="space-y-3">
-          {items.map((g) => (
-            <GoalRow
-              key={g.id}
-              goal={g}
-              brain={brain}
-              onToggle={() => onToggle(g.id)}
-              onChange={(p) => onUpdate(g.id, p)}
-              onDelete={() => onDelete(g.id)}
-            />
-          ))}
-        </ul>
+        <>
+          {items.length > 0 && (
+            <ul className="space-y-3">
+              {items.map((g) => (
+                <GoalRow
+                  key={g.id}
+                  goal={g}
+                  brain={brain}
+                  onToggle={() => onToggle(g.id)}
+                  onChange={(p) => onUpdate(g.id, p)}
+                  onDelete={() => onDelete(g.id)}
+                />
+              ))}
+            </ul>
+          )}
+
+          {/* On-pace checkpoints for goals that finish in a later quarter */}
+          {checkpoints.length > 0 && (
+            <div className={items.length > 0 ? "mt-4 pt-4 border-t border-border/40" : ""}>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <TrendingUp className="h-3 w-3 text-teal" />
+                <span className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground">
+                  On pace — where you should be by {endLabel}
+                </span>
+              </div>
+              <ul className="space-y-2">
+                {checkpoints.map(({ goal, target }) => {
+                  const cur = goal.current ?? 0;
+                  const onTrack = cur >= target;
+                  // ahead/behind only meaningful once the checkpoint date has arrived
+                  const tone = qEndPast
+                    ? onTrack ? "text-teal" : "text-coral"
+                    : "text-gold";
+                  return (
+                    <li key={goal.id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground/90 truncate">{goal.title}</span>
+                      <span className="font-mono text-[10px] whitespace-nowrap shrink-0">
+                        <span className="text-muted-foreground/40">{fmtVal(goal, cur)} → </span>
+                        <span className={tone}>{fmtVal(goal, target)}</span>
+                        {qEndPast && (
+                          <span className={`ml-1 ${tone}`}>{onTrack ? "✓" : "behind"}</span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );
@@ -1130,16 +1215,14 @@ function GoalRow({
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <Badge>{goal.category}</Badge>
               <Badge variant="muted">{goal.timeframe}</Badge>
-              {goal.quarter && <Badge variant="gold">{goal.quarter}</Badge>}
+              {/* Single quarter badge — follows the deadline when one is set */}
+              {effectiveQuarterLabel(goal) && (
+                <Badge variant="gold">{effectiveQuarterLabel(goal)}</Badge>
+              )}
               {goal.deadline && (
                 <Badge variant={days !== null && days < 0 ? "destructive" : "muted"}>
                   {format(new Date(goal.deadline), "MMM d, yyyy")}
                   {days !== null && (days < 0 ? " · overdue" : ` · ${days}d`)}
-                </Badge>
-              )}
-              {goal.deadline && deadlineQuarterLabel(goal.deadline) && (
-                <Badge variant="gold">
-                  {deadlineQuarterLabel(goal.deadline)}
                 </Badge>
               )}
               {goal.goalType === "streak" && (() => {
@@ -1194,12 +1277,21 @@ function GoalRow({
                   onChange={(v) => onChange({ timeframe: v as GoalTimeframe })}
                   options={TIMEFRAMES}
                 />
-                <Select
-                  value={goal.quarter ?? ""}
-                  onChange={(v) => onChange({ quarter: (v || null) as GoalQuarter })}
-                  options={["", ...QUARTERS]}
-                  render={(q) => (q === "" ? "No quarter" : q)}
-                />
+                {goal.deadline ? (
+                  <div
+                    className="bg-background/40 border border-border rounded-md px-2 py-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 flex items-center justify-center text-center"
+                    title="Quarter follows the deadline"
+                  >
+                    {effectiveQuarter(goal) ?? "—"} · from date
+                  </div>
+                ) : (
+                  <Select
+                    value={goal.quarter ?? ""}
+                    onChange={(v) => onChange({ quarter: (v || null) as GoalQuarter })}
+                    options={["", ...QUARTERS]}
+                    render={(q) => (q === "" ? "No quarter" : q)}
+                  />
+                )}
                 <Select
                   value={goal.goalType ?? "metric"}
                   onChange={(v) => onChange({ goalType: v as "metric" | "streak" })}
