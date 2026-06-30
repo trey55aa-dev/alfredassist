@@ -1,13 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { awardXp, XP_VALUES } from "@/lib/gamification";
-import { Plus, Trash2, Flame, Target as TargetIcon, ChevronDown } from "lucide-react";
+import { Plus, Flame, Target as TargetIcon, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { todayKey } from "@/lib/alfred";
 import {
@@ -24,21 +23,22 @@ import {
   Habit,
   HabitLog,
   SEED_HABITS,
-  buildRecovery,
   currentStreakFor,
   habitsAtRisk,
   isCompleteForPeriod,
   last7Periods,
-  longestStreakFor,
   toggleHabitForToday,
+  recordHabitTime,
+  removeHabitTime,
+  purgeHabitMeta,
 } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
-import { useEffect } from "react";
+import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 
-// Legacy export kept so Dashboard's existing import doesn't break
+// Legacy export kept for any external importers.
 export const DAILY = SEED_HABITS.filter((h) => h.cadence === "daily").map((h) => h.title);
 export const DAILY_TOTAL = DAILY.length;
 
@@ -55,16 +55,17 @@ export default function Checklist() {
   const { goals, setGoals } = useCloudGoals();
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   const [tab, setTab] = useState<Cadence>("daily");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const activeHabits = useMemo(() => habits.filter((h) => !h.archived), [habits]);
+  const selected = useMemo(
+    () => (selectedId ? habits.find((h) => h.id === selectedId) ?? null : null),
+    [selectedId, habits],
+  );
 
   const grouped = useMemo(() => {
     const out: Record<Cadence, Habit[]> = {
-      daily: [],
-      weekly: [],
-      monthly: [],
-      quarterly: [],
-      annual: [],
+      daily: [], weekly: [], monthly: [], quarterly: [], annual: [],
     };
     for (const h of activeHabits) out[h.cadence].push(h);
     return out;
@@ -91,6 +92,11 @@ export default function Checklist() {
     const wasDone = isCompleteForPeriod(habit, logs);
     const { logs: nextLogs, nowComplete } = toggleHabitForToday(habit, logs);
     setLogs(nextLogs);
+
+    // Record / clear the local completion time (powers hour-of-day stats)
+    if (nowComplete && !wasDone) recordHabitTime(habit.id, todayKey());
+    else if (!nowComplete && wasDone) removeHabitTime(habit.id, todayKey());
+
     if (nowComplete && !wasDone) {
       const streakDays = currentStreakFor(habit, nextLogs);
       awardXp(XP_VALUES.HABIT_COMPLETE, "habit", { streakDays });
@@ -143,6 +149,7 @@ export default function Checklist() {
   const deleteHabit = (id: string) => {
     setHabits(habits.filter((h) => h.id !== id));
     setLogs(logs.filter((l) => l.habitId !== id));
+    purgeHabitMeta(id);
   };
 
   return (
@@ -150,7 +157,7 @@ export default function Checklist() {
       <PageHeader
         eyebrow="Daily protocol"
         title="The Checklist"
-        description="Habits with cadence and streaks. Tick the period as you complete it; your streak holds as long as you do."
+        description="Tap a habit to see its calendar and stats. Tick the period as you complete it; your streak holds as long as you do."
       />
 
       {/* Recovery */}
@@ -181,12 +188,22 @@ export default function Checklist() {
               logs={logs}
               goals={goals}
               onToggle={handleToggle}
-              onUpdate={updateHabit}
-              onDelete={deleteHabit}
+              onOpen={(h) => setSelectedId(h.id)}
             />
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Detail sheet — calendar + stats + settings */}
+      <HabitDetailSheet
+        habit={selected}
+        open={selectedId !== null}
+        onClose={() => setSelectedId(null)}
+        logs={logs}
+        goals={goals}
+        onUpdate={updateHabit}
+        onDelete={deleteHabit}
+      />
     </div>
   );
 }
@@ -199,16 +216,14 @@ function CadenceSection({
   logs,
   goals,
   onToggle,
-  onUpdate,
-  onDelete,
+  onOpen,
 }: {
   cadence: Cadence;
   habits: Habit[];
   logs: HabitLog[];
   goals: Goal[];
   onToggle: (h: Habit) => void;
-  onUpdate: (id: string, patch: Partial<Habit>) => void;
-  onDelete: (id: string) => void;
+  onOpen: (h: Habit) => void;
 }) {
   if (habits.length === 0) {
     return (
@@ -240,8 +255,7 @@ function CadenceSection({
             logs={logs}
             goals={goals}
             onToggle={() => onToggle(h)}
-            onUpdate={(p) => onUpdate(h.id, p)}
-            onDelete={() => onDelete(h.id)}
+            onOpen={() => onOpen(h)}
           />
         ))}
       </ul>
@@ -256,23 +270,18 @@ function HabitRow({
   logs,
   goals,
   onToggle,
-  onUpdate,
-  onDelete,
+  onOpen,
 }: {
   habit: Habit;
   logs: HabitLog[];
   goals: Goal[];
   onToggle: () => void;
-  onUpdate: (patch: Partial<Habit>) => void;
-  onDelete: () => void;
+  onOpen: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const done = isCompleteForPeriod(habit, logs);
   const streak = currentStreakFor(habit, logs);
-  const longest = Math.max(longestStreakFor(habit, logs), streak);
   const week = last7Periods(habit, logs);
   const linkedGoal = goals.find((g) => g.id === habit.goalId);
-  const recovery = !done ? buildRecovery(habit, logs) : null;
 
   return (
     <li
@@ -288,7 +297,7 @@ function HabitRow({
           onCheckedChange={onToggle}
           className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
         />
-        <button onClick={() => setOpen((o) => !o)} className="flex-1 min-w-0 text-left">
+        <button onClick={onOpen} className="flex-1 min-w-0 text-left group">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span
               className={`text-sm ${
@@ -308,11 +317,7 @@ function HabitRow({
                 <Flame className="h-3 w-3" />
                 {streak}
               </span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform ${
-                  open ? "rotate-180" : ""
-                }`}
-              />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-gold transition-colors" />
             </div>
           </div>
 
@@ -334,87 +339,7 @@ function HabitRow({
           </div>
         </button>
       </div>
-
-      {open && (
-        <div className="px-3 pb-3 space-y-3 fade-in border-t border-border/40 pt-3">
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="Current" value={streak} />
-            <Stat label="Longest" value={longest} />
-            <Stat
-              label={CADENCE_NOUN[habit.cadence] + "s missed"}
-              value={recovery ? recovery.missedPeriods : 0}
-            />
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-2">
-            <SimpleSelect
-              label="Cadence"
-              value={habit.cadence}
-              onChange={(v) => onUpdate({ cadence: v as Cadence })}
-              options={CADENCES}
-              render={(v) => CADENCE_LABEL[v as Cadence]}
-            />
-            <SimpleSelect
-              label="Linked goal"
-              value={habit.goalId ?? ""}
-              onChange={(v) => onUpdate({ goalId: v || undefined })}
-              options={["", ...goals.map((g) => g.id)]}
-              render={(v) =>
-                v === "" ? "None" : goals.find((g) => g.id === v)?.title ?? "—"
-              }
-            />
-          </div>
-
-          <div>
-            <label className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Custom recovery steps (one per line)
-            </label>
-            <Textarea
-              value={(habit.recoverySteps ?? []).join("\n")}
-              onChange={(e) =>
-                onUpdate({
-                  recoverySteps: e.target.value
-                    .split("\n")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
-              }
-              placeholder={`Leave blank to use Alfred's defaults…`}
-              className="mt-1 bg-background/40 border-border text-xs min-h-[60px] resize-none focus-visible:ring-gold/40 focus-visible:border-gold/40"
-            />
-          </div>
-
-          <div className="flex justify-between items-center pt-1">
-            <button
-              onClick={() => onUpdate({ archived: true })}
-              className="text-[10px] tracking-[0.2em] uppercase font-mono text-muted-foreground hover:text-gold"
-            >
-              Archive
-            </button>
-            <button
-              onClick={() => {
-                if (confirm(`Delete "${habit.title}" and all its history?`)) onDelete();
-              }}
-              className="text-muted-foreground/60 hover:text-destructive transition-colors"
-              aria-label="Delete habit"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
     </li>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md bg-background/40 border border-border/60 py-2">
-      <div className="font-display text-2xl text-gold leading-none">{value}</div>
-      <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
-        {label}
-      </div>
-    </div>
   );
 }
 

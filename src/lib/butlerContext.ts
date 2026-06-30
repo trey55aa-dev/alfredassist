@@ -7,9 +7,12 @@ import {
   HABITS_KEY,
   HABIT_LOGS_KEY,
   isCompleteForPeriod,
+  loadHabitNotes,
+  loadHabitTimes,
   type Habit,
   type HabitLog,
 } from "./habits";
+import { computeHabitStats, WEEKDAY_SHORT, formatHour } from "./habitStats";
 import { STREAK_KEY, type StreakState, currentStreak, emptyStreak } from "./streak";
 import {
   WEEKLY_PLAN_KEY,
@@ -63,6 +66,20 @@ export function buildContext(): string {
     (h) => `- [${isCompleteForPeriod(h, logs) ? "x" : " "}] ${h.title}`,
   );
 
+  // ── Habit patterns + user comments (grounds coaching) ──
+  const habitNotes = loadHabitNotes();
+  const habitTimes = loadHabitTimes();
+  const patternLines = dailyHabits.slice(0, 12).map((h) => {
+    const st = computeHabitStats(h, logs, habitTimes);
+    const bits = [`- ${h.title}: streak ${st.current}, best ${st.longest}, year ${st.yearPct}% (${st.totalMisses} misses)`];
+    if (st.totalMisses > 0 && st.worstWeekday != null) bits.push(`misses most on ${WEEKDAY_SHORT[st.worstWeekday]}`);
+    if (st.peakHour != null) bits.push(`usually checks in ${formatHour(st.peakHour)}`);
+    return bits.join(" · ");
+  });
+  const noteLines = habits
+    .filter((h) => habitNotes[h.id])
+    .map((h) => `- ${h.title}: "${habitNotes[h.id]}"`);
+
   // ── Streak ──
   const streakState: StreakState = read(STREAK_KEY, emptyStreak);
   const streak = currentStreak(streakState);
@@ -107,6 +124,12 @@ export function buildContext(): string {
     "",
     `=== HABITS — TODAY (${doneDailyCount}/${dailyHabits.length} daily done) ===`,
     habitLines.length > 0 ? habitLines.join("\n") : "No daily habits set.",
+    "",
+    "=== HABIT PATTERNS (daily) ===",
+    patternLines.length > 0 ? patternLines.join("\n") : "No daily habits tracked yet.",
+    "",
+    "=== HABIT COMMENTS (the user's own words — use these to coach) ===",
+    noteLines.length > 0 ? noteLines.join("\n") : "No comments yet.",
     "",
     `=== STREAK ===`,
     `${streak} consecutive day${streak === 1 ? "" : "s"}`,

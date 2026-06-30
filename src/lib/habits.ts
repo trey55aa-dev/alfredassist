@@ -41,6 +41,90 @@ export interface HabitLog {
 export const HABITS_KEY = "alfred.habits";
 export const HABIT_LOGS_KEY = "alfred.habitLogs";
 
+/* ---------- Completion times (device-local) ----------
+   The cloud habit_logs table stores only (habit, date) — no time. To power
+   "what hour you usually check in" stats we keep a separate local map of
+   `${habitId}|${date}` -> ms-timestamp, recorded when a habit is ticked.
+   This is intentionally device-local; it builds up from when you start ticking. */
+
+export const HABIT_TIMES_KEY = "alfred.habitLogTimes";
+/** Per-habit free-text comments — grounds Alfred's coaching. Device-local. */
+export const HABIT_NOTES_KEY = "alfred.habitNotes";
+
+function readJSON<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJSON(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* quota */
+  }
+}
+
+export function timeKey(habitId: string, date: string): string {
+  return `${habitId}|${date}`;
+}
+
+export function loadHabitTimes(): Record<string, number> {
+  return readJSON<Record<string, number>>(HABIT_TIMES_KEY, {});
+}
+
+export function recordHabitTime(habitId: string, date: string, ts = Date.now()): void {
+  const all = loadHabitTimes();
+  all[timeKey(habitId, date)] = ts;
+  writeJSON(HABIT_TIMES_KEY, all);
+}
+
+export function removeHabitTime(habitId: string, date: string): void {
+  const all = loadHabitTimes();
+  delete all[timeKey(habitId, date)];
+  writeJSON(HABIT_TIMES_KEY, all);
+}
+
+/** Drop every recorded time + note for a habit (called on delete). */
+export function purgeHabitMeta(habitId: string): void {
+  const times = loadHabitTimes();
+  let changed = false;
+  for (const k of Object.keys(times)) {
+    if (k.startsWith(`${habitId}|`)) {
+      delete times[k];
+      changed = true;
+    }
+  }
+  if (changed) writeJSON(HABIT_TIMES_KEY, times);
+
+  const notes = loadHabitNotes();
+  if (notes[habitId] !== undefined) {
+    delete notes[habitId];
+    writeJSON(HABIT_NOTES_KEY, notes);
+  }
+}
+
+export function loadHabitNotes(): Record<string, string> {
+  return readJSON<Record<string, string>>(HABIT_NOTES_KEY, {});
+}
+
+export function getHabitNote(habitId: string): string {
+  return loadHabitNotes()[habitId] ?? "";
+}
+
+export function setHabitNote(habitId: string, text: string): void {
+  const all = loadHabitNotes();
+  const trimmed = text.trim();
+  if (trimmed) all[habitId] = trimmed;
+  else delete all[habitId];
+  writeJSON(HABIT_NOTES_KEY, all);
+}
+
 /* ---------- Period keys ---------- */
 
 function pad(n: number) {
