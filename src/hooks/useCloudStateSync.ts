@@ -28,6 +28,11 @@ const SYNCED_KEYS = [
   "alfred.focus.stats",
   "alfred.timer.history",
   "alfred.weeklyPlan.v1",
+  // Previously device-only — now synced so phone & computer match.
+  "alfred.mood.log",        // array of mood entries (id-keyed union merge)
+  "alfred.habitNotes",      // { habitId: comment }
+  "alfred.habitLogTimes",   // { habitId|date: ms } — powers hour-of-day stats
+  "alfred.goalDaily.done",  // { goalId|date: true } — daily goal check-ins
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's
@@ -35,6 +40,7 @@ const SYNCED_KEYS = [
 const REFRESH_EVENTS: Record<string, string> = {
   "alfred.weeklyPlan.v1": "alfred.weeklyPlan:changed",
   "alfred.timer.history": "alfred.timer:changed",
+  "alfred.mood.log": "alfred.mood:changed",
 };
 
 const POLL_MS = 4000;
