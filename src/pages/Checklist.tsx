@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { awardXp, XP_VALUES } from "@/lib/gamification";
-import { Plus, Flame, Target as TargetIcon, ChevronRight } from "lucide-react";
+import { Plus, Flame, Target as TargetIcon, ChevronRight, ArrowRight, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,7 +33,16 @@ import {
   removeHabitTime,
   purgeHabitMeta,
 } from "@/lib/habits";
-import type { Goal } from "@/lib/goals";
+import { type Goal, progressPct } from "@/lib/goals";
+import { logProgress } from "@/lib/goalsHistory";
+import {
+  isGoalDoneToday,
+  setGoalDoneToday,
+  goalsDoneTodayCount,
+  dailyPaceAmount,
+  paceHint,
+  sortForDaily,
+} from "@/lib/goalDaily";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
@@ -163,6 +173,9 @@ export default function Checklist() {
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />
 
+      {/* Auto-generated daily to-dos from the 2026 goals */}
+      <GoalDailyTasks goals={goals} setGoals={setGoals} />
+
       {/* Add habit */}
       <AddHabitForm goals={goals} onAdd={addHabit} defaultCadence={tab} />
 
@@ -205,6 +218,131 @@ export default function Checklist() {
         onDelete={deleteHabit}
       />
     </div>
+  );
+}
+
+/* ---------- Daily goal to-dos (auto-generated from 2026 goals) ---------- */
+
+function GoalDailyTasks({
+  goals,
+  setGoals,
+}: {
+  goals: Goal[];
+  setGoals: (g: Goal[]) => void;
+}) {
+  const [, force] = useState(0); // re-render after toggling the local done store
+  const today = todayKey();
+  const active = useMemo(() => sortForDaily(goals.filter((g) => !g.done)), [goals]);
+
+  if (active.length === 0) {
+    return (
+      <Card className="p-6 bg-gradient-card border-border text-center space-y-2">
+        <TargetIcon className="h-7 w-7 text-muted-foreground/40 mx-auto" />
+        <p className="font-display italic text-muted-foreground text-sm">
+          No active goals yet. Set some and they'll appear here as daily to-dos.
+        </p>
+        <Link
+          to="/goals-2026"
+          className="inline-flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-gold hover:text-gold-soft"
+        >
+          Open 2026 Goals <ArrowRight className="h-3 w-3" />
+        </Link>
+      </Card>
+    );
+  }
+
+  const doneCount = goalsDoneTodayCount(active.map((g) => g.id), today);
+
+  const toggle = (id: string) => {
+    setGoalDoneToday(id, !isGoalDoneToday(id, today), today);
+    force((n) => n + 1);
+  };
+
+  const quickLog = (goal: Goal, amt: number) => {
+    setGoals(
+      goals.map((g) =>
+        g.id === goal.id ? { ...logProgress({ goal: g, delta: amt }), localUpdatedAt: Date.now() } : g,
+      ),
+    );
+    setGoalDoneToday(goal.id, true, today);
+    force((n) => n + 1);
+  };
+
+  return (
+    <Card className="p-6 bg-gradient-card border-border">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.28em] uppercase text-gold mb-1">
+            <Sparkles className="h-3 w-3" /> Today · from your 2026 goals
+          </p>
+          <h3 className="font-display text-2xl">Move every goal forward</h3>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-display text-3xl text-gold leading-none">
+            {doneCount}
+            <span className="text-muted-foreground/40 text-xl">/{active.length}</span>
+          </div>
+          <div className="font-mono text-[8px] tracking-widest uppercase text-muted-foreground mt-1">
+            touched today
+          </div>
+        </div>
+      </div>
+
+      <ul className="space-y-2">
+        {active.map((g) => {
+          const done = isGoalDoneToday(g.id, today);
+          const hint = paceHint(g);
+          const amt = dailyPaceAmount(g);
+          const measurable = typeof g.target === "number" && g.target > 0;
+          const pct = progressPct(g);
+          return (
+            <li
+              key={g.id}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border transition-all ${
+                done ? "bg-muted/40 border-border/40" : "bg-background/40 border-border/60 hover:border-gold/30"
+              }`}
+            >
+              <Checkbox
+                checked={done}
+                onCheckedChange={() => toggle(g.id)}
+                className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
+              />
+              <Link to="/goals-2026" className="flex-1 min-w-0 group">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-sm ${done ? "line-through text-muted-foreground" : "text-foreground group-hover:text-gold transition-colors"}`}>
+                    {g.title}
+                  </span>
+                  <span className="font-mono text-[8px] tracking-[0.15em] uppercase text-gold/60">{g.category}</span>
+                </div>
+                <div className={`font-mono text-[10px] mt-0.5 ${hint ? "text-muted-foreground" : "text-muted-foreground/45"}`}>
+                  {hint ?? "make a move today"}
+                </div>
+                {measurable && (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-muted/60 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-gold transition-all duration-700" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="font-mono text-[9px] text-muted-foreground/70">{pct}%</span>
+                  </div>
+                )}
+              </Link>
+              {amt != null ? (
+                <button
+                  type="button"
+                  onClick={() => quickLog(g, amt)}
+                  title={`Log ${g.unit === "$" ? `$${amt.toLocaleString()}` : `${amt} ${g.unit ?? ""}`} toward ${g.title}`}
+                  className="shrink-0 h-8 px-2.5 rounded-lg border border-gold/30 bg-gold/10 text-gold hover:bg-gold/25 active:scale-95 transition-all font-mono text-[11px] font-semibold"
+                >
+                  +{g.unit === "$" ? `$${amt.toLocaleString()}` : amt}
+                </button>
+              ) : (
+                <ArrowRight className="h-4 w-4 text-muted-foreground/30 shrink-0" />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
