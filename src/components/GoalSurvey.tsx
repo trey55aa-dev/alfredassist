@@ -12,6 +12,9 @@ import {
   type Goal,
   BREAKDOWN_OPTIONS,
   MISS_RULE_OPTIONS,
+  VISION_OPTIONS,
+  REACH_OPTIONS,
+  MISS_OUTCOME_OPTIONS,
 } from "@/lib/goals";
 
 const INPUT =
@@ -106,12 +109,10 @@ export function GoalSurveyForm({
   return (
     <div className="space-y-5">
       <Question icon={Flag} n={1} q={`What does this look like by ${byLabel}?`}>
-        <textarea
-          value={value.vision ?? ""}
-          onChange={(e) => set({ vision: e.target.value })}
-          rows={2}
-          placeholder="Paint the picture — e.g. I can run 5K nonstop, feeling strong."
-          className={`${INPUT} resize-none`}
+        <ChipRow
+          options={VISION_OPTIONS}
+          value={value.vision}
+          onChange={(v) => set({ vision: v })}
         />
       </Question>
 
@@ -141,27 +142,25 @@ export function GoalSurveyForm({
       </Question>
 
       <Question icon={Trophy} n={4} q="Then what — once it's done, or if it isn't?">
-        <div className="grid sm:grid-cols-2 gap-2">
-          <div className="space-y-1">
+        <div className="space-y-3">
+          <div className="space-y-1.5">
             <label className="font-mono text-[9px] tracking-wider uppercase text-teal">
               If I reach it →
             </label>
-            <input
-              value={value.ifReached ?? ""}
-              onChange={(e) => set({ ifReached: e.target.value })}
-              placeholder="reward / next goal"
-              className={INPUT}
+            <ChipRow
+              options={REACH_OPTIONS}
+              value={value.ifReached}
+              onChange={(v) => set({ ifReached: v })}
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="font-mono text-[9px] tracking-wider uppercase text-coral">
               If I fall short →
             </label>
-            <input
-              value={value.ifMissed ?? ""}
-              onChange={(e) => set({ ifMissed: e.target.value })}
-              placeholder="adjust / try again"
-              className={INPUT}
+            <ChipRow
+              options={MISS_OUTCOME_OPTIONS}
+              value={value.ifMissed}
+              onChange={(v) => set({ ifMissed: v })}
             />
           </div>
         </div>

@@ -115,6 +115,30 @@ export const MISS_RULE_OPTIONS = [
   "Weekly tally",
 ] as const;
 
+/** Preset answers for "what does this look like by the deadline?" */
+export const VISION_OPTIONS = [
+  "Hit my exact target",
+  "Made it a consistent habit",
+  "Finished a concrete deliverable",
+  "Feel confident & capable",
+] as const;
+
+/** Preset answers for "if I reach it → then what?" */
+export const REACH_OPTIONS = [
+  "Celebrate & reward myself",
+  "Set a bigger goal",
+  "Move to the next goal",
+  "Lock it in as a habit",
+] as const;
+
+/** Preset answers for "if I fall short → then what?" */
+export const MISS_OUTCOME_OPTIONS = [
+  "Extend the deadline",
+  "Lower the target",
+  "Try again next cycle",
+  "Reassess if it still matters",
+] as const;
+
 export interface Goal {
   id: string;
   title: string;
