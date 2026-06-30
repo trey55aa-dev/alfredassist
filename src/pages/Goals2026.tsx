@@ -66,6 +66,7 @@ import {
 import type { AgendaEvent } from "@/lib/agenda";
 import { BackupRestore } from "@/components/BackupRestore";
 import { GoalAnalyticsPanel } from "@/components/GoalAnalyticsPanel";
+import { GoalSurveyDialog, GoalSurveyForm } from "@/components/GoalSurvey";
 import {
   CATEGORIES,
   GOALS_KEY,
@@ -73,6 +74,7 @@ import {
   GoalCategory,
   GoalQuarter,
   GoalSubStep,
+  GoalSurvey,
   GoalTimeframe,
   FinancialType,
   PACE_META,
@@ -124,6 +126,7 @@ export default function Goals2026() {
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [view, setView] = useState<"all" | "quarters" | "timeframe">("all");
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [surveyGoalId, setSurveyGoalId] = useState<string | null>(null);
 
   // Migrate older goals missing new fields
   const safeGoals = useMemo(
@@ -151,6 +154,24 @@ export default function Goals2026() {
   // Year used to anchor quarter-end checkpoint dates in the Quarters view.
   const quartersYear = new Date().getFullYear();
 
+  // Pattern detection: the breakdown style the user picks most often, used to
+  // pre-suggest an answer on the blueprint survey.
+  const breakdownSuggestion = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const g of goals) {
+      const b = g.survey?.breakdown;
+      if (b) counts[b] = (counts[b] ?? 0) + 1;
+    }
+    let best: string | undefined;
+    let max = 0;
+    for (const [k, v] of Object.entries(counts)) if (v > max) { max = v; best = k; }
+    return best;
+  }, [goals]);
+
+  const surveyGoal = surveyGoalId
+    ? safeGoals.find((g) => g.id === surveyGoalId) ?? null
+    : null;
+
   const totalDone = filteredGoals.filter((g) => g.done).length;
   const overallPct = filteredGoals.length
     ? Math.round((totalDone / filteredGoals.length) * 100)
@@ -171,10 +192,13 @@ export default function Goals2026() {
 
   const addGoal = (g: Omit<Goal, "id" | "createdAt">) => {
     const now = Date.now();
+    const id = crypto.randomUUID();
     setGoals([
       ...safeGoals,
-      { ...g, id: crypto.randomUUID(), createdAt: now, localUpdatedAt: now },
+      { ...g, id, createdAt: now, localUpdatedAt: now },
     ]);
+    // Immediately offer the quick blueprint survey for the new goal.
+    setSurveyGoalId(id);
   };
 
   return (
@@ -388,6 +412,18 @@ export default function Goals2026() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Blueprint survey — fires right after a goal is created */}
+      <GoalSurveyDialog
+        goal={surveyGoal}
+        open={surveyGoalId !== null}
+        suggestion={breakdownSuggestion}
+        onClose={() => setSurveyGoalId(null)}
+        onSave={(survey) => {
+          if (surveyGoalId) update(surveyGoalId, { survey });
+          setSurveyGoalId(null);
+        }}
+      />
     </div>
   );
 }
@@ -1350,6 +1386,18 @@ function GoalRow({
                 onChange={(next) => onChange({ tags: next })}
               />
 
+              {/* Blueprint survey — editable in place */}
+              <div className="space-y-2 rounded-xl border border-border/50 bg-background/30 p-3">
+                <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-gold" /> Goal Blueprint
+                </div>
+                <GoalSurveyForm
+                  value={goal.survey ?? {}}
+                  onChange={(s) => onChange({ survey: s })}
+                  deadline={goal.deadline}
+                />
+              </div>
+
               <AIBreakdown goal={goal} onChange={onChange} />
               {linked.length > 0 && (
                 <div className="space-y-1">
@@ -1493,6 +1541,19 @@ function AIBreakdown({
 
   const generate = async () => {
     setLoading(true);
+    // Fold the blueprint survey into the prompt so the plan matches how the
+    // user wants to work (definition of done + preferred breakdown style).
+    const s = goal.survey;
+    const surveyContext = s
+      ? [
+          s.vision ? `Definition of done by the deadline: ${s.vision}` : "",
+          s.breakdown ? `Preferred breakdown style (follow this): ${s.breakdown}` : "",
+          s.missRule ? `How the user handles misses/relapses: ${s.missRule}` : "",
+          s.ifReached ? `Reward when reached: ${s.ifReached}` : "",
+          s.ifMissed ? `Fallback if missed: ${s.ifMissed}` : "",
+        ].filter(Boolean).join("\n")
+      : "";
+    const fullContext = [surveyContext, context].filter(Boolean).join("\n\n");
     try {
       const { data, error } = await supabase.functions.invoke(
         "breakdown-goal",
@@ -1508,7 +1569,7 @@ function AIBreakdown({
               current: goal.current,
               unit: goal.unit,
             },
-            context,
+            context: fullContext,
           },
         },
       );

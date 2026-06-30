@@ -80,6 +80,41 @@ export function appendStatusEvent(
   return [...history, { status, at: new Date().toISOString(), note }];
 }
 
+/**
+ * Quick "blueprint" survey captured when a goal is created (≤4 questions).
+ * Grounds the AI breakdown, the miss/relapse handling, and the post-goal plan.
+ * Stored on the goal; device-local for now (no Supabase column yet).
+ */
+export interface GoalSurvey {
+  /** Q1 — what success looks like by the deadline. */
+  vision?: string;
+  /** Q2 — preferred way to break the goal into steps (drives the AI plan). */
+  breakdown?: string;
+  /** Q3 — how to count misses / relapses to keep improving. */
+  missRule?: string;
+  /** Q4a — what happens when the goal is reached. */
+  ifReached?: string;
+  /** Q4b — what happens if it isn't reached. */
+  ifMissed?: string;
+  updatedAt?: number;
+}
+
+/** Preset answers for the "how should I break this down?" question. */
+export const BREAKDOWN_OPTIONS = [
+  "Weekly milestones",
+  "Monthly phases",
+  "Small daily steps",
+  "A few big checkpoints",
+] as const;
+
+/** Preset answers for the "how should I count misses?" question. */
+export const MISS_RULE_OPTIONS = [
+  "Strict — reset on any miss",
+  "Forgiving — track, don't reset",
+  "Just log it, no judgment",
+  "Weekly tally",
+] as const;
+
 export interface Goal {
   id: string;
   title: string;
@@ -92,6 +127,8 @@ export interface Goal {
   unit?: string;
   done: boolean;
   note?: string;
+  /** Blueprint survey answers captured at creation (see GoalSurvey). */
+  survey?: GoalSurvey;
   createdAt: number;
   /** AI-generated phased plan. */
   subSteps?: GoalSubStep[];

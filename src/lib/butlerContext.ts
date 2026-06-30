@@ -54,6 +54,12 @@ export function buildContext(): string {
       );
     }
     if (g.deadline) parts.push(`due ${g.deadline}`);
+    const s = g.survey;
+    if (s?.vision) parts.push(`| done = ${s.vision}`);
+    if (s?.breakdown) parts.push(`| breakdown: ${s.breakdown}`);
+    if (s?.missRule) parts.push(`| misses: ${s.missRule}`);
+    if (s?.ifReached) parts.push(`| reward: ${s.ifReached}`);
+    if (s?.ifMissed) parts.push(`| if missed: ${s.ifMissed}`);
     return parts.join(" ");
   });
 
