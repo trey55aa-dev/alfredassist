@@ -90,6 +90,103 @@ function ChipRow({
   );
 }
 
+/* ---------- follow-up sub-questions ----------
+   When a main choice is made, drill into the what / why / how behind it. MC
+   sub-questions (with `options`) stay fast; ones without options are open-ended
+   for going deeper. Answers are stored in survey.details keyed by `key`. */
+
+interface SubQuestion {
+  key: string;
+  q: string;
+  options?: readonly string[]; // present → multiple choice; absent → open text
+}
+
+const VISION_SUBQ: SubQuestion[] = [
+  { key: "vision.sign", q: "What's the clearest sign you've made it? (optional)" },
+];
+
+const BREAKDOWN_SUBQ: SubQuestion[] = [
+  { key: "bd.session", q: "How long per work session?", options: ["15 min", "30 min", "1 hour", "2+ hours"] },
+  { key: "bd.when", q: "Best time of day?", options: ["Morning", "Midday", "Evening", "Whenever I can"] },
+];
+
+const MISS_SUBQ: SubQuestion[] = [
+  { key: "miss.what", q: "What counts as a miss?", options: ["Skipping a day", "Going under target", "Breaking a rule", "Not logging it"] },
+  { key: "miss.then", q: "When you miss, what should happen?", options: ["Reset to zero", "Lose that day only", "Note it & continue", "Pause until I restart"] },
+  { key: "miss.why", q: "Why this approach? (optional)" },
+];
+
+const REACH_SUBQ: SubQuestion[] = [
+  { key: "reach.how", q: "Anything specific in mind? (optional)" },
+];
+
+/** One compact follow-up — chips (teal accent, to distinguish from the gold main
+ *  answers) or a single open-ended line. */
+function SubQ({
+  sq,
+  value,
+  onChange,
+}: {
+  sq: SubQuestion;
+  value?: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60">
+        {sq.q}
+      </div>
+      {sq.options ? (
+        <div className="flex flex-wrap gap-1.5">
+          {sq.options.map((o) => {
+            const active = value === o;
+            return (
+              <button
+                key={o}
+                type="button"
+                onClick={() => onChange(o)}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-mono border transition-all ${
+                  active
+                    ? "bg-teal text-background border-teal"
+                    : "bg-background/40 border-border/60 text-muted-foreground hover:border-teal/40 hover:text-foreground"
+                }`}
+              >
+                {o}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <input
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Type your answer…"
+          className={INPUT}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The indented block of follow-ups shown once a main question is answered. */
+function SubQuestions({
+  items,
+  details,
+  onChange,
+}: {
+  items: SubQuestion[];
+  details: Record<string, string> | undefined;
+  onChange: (key: string, val: string) => void;
+}) {
+  return (
+    <div className="mt-2.5 pl-3 border-l-2 border-teal/25 space-y-2.5 fade-in">
+      {items.map((sq) => (
+        <SubQ key={sq.key} sq={sq} value={details?.[sq.key]} onChange={(v) => onChange(sq.key, v)} />
+      ))}
+    </div>
+  );
+}
+
 /** The 4-question blueprint form — reused by the creation dialog and inline editing. */
 export function GoalSurveyForm({
   value,
@@ -104,6 +201,8 @@ export function GoalSurveyForm({
 }) {
   const set = (patch: Partial<GoalSurvey>) =>
     onChange({ ...value, ...patch, updatedAt: Date.now() });
+  const setDetail = (key: string, val: string) =>
+    onChange({ ...value, details: { ...(value.details ?? {}), [key]: val }, updatedAt: Date.now() });
   const byLabel = deadline ? format(new Date(deadline), "MMM d, yyyy") : "your deadline";
 
   return (
@@ -114,6 +213,9 @@ export function GoalSurveyForm({
           value={value.vision}
           onChange={(v) => set({ vision: v })}
         />
+        {value.vision && (
+          <SubQuestions items={VISION_SUBQ} details={value.details} onChange={setDetail} />
+        )}
       </Question>
 
       <Question icon={Wand2} n={2} q="How should I break this down?">
@@ -131,6 +233,9 @@ export function GoalSurveyForm({
           value={value.breakdown}
           onChange={(v) => set({ breakdown: v })}
         />
+        {value.breakdown && (
+          <SubQuestions items={BREAKDOWN_SUBQ} details={value.details} onChange={setDetail} />
+        )}
       </Question>
 
       <Question icon={RefreshCw} n={3} q="How should I count misses or relapses?">
@@ -139,6 +244,9 @@ export function GoalSurveyForm({
           value={value.missRule}
           onChange={(v) => set({ missRule: v })}
         />
+        {value.missRule && (
+          <SubQuestions items={MISS_SUBQ} details={value.details} onChange={setDetail} />
+        )}
       </Question>
 
       <Question icon={Trophy} n={4} q="Then what — once it's done, or if it isn't?">
@@ -152,6 +260,9 @@ export function GoalSurveyForm({
               value={value.ifReached}
               onChange={(v) => set({ ifReached: v })}
             />
+            {value.ifReached && (
+              <SubQuestions items={REACH_SUBQ} details={value.details} onChange={setDetail} />
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="font-mono text-[9px] tracking-wider uppercase text-coral">

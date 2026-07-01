@@ -96,6 +96,9 @@ export interface GoalSurvey {
   ifReached?: string;
   /** Q4b — what happens if it isn't reached. */
   ifMissed?: string;
+  /** Follow-up sub-answers, keyed by sub-question id (e.g. "miss.what"). Lets
+   *  each main choice drill into the what/why/how without a rigid schema. */
+  details?: Record<string, string>;
   updatedAt?: number;
 }
 

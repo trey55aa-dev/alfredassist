@@ -60,6 +60,13 @@ export function buildContext(): string {
     if (s?.missRule) parts.push(`| misses: ${s.missRule}`);
     if (s?.ifReached) parts.push(`| reward: ${s.ifReached}`);
     if (s?.ifMissed) parts.push(`| if missed: ${s.ifMissed}`);
+    if (s?.details) {
+      const det = Object.entries(s.details)
+        .filter(([, v]) => v && v.trim())
+        .map(([k, v]) => `${k}=${v}`)
+        .join("; ");
+      if (det) parts.push(`| details: ${det}`);
+    }
     return parts.join(" ");
   });
 

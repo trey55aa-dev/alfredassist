@@ -1547,6 +1547,11 @@ function AIBreakdown({
     // Fold the blueprint survey into the prompt so the plan matches how the
     // user wants to work (definition of done + preferred breakdown style).
     const s = goal.survey;
+    const detailLines = s?.details
+      ? Object.entries(s.details)
+          .filter(([, v]) => v && v.trim())
+          .map(([k, v]) => `Detail [${k}]: ${v}`)
+      : [];
     const surveyContext = s
       ? [
           s.vision ? `Definition of done by the deadline: ${s.vision}` : "",
@@ -1554,6 +1559,7 @@ function AIBreakdown({
           s.missRule ? `How the user handles misses/relapses: ${s.missRule}` : "",
           s.ifReached ? `Reward when reached: ${s.ifReached}` : "",
           s.ifMissed ? `Fallback if missed: ${s.ifMissed}` : "",
+          ...detailLines,
         ].filter(Boolean).join("\n")
       : "";
     const fullContext = [surveyContext, context].filter(Boolean).join("\n\n");
