@@ -67,6 +67,7 @@ import type { AgendaEvent } from "@/lib/agenda";
 import { BackupRestore } from "@/components/BackupRestore";
 import { GoalAnalyticsPanel } from "@/components/GoalAnalyticsPanel";
 import { GoalSurveyDialog, GoalSurveyForm } from "@/components/GoalSurvey";
+import { GoalEmoji, GoalEmojiPicker } from "@/components/GoalEmoji";
 import {
   CATEGORIES,
   GOALS_KEY,
@@ -439,6 +440,7 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
   const [unit, setUnit] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
   const [finType, setFinType] = useState<FinancialType>("savings");
+  const [emoji, setEmoji] = useState<string | undefined>(undefined);
 
   const isMoney = category === "Money";
 
@@ -454,17 +456,20 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
       current: target ? 0 : undefined,
       unit: isMoney ? "$" : (unit.trim() || undefined),
       financialType: isMoney ? finType : undefined,
+      emoji,
       done: false,
     });
     setTitle("");
     setTarget("");
     setUnit("");
     setDeadline(undefined);
+    setEmoji(undefined);
   };
 
   return (
     <Card className="p-4 bg-gradient-card border-border space-y-3">
       <div className="flex flex-col sm:flex-row gap-2">
+        <GoalEmojiPicker value={emoji} category={category} onChange={setEmoji} />
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -1239,6 +1244,7 @@ function GoalRow({
           onCheckedChange={onToggle}
           className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
         />
+        <GoalEmoji goal={goal} className="text-xl mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <button onClick={() => setOpen((o) => !o)} className="text-left w-full">
             <div
@@ -1307,6 +1313,18 @@ function GoalRow({
 
           {open && (
             <div className="mt-3 space-y-3 fade-in">
+              {/* Emoji identity */}
+              <div className="flex items-center gap-2">
+                <GoalEmojiPicker
+                  value={goal.emoji}
+                  category={goal.category}
+                  onChange={(e) => onChange({ emoji: e })}
+                />
+                <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+                  Goal emoji
+                </span>
+              </div>
+
               {/* Analytics panel — streak tracker or quarterly pace */}
               <GoalAnalyticsPanel goal={goal} onChange={onChange} />
 

@@ -46,6 +46,7 @@ import { HealthSummaryCard } from "@/components/HealthSummaryCard";
 import { useAuth } from "@/hooks/useAuth";
 import { computeProjection } from "@/lib/goalsHistory";
 import { ProgressRing } from "@/components/ProgressRing";
+import { GoalEmoji } from "@/components/GoalEmoji";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -538,7 +539,8 @@ export default function Dashboard() {
                   className="group p-3 rounded-xl bg-background/40 border border-border/40 hover:border-gold/30 transition-all hover:-translate-y-0.5"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors line-clamp-1">
+                    <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors line-clamp-1 flex items-center gap-1.5">
+                      <GoalEmoji goal={g} className="text-base shrink-0" />
                       {g.title}
                     </span>
                     {g.quarter && (

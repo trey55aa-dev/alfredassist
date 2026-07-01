@@ -47,6 +47,7 @@ import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
+import { GoalEmoji } from "@/components/GoalEmoji";
 
 // Legacy export kept for any external importers.
 export const DAILY = SEED_HABITS.filter((h) => h.cadence === "daily").map((h) => h.title);
@@ -307,6 +308,7 @@ function GoalDailyTasks({
                 onCheckedChange={() => toggle(g.id)}
                 className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
               />
+              <GoalEmoji goal={g} className="text-lg shrink-0" />
               <Link to="/goals-2026" className="flex-1 min-w-0 group">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-sm ${done ? "line-through text-muted-foreground" : "text-foreground group-hover:text-gold transition-colors"}`}>

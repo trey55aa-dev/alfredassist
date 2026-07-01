@@ -3,7 +3,7 @@
 // recurring). Pure + deterministic so it's easy to test and reason about.
 
 import type { AgendaEvent } from "./agenda";
-import { type Goal, daysUntil } from "./goals";
+import { type Goal, daysUntil, goalEmoji } from "./goals";
 import { paceHint } from "./goalDaily";
 
 export interface SuggestedBlock {
@@ -16,9 +16,6 @@ export interface SuggestedBlock {
   goalId: string;
 }
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  Body: "💪", Career: "💼", Money: "💰", Skills: "📚", Life: "❤️",
-};
 const CATEGORY_COLOR: Record<string, string> = {
   Body: "hsl(175 55% 45%)",
   Career: "hsl(45 80% 55%)",
@@ -139,7 +136,7 @@ export function suggestSchedule(
         title: item.title,
         start: new Date(cursor).toISOString(),
         end: new Date(cursor + blockMs).toISOString(),
-        emoji: CATEGORY_EMOJI[item.goal.category] ?? "🎯",
+        emoji: goalEmoji(item.goal),
         calendarColor: CATEGORY_COLOR[item.goal.category] ?? "hsl(45 80% 55%)",
         description: item.desc,
         goalId: item.goal.id,

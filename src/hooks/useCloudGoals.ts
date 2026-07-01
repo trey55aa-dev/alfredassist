@@ -59,10 +59,13 @@ export function reconcileGoals(
       toSync.push(lg);
     } else {
       // Cloud is newer (or this device never edited it) → adopt cloud, but keep
-      // local-only fields the DB doesn't persist (financialType).
+      // local-only fields the DB doesn't persist yet (financialType, emoji, survey)
+      // so a custom emoji / blueprint isn't wiped when the cloud copy is adopted.
       finalGoals.push({
         ...meta.goal,
         financialType: lg.financialType,
+        emoji: lg.emoji ?? meta.goal.emoji,
+        survey: lg.survey ?? meta.goal.survey,
         localUpdatedAt: meta.cloudUpdatedAt,
       });
     }

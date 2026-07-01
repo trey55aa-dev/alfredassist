@@ -154,6 +154,9 @@ export interface Goal {
   unit?: string;
   done: boolean;
   note?: string;
+  /** A single emoji that gives the goal a visual identity. Falls back to a
+   *  category default via goalEmoji() when unset. */
+  emoji?: string;
   /** Blueprint survey answers captured at creation (see GoalSurvey). */
   survey?: GoalSurvey;
   createdAt: number;
@@ -241,6 +244,37 @@ export function collectTags(goals: Goal[]): string[] {
 }
 
 export const CATEGORIES: GoalCategory[] = ["Body", "Career", "Money", "Skills", "Life"];
+
+/** Curated, expressive emoji palette for goals — grouped loosely by theme. */
+export const GOAL_EMOJIS = [
+  "🎯", "🔥", "⭐", "🏆", "🚀", "💡", "🌟", "✅",
+  "💪", "🏃", "🏋️", "🧘", "🤸", "🥊", "⚽", "🏀",
+  "💼", "📈", "💻", "🧑‍💻", "📊", "🗂️", "🤝", "📝",
+  "💰", "💵", "🏦", "💳", "🪙", "📉", "🛒", "🧾",
+  "📚", "🧠", "✍️", "🎨", "🎸", "🍳", "🔧", "🌐", "📷", "🗣️",
+  "❤️", "✈️", "🏡", "💍", "🌱", "🎉", "☕", "🐶", "🌅", "🧳",
+] as const;
+
+/** Default emoji per category — every goal gets a visual even without a custom one. */
+export const CATEGORY_DEFAULT_EMOJI: Record<GoalCategory, string> = {
+  Body: "💪",
+  Career: "💼",
+  Money: "💰",
+  Skills: "📚",
+  Life: "❤️",
+};
+
+/** The emoji to show for a goal: its custom one, else a category default. */
+export function goalEmoji(goal: Pick<Goal, "emoji" | "category">): string {
+  return goal.emoji || CATEGORY_DEFAULT_EMOJI[goal.category] || "🎯";
+}
+
+/** Stable 0–N pseudo-value from a goal id — used to desync idle animations. */
+export function goalEmojiDelayMs(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  return (h % 20) * 120; // 0–2280ms
+}
 export const TIMEFRAMES: GoalTimeframe[] = ["daily", "monthly", "quarterly", "annual"];
 export const QUARTERS: Exclude<GoalQuarter, null>[] = ["Q1", "Q2", "Q3", "Q4"];
 
