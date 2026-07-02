@@ -47,6 +47,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { computeProjection } from "@/lib/goalsHistory";
 import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
+import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -206,7 +207,7 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const { habits, habitLogs, setHabitLogs } = useCloudHabits();
+  const { habits, setHabits, habitLogs, setHabitLogs, loading: habitsLoading } = useCloudHabits();
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
     date: todayKey(),
@@ -214,7 +215,15 @@ export default function Dashboard() {
     minutes: 0,
   });
   const [journal] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
-  const { goals, setGoals } = useCloudGoals();
+  const { goals, setGoals, loading: goalsLoading } = useCloudGoals();
+
+  /* ── First-run onboarding: brand-new account, nothing set up yet ── */
+  const [onboarded, setOnboarded] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(ONBOARDED_KEY) === "1",
+  );
+  const activeHabitCount = habits.filter((h) => !h.archived).length;
+  const showOnboarding =
+    !onboarded && !goalsLoading && !habitsLoading && goals.length === 0 && activeHabitCount === 0;
 
   useEffect(() => {
     if (goals.length === 0) return;
@@ -292,6 +301,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
+
+      {/* First-run wizard: goal → blueprint → starter habits */}
+      {showOnboarding && (
+        <OnboardingWizard
+          goals={goals}
+          setGoals={setGoals}
+          habits={habits}
+          setHabits={setHabits}
+          onDone={() => setOnboarded(true)}
+        />
+      )}
 
       {/* ── Greeting ── */}
       <div className="space-y-1">
