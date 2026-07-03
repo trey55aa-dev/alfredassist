@@ -3,6 +3,9 @@ project_id = "zsmnhphdagevtdooqpqp"
 [functions.breakdown-goal]
 verify_jwt = false
 
+[functions.alfred-chat]
+verify_jwt = false
+
 [functions.transcribe-audio]
 verify_jwt = false
 

@@ -4,7 +4,6 @@ import { ButlerAvatar } from "./ButlerAvatar";
 import {
   QUICK_PROMPTS,
   BUTLER_CHAT_KEY,
-  butlerReady,
   streamButlerReply,
   type ChatMessage,
 } from "@/lib/butlerAI";
@@ -103,8 +102,6 @@ export function ButlerPanel({ open, onClose }: Props) {
     setStreaming(false);
   };
 
-  const ready = butlerReady();
-
   return (
     <>
       {/* Backdrop */}
@@ -177,17 +174,6 @@ export function ButlerPanel({ open, onClose }: Props) {
                   Your butler is ready. How may I assist?
                 </p>
               </div>
-              {!ready && (
-                <div className="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center">
-                  <p className="font-mono text-[10px] tracking-wider text-amber-400">
-                    Add <code className="text-amber-300">VITE_GEMINI_API_KEY</code> to your .env
-                    to enable AI responses.
-                  </p>
-                  <p className="font-mono text-[9px] text-muted-foreground mt-1">
-                    Free key at aistudio.google.com
-                  </p>
-                </div>
-              )}
               {/* Quick prompts */}
               <div className="grid grid-cols-2 gap-2 w-full">
                 {QUICK_PROMPTS.map((p) => (

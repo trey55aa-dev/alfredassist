@@ -1,24 +1,9 @@
-// Alfred AI butler — wraps Gemini 1.5 Flash with streaming.
-//
-// API key: add VITE_GEMINI_API_KEY to your .env file.
-// Get a free key at https://aistudio.google.com
-// Restrict the key to your Lovable domain in AI Studio settings so it can
-// safely live in the client bundle.
+// Alfred AI butler client. The AI now runs SERVER-SIDE in the `alfred-chat`
+// edge function using a secret GEMINI_API_KEY — the key never ships in the
+// browser bundle. This module just calls the function and re-streams the reply
+// for the typewriter effect.
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const SYSTEM_PROMPT = `You are Alfred, the AI butler for this personal productivity command center. You are a trusted, refined advisor who knows your employer's goals and schedule intimately.
-
-Your character:
-- Speak with quiet authority — brief, precise, never verbose
-- Address the user as "sir" by default; adjust if they tell you otherwise
-- Reference specific numbers and data from the context block when giving insights
-- Celebrate wins subtly; flag risks without alarm; never moralize
-- Keep responses to 2–3 short paragraphs maximum. Use bullet points only when listing 3 or more items
-- When the employer asks what they should do next, give one clear, specific recommendation
-- When discussing goals, always reference the actual percentage and numbers from the data
-
-You have access to the employer's live data below — treat it as ground truth.`;
+import { supabase } from "@/integrations/supabase/client";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -27,12 +12,9 @@ export interface ChatMessage {
 
 export const BUTLER_CHAT_KEY = "alfred.butler.history";
 
-function apiKey(): string | undefined {
-  return import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-}
-
+/** The AI is server-side now; there's no client key to check. */
 export function butlerReady(): boolean {
-  return Boolean(apiKey());
+  return true;
 }
 
 export async function* streamButlerReply(
@@ -40,33 +22,35 @@ export async function* streamButlerReply(
   userMessage: string,
   context: string,
 ): AsyncGenerator<string> {
-  const key = apiKey();
-  if (!key) {
-    yield "I'm afraid my connection isn't configured yet, sir. Please add `VITE_GEMINI_API_KEY` to your `.env` file — a free Google AI Studio key will do nicely. Once that's in place, I'll be fully at your service.";
-    return;
-  }
-
-  const genAI = new GoogleGenerativeAI(key);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    systemInstruction: `${SYSTEM_PROMPT}\n\n--- YOUR EMPLOYER'S CURRENT DATA ---\n${context}`,
-  });
-
-  const geminiHistory = history.map((m) => ({
-    role: m.role === "assistant" ? ("model" as const) : ("user" as const),
-    parts: [{ text: m.content }],
-  }));
-
+  let reply = "";
   try {
-    const chat = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessageStream(userMessage);
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) yield text;
+    const { data, error } = await supabase.functions.invoke("alfred-chat", {
+      body: { history, message: userMessage, context },
+    });
+    if (error) {
+      const status = (error as { context?: { status?: number } })?.context?.status;
+      if (status === 429) {
+        yield "A touch too many requests at once, sir — give me a breath and try again.";
+        return;
+      }
+      throw error;
+    }
+    reply = ((data as { reply?: string } | null)?.reply ?? "").trim();
+    if (!reply) {
+      yield "I'm afraid I've drawn a blank, sir. Do try again in a moment.";
+      return;
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    yield `I encountered a difficulty, sir: ${msg}. Please verify your API key is valid and try again.`;
+    yield `I encountered a difficulty, sir: ${msg}. If this persists, the AI service may need setup — check that the alfred-chat function is deployed and GEMINI_API_KEY is set.`;
+    return;
+  }
+
+  // Re-stream the full reply in small chunks so the typing animation still plays.
+  const tokens = reply.split(/(\s+)/);
+  for (let i = 0; i < tokens.length; i += 3) {
+    yield tokens.slice(i, i + 3).join("");
+    await new Promise((r) => setTimeout(r, 16));
   }
 }
 
