@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, ArrowRight, Check, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,9 +16,12 @@ import {
   quarterFromDate,
   type Goal,
   type GoalCategory,
+  type GoalSubStep,
   type GoalSurvey,
+  type SubStepStatus,
 } from "@/lib/goals";
 import type { Habit } from "@/lib/habits";
+import { supabase } from "@/integrations/supabase/client";
 
 /** Set once the wizard finishes or is skipped — never nag again on this device. */
 export const ONBOARDED_KEY = "alfred.onboarded";
@@ -82,6 +85,8 @@ export function OnboardingWizard({
   const timelines = useMemo(() => timelineOptions(), []);
   const starters = STARTER_HABITS[category];
 
+  const [finishing, setFinishing] = useState(false);
+
   const markDone = () => {
     try { localStorage.setItem(ONBOARDED_KEY, "1"); } catch { /* quota */ }
     onDone();
@@ -89,12 +94,54 @@ export function OnboardingWizard({
 
   const skip = () => markDone();
 
-  const finish = () => {
+  /** Best-effort AI plan for the new goal. Never blocks onboarding — returns
+   *  undefined on any error/timeout so the goal is still created. */
+  const draftPlan = async (): Promise<Pick<Goal, "subSteps" | "planSummary"> | undefined> => {
+    const ctx: string[] = [];
+    if (survey.vision) ctx.push(`Definition of done: ${survey.vision}`);
+    if (survey.breakdown) ctx.push(`Preferred breakdown style (follow this): ${survey.breakdown}`);
+    if (survey.missRule) ctx.push(`How they handle misses: ${survey.missRule}`);
+    if (survey.details) {
+      for (const [k, v] of Object.entries(survey.details)) if (v?.trim()) ctx.push(`Detail [${k}]: ${v}`);
+    }
+    try {
+      const invoke = supabase.functions.invoke("breakdown-goal", {
+        body: {
+          goal: { title: title.trim(), category, timeframe: "annual", deadline },
+          context: ctx.join("\n"),
+        },
+      });
+      const timeout = new Promise<{ data: null }>((res) => setTimeout(() => res({ data: null }), 14000));
+      const result = await Promise.race([invoke, timeout]);
+      const data = (result as { data: { summary?: string; steps?: { title: string; detail?: string; durationWeeks?: number }[] } | null }).data;
+      if (!data?.steps?.length) return undefined;
+      const nowIso = new Date().toISOString();
+      const subSteps: GoalSubStep[] = data.steps.map((s) => ({
+        id: crypto.randomUUID(),
+        title: s.title,
+        detail: s.detail,
+        durationWeeks: s.durationWeeks,
+        done: false,
+        status: "pending" as SubStepStatus,
+        statusHistory: [{ status: "pending" as SubStepStatus, at: nowIso }],
+      }));
+      return { subSteps, planSummary: data.summary };
+    } catch {
+      return undefined; // AI unreachable (not deployed / no credits) — skip the plan
+    }
+  };
+
+  const finish = async () => {
+    if (finishing) return;
+    setFinishing(true);
     const now = Date.now();
     const goalId = crypto.randomUUID();
     const hasSurvey = Object.keys(survey).some(
       (k) => k !== "updatedAt" && (survey as Record<string, unknown>)[k],
     );
+
+    const plan = title.trim() ? await draftPlan() : undefined;
+
     const goal: Goal = {
       id: goalId,
       title: title.trim(),
@@ -103,6 +150,9 @@ export function OnboardingWizard({
       quarter: null,
       deadline,
       survey: hasSurvey ? survey : undefined,
+      subSteps: plan?.subSteps,
+      planSummary: plan?.planSummary,
+      planStartDate: plan ? new Date().toISOString() : undefined,
       done: false,
       createdAt: now,
       localUpdatedAt: now,
@@ -135,7 +185,7 @@ export function OnboardingWizard({
   const stepTitle = ["Set your first goal", "Your goal blueprint", "Build the daily protocol"][step];
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) skip(); }}>
+    <Dialog open onOpenChange={(o) => { if (!o && !finishing) skip(); }}>
       <DialogContent className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-xl flex items-center gap-2">
@@ -300,7 +350,8 @@ export function OnboardingWizard({
           {step > 0 ? (
             <button
               onClick={() => setStep((s) => s - 1)}
-              className="inline-flex items-center gap-1 rounded-xl border border-border/60 px-3 py-2.5 text-xs font-mono tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
+              disabled={finishing}
+              className="inline-flex items-center gap-1 rounded-xl border border-border/60 px-3 py-2.5 text-xs font-mono tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </button>
@@ -324,9 +375,14 @@ export function OnboardingWizard({
           ) : (
             <button
               onClick={finish}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-4 py-2.5 text-xs font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-[0.98] transition-all"
+              disabled={finishing}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-4 py-2.5 text-xs font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-[0.98] transition-all disabled:opacity-80 disabled:pointer-events-none"
             >
-              <Check className="h-3.5 w-3.5" /> Start my campaign
+              {finishing ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Drafting your plan…</>
+              ) : (
+                <><Check className="h-3.5 w-3.5" /> Start my campaign</>
+              )}
             </button>
           )}
         </div>
