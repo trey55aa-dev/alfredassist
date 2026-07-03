@@ -48,6 +48,7 @@ import { computeProjection } from "@/lib/goalsHistory";
 import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
+import { AlfredBriefing } from "@/components/AlfredBriefing";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -312,6 +313,9 @@ export default function Dashboard() {
           onDone={() => setOnboarded(true)}
         />
       )}
+
+      {/* Proactive Alfred — self-appearing morning briefing / evening review */}
+      <AlfredBriefing />
 
       {/* ── Greeting ── */}
       <div className="space-y-1">

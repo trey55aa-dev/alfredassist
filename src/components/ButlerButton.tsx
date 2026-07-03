@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ButlerAvatar } from "./ButlerAvatar";
 import { ButlerPanel } from "./ButlerPanel";
 import { useLocation } from "react-router-dom";
@@ -6,6 +6,13 @@ import { useLocation } from "react-router-dom";
 export function ButlerButton() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+
+  // Let other surfaces (e.g. the proactive briefing's "Ask Alfred") open the panel.
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("alfred.butler:open", handler);
+    return () => window.removeEventListener("alfred.butler:open", handler);
+  }, []);
 
   // Hide on the focus page (full-screen timer) and auth page
   const hidden =
