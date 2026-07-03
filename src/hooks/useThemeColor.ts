@@ -65,6 +65,8 @@ export const PRESET_ACCENTS: AccentColor[] = [
 const THEME_STORAGE_KEY = "alfred-theme-color";
 const ACCENT_STORAGE_KEY = "alfred-accent-color";
 const AMBIENT_STORAGE_KEY = "alfred-ambient-settings";
+/** Fired on same-tab ambient changes so AmbientPattern can update without polling. */
+export const AMBIENT_CHANGED = "alfred.ambient:changed";
 
 const DEFAULT_AMBIENT: AmbientSettings = {
   enabled: true,
@@ -240,12 +242,14 @@ export function useThemeColor() {
     const newAmbient = { ...ambient, enabled };
     setAmbient(newAmbient);
     localStorage.setItem(AMBIENT_STORAGE_KEY, JSON.stringify(newAmbient));
+    window.dispatchEvent(new Event(AMBIENT_CHANGED));
   };
 
   const setAmbientIntensity = (intensity: number) => {
     const newAmbient = { ...ambient, intensity };
     setAmbient(newAmbient);
     localStorage.setItem(AMBIENT_STORAGE_KEY, JSON.stringify(newAmbient));
+    window.dispatchEvent(new Event(AMBIENT_CHANGED));
   };
 
   return {

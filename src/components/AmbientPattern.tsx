@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { countCompletedToday, LOCAL_EVENTS_CHANGED } from "@/lib/agendaStore";
+import { AMBIENT_CHANGED } from "@/hooks/useThemeColor";
 
 interface AmbientSettings {
   enabled: boolean;
@@ -28,13 +29,16 @@ export function AmbientPattern() {
       setSettings(loadSettings());
     };
     refresh();
+    // Event-driven — no more 1s polling. Completed-count changes fire
+    // LOCAL_EVENTS_CHANGED; ambient toggle/slider fires AMBIENT_CHANGED;
+    // "storage" covers other tabs.
     window.addEventListener(LOCAL_EVENTS_CHANGED, refresh);
+    window.addEventListener(AMBIENT_CHANGED, refresh);
     window.addEventListener("storage", refresh);
-    const t = setInterval(refresh, 1000);
     return () => {
       window.removeEventListener(LOCAL_EVENTS_CHANGED, refresh);
+      window.removeEventListener(AMBIENT_CHANGED, refresh);
       window.removeEventListener("storage", refresh);
-      clearInterval(t);
     };
   }, []);
 
