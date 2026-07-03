@@ -7,6 +7,7 @@ import {
   markBriefingSeen,
   buildBriefing,
   hasBriefingData,
+  type BriefingType,
   type Tone,
 } from "@/lib/briefing";
 
@@ -21,11 +22,19 @@ const TONE: Record<Tone, string> = {
 export function AlfredBriefing() {
   const [dismissed, setDismissed] = useState(false);
   const now = useMemo(() => new Date(), []);
-  const type = currentBriefingType(now);
+  // ?briefing=morning|evening forces a variant (on-demand preview + testing),
+  // bypassing the time-window, once-seen, and empty-account guards.
+  const override = useMemo<BriefingType | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search).get("briefing");
+    return q === "morning" || q === "evening" ? q : null;
+  }, []);
+  const type = override ?? currentBriefingType(now);
   const briefing = useMemo(() => (type ? buildBriefing(type, now) : null), [type, now]);
 
   if (!type || !briefing) return null;
-  if (dismissed || briefingSeen(type) || !hasBriefingData()) return null;
+  if (dismissed) return null;
+  if (!override && (briefingSeen(type) || !hasBriefingData())) return null;
 
   const dismiss = () => {
     markBriefingSeen(type);

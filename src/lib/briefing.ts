@@ -183,9 +183,9 @@ function morning(s: Stats): Briefing {
     const hint = paceHint(top);
     items.push({
       icon: "🎯",
-      text: `${s.goalsToMove.length} goal${p(s.goalsToMove.length)} await a move${
-        hint ? ` — ${top.title}: ${hint}` : `, starting with ${top.title}`
-      }.`,
+      text: `${s.goalsToMove.length} goal${p(s.goalsToMove.length)} ${
+        s.goalsToMove.length === 1 ? "awaits" : "await"
+      } a move${hint ? ` — ${top.title}: ${hint}` : `, starting with ${top.title}`}.`,
       tone: "gold",
     });
   }
