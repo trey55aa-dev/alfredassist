@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -120,7 +121,17 @@ export default function AppLayout() {
               }}
             >
               <ErrorBoundary>
-                <Outlet />
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center py-24">
+                      <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gold/70 animate-pulse">
+                        Loading…
+                      </div>
+                    </div>
+                  }
+                >
+                  <Outlet />
+                </Suspense>
               </ErrorBoundary>
             </div>
           </main>
