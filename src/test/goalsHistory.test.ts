@@ -1,0 +1,69 @@
+import { describe, it, expect } from "vitest";
+import { paceTargetByDate, computeProjection } from "@/lib/goalsHistory";
+import type { Goal } from "@/lib/goals";
+
+function mkGoal(p: Partial<Goal> = {}): Goal {
+  return {
+    id: "g",
+    title: "Save",
+    category: "Money",
+    timeframe: "annual",
+    quarter: null,
+    done: false,
+    createdAt: new Date(2026, 0, 1).getTime(),
+    ...p,
+  } as Goal;
+}
+
+describe("paceTargetByDate", () => {
+  it("returns null without a numeric target or a deadline", () => {
+    expect(paceTargetByDate(mkGoal({ deadline: new Date(2026, 11, 31).toISOString() }), new Date())).toBeNull();
+    expect(paceTargetByDate(mkGoal({ target: 100 }), new Date())).toBeNull();
+  });
+
+  it("interpolates linearly from start to deadline", () => {
+    const goal = mkGoal({ target: 100, deadline: new Date(2026, 11, 31, 23, 59, 59).toISOString() });
+    // At the start (Jan 1) → 0; at the deadline → target.
+    expect(paceTargetByDate(goal, new Date(2026, 0, 1))).toBe(0);
+    expect(paceTargetByDate(goal, new Date(2026, 11, 31, 23, 59, 59))).toBe(100);
+    // Mid-year ≈ half the target.
+    const mid = paceTargetByDate(goal, new Date(2026, 5, 30))!;
+    expect(mid).toBeGreaterThan(45);
+    expect(mid).toBeLessThan(55);
+  });
+
+  it("clamps outside the [start, deadline] window", () => {
+    const goal = mkGoal({ target: 100, deadline: new Date(2026, 11, 31).toISOString() });
+    expect(paceTargetByDate(goal, new Date(2025, 0, 1))).toBe(0);   // before start
+    expect(paceTargetByDate(goal, new Date(2027, 0, 1))).toBe(100); // after deadline
+  });
+});
+
+describe("computeProjection", () => {
+  it("reports completion for a done goal", () => {
+    expect(computeProjection(mkGoal({ done: true })).status).toBe("complete");
+  });
+
+  it("has no data without a measurable target", () => {
+    expect(computeProjection(mkGoal()).status).toBe("no_data");
+  });
+
+  it("reports target reached when current >= target", () => {
+    expect(computeProjection(mkGoal({ target: 50, current: 50 })).status).toBe("complete");
+  });
+
+  it("computes the required daily rate to hit the deadline", () => {
+    const now = new Date(2026, 5, 1, 12, 0, 0);
+    const goal = mkGoal({
+      target: 100,
+      current: 0,
+      createdAt: now.getTime(),
+      deadline: new Date(2026, 5, 11, 12, 0, 0).toISOString(), // 10 days out
+    });
+    const proj = computeProjection(goal, now);
+    expect(proj.requiredDailyRate).not.toBeNull();
+    expect(proj.requiredDailyRate!).toBeGreaterThan(9);
+    expect(proj.requiredDailyRate!).toBeLessThan(11); // 100 / ~10 days
+    expect(proj.daysLeft).toBe(10);
+  });
+});
