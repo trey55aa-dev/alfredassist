@@ -8,6 +8,7 @@ import {
   type LoadedGoal,
 } from "@/lib/goalsRepo";
 import { GOALS_KEY, type Goal, SEED_GOALS } from "@/lib/goals";
+import { reportSync } from "@/lib/syncStatus";
 
 /* ---------- cross-device reconcile (pure, exported for testing) ---------- */
 
@@ -227,6 +228,7 @@ export function useCloudGoals(): {
     console.log(`[Goals] Syncing ${toUpsert.length} upserts, ${toDelete.length} deletes to cloud…`);
     setSyncing(true);
     setError(null);
+    reportSync({ syncing: true });
     try {
       for (const g of toUpsert) {
         await upsertGoal(user.id, g);
@@ -237,10 +239,12 @@ export function useCloudGoals(): {
       }
       cloudRef.current = next;
       setLastSyncTime(user.id);
+      reportSync({ syncing: false, error: null });
       console.log("[Goals] Cloud sync complete ✓");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`Save failed: ${msg}`);
+      reportSync({ syncing: false, error: `Goals — ${msg}` });
       console.error("[Goals] ❌ Cloud sync FAILED:", err);
     } finally {
       setSyncing(false);

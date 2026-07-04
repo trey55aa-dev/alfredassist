@@ -17,6 +17,7 @@ import {
   type Habit,
   type HabitLog,
 } from "@/lib/habits";
+import { reportSync } from "@/lib/syncStatus";
 
 /**
  * Cloud-backed habits + habit-logs hook with ownership-aware localStorage cache.
@@ -149,6 +150,7 @@ export function useCloudHabits(): {
 
     setSyncing(true);
     setError(null);
+    reportSync({ syncing: true });
     try {
       // Habits diff: upsert changed, delete missing.
       const prevHabits = cloudHabitsRef.current;
@@ -180,8 +182,11 @@ export function useCloudHabits(): {
 
       cloudHabitsRef.current = nextHabits;
       cloudLogsRef.current = nextLogs;
+      reportSync({ syncing: false, error: null });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      reportSync({ syncing: false, error: `Habits — ${msg}` });
     } finally {
       setSyncing(false);
     }

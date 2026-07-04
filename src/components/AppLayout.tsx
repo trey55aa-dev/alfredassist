@@ -7,6 +7,7 @@ import { AmbientPattern } from "@/components/AmbientPattern";
 import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { FocusModeBanner } from "@/components/FocusModeBanner";
 import { FocusModeStarter } from "@/components/FocusModeStarter";
+import { SyncStatus } from "@/components/SyncStatus";
 import { XpFlash } from "@/components/XpFlash";
 import { LevelUpModal } from "@/components/LevelUpModal";
 import { BadgeToast } from "@/components/BadgeToast";
@@ -93,6 +94,7 @@ export default function AppLayout() {
             </div>
 
             <div className="flex items-center gap-2 px-3">
+              <SyncStatus />
               <FocusModeStarter />
               <div className="hidden md:flex items-center gap-1.5 border border-gold/20 rounded-full px-2.5 py-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
