@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.alfred-chat]
 verify_jwt = false
 
+[functions.send-briefings]
+verify_jwt = false
+
 [functions.transcribe-audio]
 verify_jwt = false
 

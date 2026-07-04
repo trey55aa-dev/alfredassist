@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { QuickAddEvent } from "@/components/QuickAddEvent";
 import { SuggestedSchedule } from "@/components/SuggestedSchedule";
+import { PushToggle } from "@/components/PushToggle";
 import { EditEventForm } from "@/components/EditEventForm";
 import { DayTimeline } from "@/components/DayTimeline";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
@@ -347,6 +348,7 @@ export default function Agenda() {
         description="Today's engagements at a glance — Alfred will plan focus blocks around them."
         actions={
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            <PushToggle />
             <NotificationToggle />
             <ReminderSettings />
             <FollowUpSettingsButton />

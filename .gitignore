@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 supabase/.temp/
+
+# VAPID push keys — private key must never be committed
+supabase/vapid-keys.local.json
