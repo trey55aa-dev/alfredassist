@@ -30,7 +30,12 @@ export interface GeminiRequest {
   contents: GeminiContent[];
   tools?: { functionDeclarations: GeminiFunctionDeclaration[] }[];
   forceFunction?: string;
-  generationConfig?: { temperature?: number; maxOutputTokens?: number };
+  generationConfig?: {
+    temperature?: number;
+    maxOutputTokens?: number;
+    /** For image-capable models, e.g. ["TEXT", "IMAGE"]. */
+    responseModalities?: string[];
+  };
 }
 
 export interface GeminiResponse {
@@ -107,6 +112,19 @@ export function extractFunctionCall<T = Record<string, unknown>>(
         name: p.functionCall.name,
         args: (p.functionCall.args ?? {}) as T,
       };
+    }
+  }
+  return null;
+}
+
+/** Extract the first inline image (base64) from the response, or null. */
+export function extractInlineImage(
+  resp: GeminiResponse,
+): { mimeType: string; data: string } | null {
+  const parts = resp.candidates?.[0]?.content?.parts ?? [];
+  for (const p of parts) {
+    if (p.inlineData?.data) {
+      return { mimeType: p.inlineData.mimeType || "image/png", data: p.inlineData.data };
     }
   }
   return null;

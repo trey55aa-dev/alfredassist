@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ImagePlus, Sparkles, RotateCcw, Check, Loader2 } from "lucide-react";
+import { ImagePlus, Sparkles, Wand2, RotateCcw, Check, Loader2 } from "lucide-react";
 import {
   PRESET_SCENES,
   applyScene,
@@ -11,6 +11,7 @@ import {
   type SceneId,
   type SceneState,
 } from "@/lib/themeScenes";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Reusable background-scene chooser: designed presets with live previews, plus
@@ -20,6 +21,7 @@ export function ScenePicker({ onChange }: { onChange?: () => void }) {
   const [active, setActive] = useState<SceneState | null>(() => loadScene());
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +64,27 @@ export function ScenePicker({ onChange }: { onChange?: () => void }) {
     const state = generateScene(prompt || "alfred");
     applyScene(state);
     commit(state);
+  };
+
+  // Real AI image via the Gemini edge function → stored as an "image" scene.
+  const aiGenerate = async () => {
+    setErr(null);
+    setAiBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-background", {
+        body: { prompt: prompt || "calm, elegant, modern" },
+      });
+      if (error) throw error;
+      const image = (data as { image?: string; error?: string })?.image;
+      if (!image) throw new Error((data as { error?: string })?.error || "No image was returned.");
+      const state: SceneState = { id: "image", image, base: "0 0% 4%", fg: "0 0% 95%" };
+      applyScene(state);
+      commit(state);
+    } catch {
+      setErr("AI image needs the Gemini key set up on the server. The instant Generate above always works.");
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const isActive = (id: SceneId) => active?.id === id;
@@ -156,22 +179,37 @@ export function ScenePicker({ onChange }: { onChange?: () => void }) {
       <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
       {err && <p className="text-[11px] text-coral">{err}</p>}
 
-      {/* Generate-from-a-vibe input */}
-      <div className="flex gap-2">
+      {/* Generate-from-a-vibe input + two actions */}
+      <div className="space-y-2">
         <input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && generate()}
           placeholder="Describe a vibe — e.g. cyberpunk sunset…"
-          className="flex-1 rounded-xl bg-background/40 border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-gold/40 focus:ring-1 focus:ring-gold/20 outline-none transition-colors"
+          className="w-full rounded-xl bg-background/40 border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-gold/40 focus:ring-1 focus:ring-gold/20 outline-none transition-colors"
         />
-        <button
-          type="button"
-          onClick={generate}
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-3 py-2 text-[11px] font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-95 transition-all"
-        >
-          <Sparkles className="h-3.5 w-3.5" /> Generate
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={generate}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-3 py-2 text-[11px] font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-95 transition-all"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Generate
+          </button>
+          <button
+            type="button"
+            onClick={aiGenerate}
+            disabled={aiBusy}
+            title="Generate a real image with AI (needs the Gemini key configured)"
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-gold/40 bg-gold/10 text-gold px-3 py-2 text-[11px] font-mono tracking-wider uppercase font-semibold hover:bg-gold/20 active:scale-95 transition-all disabled:opacity-60 disabled:pointer-events-none"
+          >
+            {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+            {aiBusy ? "Painting…" : "AI image"}
+          </button>
+        </div>
+        <p className="font-mono text-[8px] tracking-wider uppercase text-muted-foreground/50">
+          Generate is instant &amp; offline · AI image asks Gemini for a real picture
+        </p>
       </div>
 
       <button

@@ -39,11 +39,16 @@ supabase secrets list | grep CRON_SECRET   # note the value for step 4
 ## 3. Deploy the edge functions
 
 ```bash
-supabase functions deploy alfred-chat      --project-ref zsmnhphdagevtdooqpqp
-supabase functions deploy breakdown-goal   --project-ref zsmnhphdagevtdooqpqp
-supabase functions deploy send-briefings   --project-ref zsmnhphdagevtdooqpqp
+supabase functions deploy alfred-chat        --project-ref zsmnhphdagevtdooqpqp
+supabase functions deploy breakdown-goal     --project-ref zsmnhphdagevtdooqpqp
+supabase functions deploy send-briefings     --project-ref zsmnhphdagevtdooqpqp
+supabase functions deploy generate-background --project-ref zsmnhphdagevtdooqpqp
 # (notion-proxy too, if you use the Notion sync)
 ```
+
+`generate-background` reuses the `GEMINI_API_KEY` secret. If Gemini's default
+image model name changes, override it without a code change:
+`supabase secrets set GEMINI_IMAGE_MODEL=<model-id>` (default `gemini-2.5-flash-image-preview`).
 
 Quick smoke test of Alfred's chat:
 ```bash
