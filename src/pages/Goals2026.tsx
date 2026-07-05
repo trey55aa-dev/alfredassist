@@ -1244,7 +1244,13 @@ function GoalRow({
           onCheckedChange={onToggle}
           className="mt-0.5 border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
         />
-        <GoalEmoji goal={goal} className="text-xl mt-0.5 shrink-0" />
+        <GoalEmojiPicker
+          value={goal.emoji}
+          category={goal.category}
+          onChange={(e) => onChange({ emoji: e })}
+        >
+          <GoalEmoji goal={goal} className="text-xl mt-0.5 shrink-0" />
+        </GoalEmojiPicker>
         <div className="flex-1 min-w-0">
           <button onClick={() => setOpen((o) => !o)} className="text-left w-full">
             <div

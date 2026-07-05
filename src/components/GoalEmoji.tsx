@@ -56,22 +56,35 @@ export function GoalEmojiPicker({
   value,
   category,
   onChange,
+  children,
 }: {
   value?: string;
   category: GoalCategory;
   onChange: (emoji: string) => void;
+  /** Custom trigger (e.g. the goal's animated emoji). Falls back to a labelled box. */
+  children?: React.ReactNode;
 }) {
   const current = value || CATEGORY_DEFAULT_EMOJI[category] || "🎯";
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          title="Pick an emoji for this goal"
-          className="h-10 w-10 shrink-0 rounded-lg border border-border bg-background/40 flex items-center justify-center text-xl hover:border-gold/40 transition-colors"
-        >
-          {current}
-        </button>
+        {children ? (
+          <button
+            type="button"
+            title="Change emoji"
+            className="shrink-0 rounded-lg p-0.5 -m-0.5 cursor-pointer hover:bg-gold/15 hover:ring-1 hover:ring-gold/30 transition-colors"
+          >
+            {children}
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="Pick an emoji for this goal"
+            className="h-10 w-10 shrink-0 rounded-lg border border-border bg-background/40 flex items-center justify-center text-xl hover:border-gold/40 transition-colors"
+          >
+            {current}
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2 bg-popover border-border" align="start">
         <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto scrollbar-thin">
