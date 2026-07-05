@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { SceneBackground } from "@/components/SceneBackground";
 import { AmbientPattern } from "@/components/AmbientPattern";
 import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { FocusModeBanner } from "@/components/FocusModeBanner";
@@ -64,6 +65,7 @@ export default function AppLayout() {
     <FocusAudioProvider>
     <SidebarProvider>
       <div className="relative min-h-screen flex w-full bg-background overflow-x-hidden">
+        <SceneBackground />
         <AmbientPattern />
 
         {/* Sidebar — desktop/tablet only; on mobile it still works as a sheet

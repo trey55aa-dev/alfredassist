@@ -17,7 +17,9 @@ import {
   Palette,
   Sparkles,
   Pencil,
+  Image as ImageIcon,
 } from "lucide-react";
+import { ScenePicker } from "@/components/ScenePicker";
 import { NAV_CATEGORIES, FOCUS_SAFE } from "@/lib/navConfig";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
@@ -256,11 +258,32 @@ export function AppSidebar() {
             )}
           </div>
 
-          {/* Theme Color Picker */}
+          {/* Background scene picker */}
           {!collapsed && (
             <Popover>
               <PopoverTrigger asChild>
                 <button className="flex items-center gap-2 w-full mt-3 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  <span className="font-mono tracking-wider uppercase text-primary">Background</span>
+                  <Sparkles className="ml-auto h-3 w-3 text-gold/60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" align="start" className="w-80 bg-popover border-border">
+                <div className="space-y-3">
+                  <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+                    Background scene
+                  </div>
+                  <ScenePicker />
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Theme Color Picker */}
+          {!collapsed && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-2 w-full mt-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
                   <Palette className="h-3.5 w-3.5" />
                   <span className="font-mono tracking-wider uppercase text-primary">Theme Color</span>
                   <div

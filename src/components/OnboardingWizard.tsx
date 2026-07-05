@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GoalSurveyForm } from "@/components/GoalSurvey";
+import { ScenePicker } from "@/components/ScenePicker";
 import {
   CATEGORIES,
   CATEGORY_DEFAULT_EMOJI,
@@ -182,7 +183,7 @@ export function OnboardingWizard({
     setCustomHabit("");
   };
 
-  const stepTitle = ["Set your first goal", "Your goal blueprint", "Build the daily protocol"][step];
+  const stepTitle = ["Choose your look", "Set your first goal", "Your goal blueprint", "Build the daily protocol"][step];
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !finishing) skip(); }}>
@@ -195,7 +196,7 @@ export function OnboardingWizard({
 
         {/* Progress dots */}
         <div className="flex items-center gap-1.5 -mt-1 mb-1">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <span
               key={i}
               className={`h-1.5 rounded-full transition-all ${
@@ -204,12 +205,23 @@ export function OnboardingWizard({
             />
           ))}
           <span className="ml-auto font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60">
-            Step {step + 1} of 3 · ~1 min
+            Step {step + 1} of 4 · ~1 min
           </span>
         </div>
 
-        {/* ── Step 1: the goal ── */}
+        {/* ── Step 1: choose a look ── */}
         {step === 0 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground/80">
+              First, make it yours. Pick a background — you can change it any time
+              from the sidebar.
+            </p>
+            <ScenePicker />
+          </div>
+        )}
+
+        {/* ── Step 2: the goal ── */}
+        {step === 1 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground/80">
               Alfred plans your days around your goals. Start with the one that
@@ -275,8 +287,8 @@ export function OnboardingWizard({
           </div>
         )}
 
-        {/* ── Step 2: the blueprint (reuses the survey) ── */}
-        {step === 1 && (
+        {/* ── Step 3: the blueprint (reuses the survey) ── */}
+        {step === 2 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground/80">
               A few taps so Alfred can coach “{title.trim()}” the way you work.
@@ -286,8 +298,8 @@ export function OnboardingWizard({
           </div>
         )}
 
-        {/* ── Step 3: starter habits ── */}
-        {step === 2 && (
+        {/* ── Step 4: starter habits ── */}
+        {step === 3 && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground/80">
               Goals move when days move. Pick a couple of daily habits to power
@@ -364,10 +376,10 @@ export function OnboardingWizard({
             </button>
           )}
           <div className="flex-1" />
-          {step < 2 ? (
+          {step < 3 ? (
             <button
               onClick={() => setStep((s) => s + 1)}
-              disabled={step === 0 && !title.trim()}
+              disabled={step === 1 && !title.trim()}
               className="inline-flex items-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-4 py-2.5 text-xs font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
             >
               Continue <ArrowRight className="h-3.5 w-3.5" />
