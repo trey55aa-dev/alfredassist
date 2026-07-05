@@ -150,6 +150,23 @@ export default function Checklist() {
     if (!isCompleteForPeriod(habit, logs)) handleToggle(habit);
   };
 
+  // Edit history from the calendar: backfill a missed day or undo a stray tick.
+  const handleToggleDate = (habit: Habit, dateYmd: string) => {
+    // Editing *today* runs the full flow (streak, XP, linked-goal, completion time).
+    if (dateYmd === todayKey()) {
+      handleToggle(habit);
+      return;
+    }
+    // A past day only adjusts the record — no retroactive XP or goal bumps.
+    const has = logs.some((l) => l.habitId === habit.id && l.date === dateYmd);
+    if (has) {
+      setLogs(logs.filter((l) => !(l.habitId === habit.id && l.date === dateYmd)));
+      removeHabitTime(habit.id, dateYmd);
+    } else {
+      setLogs([...logs, { habitId: habit.id, date: dateYmd }]);
+    }
+  };
+
   const addHabit = (h: Omit<Habit, "id" | "createdAt">) => {
     setHabits([...habits, { ...h, id: crypto.randomUUID(), createdAt: Date.now() }]);
   };
@@ -217,6 +234,7 @@ export default function Checklist() {
         goals={goals}
         onUpdate={updateHabit}
         onDelete={deleteHabit}
+        onToggleDate={handleToggleDate}
       />
     </div>
   );

@@ -15,8 +15,11 @@ import {
   Trophy,
   Trash2,
   Clock,
+  Check,
+  X,
   Target as TargetIcon,
 } from "lucide-react";
+import { todayKey } from "@/lib/alfred";
 import {
   type Habit,
   type HabitLog,
@@ -46,9 +49,11 @@ interface Props {
   goals: Goal[];
   onUpdate: (id: string, patch: Partial<Habit>) => void;
   onDelete: (id: string) => void;
+  /** Toggle a habit's completion on a specific day (backfill / correct history). */
+  onToggleDate: (habit: Habit, dateYmd: string) => void;
 }
 
-export function HabitDetailSheet({ habit, open, onClose, logs, goals, onUpdate, onDelete }: Props) {
+export function HabitDetailSheet({ habit, open, onClose, logs, goals, onUpdate, onDelete, onToggleDate }: Props) {
   const [tab, setTab] = useState<Tab>("calendar");
   const now = new Date();
   const [view, setView] = useState({ year: now.getFullYear(), month: now.getMonth() });
@@ -92,7 +97,7 @@ export function HabitDetailSheet({ habit, open, onClose, logs, goals, onUpdate, 
 
         <div className="pt-2">
           {tab === "calendar" && (
-            <CalendarTab habit={habit} logs={logs} view={view} setView={setView} />
+            <CalendarTab habit={habit} logs={logs} view={view} setView={setView} onToggleDate={onToggleDate} />
           )}
           {tab === "stats" && <StatsTab habit={habit} logs={logs} />}
           {tab === "settings" && (
@@ -111,17 +116,26 @@ function CalendarTab({
   logs,
   view,
   setView,
+  onToggleDate,
 }: {
   habit: Habit;
   logs: HabitLog[];
   view: { year: number; month: number };
   setView: (v: { year: number; month: number }) => void;
+  onToggleDate: (habit: Habit, dateYmd: string) => void;
 }) {
   const times = useMemo(() => loadHabitTimes(), [habit.id, view.year, view.month]);
   const cells = useMemo(
     () => monthCells(habit, logs, times, view.year, view.month),
     [habit, logs, times, view.year, view.month],
   );
+
+  // Which day is open in the editor below the grid (Streaks-style tap-to-inspect).
+  const [selectedYmd, setSelectedYmd] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedYmd(null);
+  }, [habit.id, view.year, view.month]);
+  const selectedCell = selectedYmd ? cells.find((c) => c.ymd === selectedYmd) ?? null : null;
 
   const monthLabel = new Date(view.year, view.month, 1).toLocaleDateString("en-US", {
     month: "long",
@@ -164,9 +178,16 @@ function CalendarTab({
         ))}
       </div>
 
-      {/* Day circles */}
+      {/* Day circles — tap any day up to today to inspect / edit it */}
       <div className="grid grid-cols-7 gap-1.5">
-        {cells.map((c, i) => <DayCircle key={i} cell={c} />)}
+        {cells.map((c, i) => (
+          <DayCircle
+            key={i}
+            cell={c}
+            selected={c.ymd === selectedYmd}
+            onSelect={c.state === "future" ? undefined : () => setSelectedYmd(c.ymd)}
+          />
+        ))}
       </div>
 
       {/* Legend */}
@@ -183,17 +204,31 @@ function CalendarTab({
           <span className="h-3 w-3 rounded-full border-2 border-gold/60 inline-block" /> Today
         </span>
       </div>
+
+      {/* Selected-day inspector / editor */}
+      <DayDetail
+        cell={selectedCell}
+        onToggle={() => selectedCell && onToggleDate(habit, selectedCell.ymd)}
+      />
     </div>
   );
 }
 
-function DayCircle({ cell }: { cell: DayCell }) {
+function DayCircle({
+  cell,
+  selected,
+  onSelect,
+}: {
+  cell: DayCell;
+  selected: boolean;
+  onSelect?: () => void;
+}) {
   const n = cell.date.getDate();
   const base = "aspect-square rounded-full flex items-center justify-center font-mono text-[10px] transition-all";
   const dim = cell.inMonth ? "" : "opacity-30";
 
   let cls = "";
-  let content: React.ReactNode = n;
+  const content: React.ReactNode = n;
   switch (cell.state) {
     case "done":
       cls = "bg-gradient-gold text-primary-foreground shadow-gold font-semibold";
@@ -214,14 +249,75 @@ function DayCircle({ cell }: { cell: DayCell }) {
       break;
   }
 
+  const ring = selected ? " ring-2 ring-gold ring-offset-2 ring-offset-background" : "";
+  const interactive = onSelect ? " cursor-pointer hover:scale-110 active:scale-95" : " cursor-default";
+
   const title =
     cell.ymd +
     (cell.state === "done" ? " · done" : cell.state === "missed" ? " · missed" : "") +
-    (cell.hour != null ? ` · logged ${formatHour(cell.hour)}` : "");
+    (cell.hour != null ? ` · logged ${formatHour(cell.hour)}` : "") +
+    (onSelect ? " · tap to edit" : "");
 
   return (
-    <div className={`${base} ${cls} ${dim}`} title={title}>
+    <button
+      type="button"
+      disabled={!onSelect}
+      onClick={onSelect}
+      aria-pressed={cell.state === "done"}
+      className={`${base} ${cls} ${dim}${ring}${interactive}`}
+      title={title}
+    >
       {content}
+    </button>
+  );
+}
+
+/* ─── Selected-day inspector + editor ───────────────────── */
+
+function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => void }) {
+  if (!cell) {
+    return (
+      <p className="text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/45 pt-1">
+        Tap any day to view or edit it
+      </p>
+    );
+  }
+
+  const done = cell.state === "done";
+  const isToday = cell.ymd === todayKey();
+  const dateLabel = cell.date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+  const stateLabel = done
+    ? "Completed"
+    : isToday
+      ? "Not done yet today"
+      : cell.state === "missed"
+        ? "Missed"
+        : "Not tracked";
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-white/3 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
+      <div className="min-w-0">
+        <div className="font-display text-base leading-tight">{dateLabel}</div>
+        <div className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70 mt-0.5">
+          {stateLabel}
+          {cell.hour != null && <span className="text-gold/70"> · logged {formatHour(cell.hour)}</span>}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 font-mono text-[10px] tracking-wider uppercase transition-all active:scale-95 ${
+          done
+            ? "border border-coral/40 text-coral/80 hover:bg-coral/10"
+            : "bg-gradient-gold text-primary-foreground shadow-gold hover:opacity-90"
+        }`}
+      >
+        {done ? <><X className="h-3.5 w-3.5" /> Undo</> : <><Check className="h-3.5 w-3.5" /> Mark done</>}
+      </button>
     </div>
   );
 }
