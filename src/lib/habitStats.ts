@@ -49,7 +49,7 @@ export function habitStart(habit: Habit, logs: HabitLog[]): Date {
 
 /* ---------- month calendar ---------- */
 
-export type DayState = "done" | "missed" | "today" | "future" | "pre" | "none";
+export type DayState = "done" | "missed" | "today" | "future" | "pre" | "pending" | "none";
 
 export interface DayCell {
   date: Date;
@@ -73,6 +73,9 @@ export function monthCells(
   const start = habitStart(habit, logs);
   const startYmd = ymd(start);
   const todayY = todayKey(today);
+  // Yesterday gets a one-day grace: still uncounted, but not yet a "miss" — you
+  // may just have forgotten to tick it. It firms up to "missed" the day after.
+  const yesterdayY = ymd(addDays(startOfDay(today), -1));
   const daily = habit.cadence === "daily";
 
   const first = new Date(year, month, 1);
@@ -90,7 +93,7 @@ export function monthCells(
     if (done) state = "done";
     else if (key > todayY) state = "future";
     else if (key === todayY) state = "today";
-    else if (daily && key >= startYmd) state = "missed";
+    else if (daily && key >= startYmd) state = key >= yesterdayY ? "pending" : "missed";
     else state = "none"; // non-daily empty day, or before tracking began
 
     cells.push({ date, ymd: key, inMonth, state, hour: ts != null ? new Date(ts).getHours() : null });
@@ -166,9 +169,10 @@ export function computeHabitStats(
       yearElapsed++;
       if (set.has(ymd(d))) yearDone++;
     }
-    // total misses: start .. yesterday (today is still pending, never a miss)
-    const yesterday = addDays(todayMid, -1);
-    for (let d = new Date(start), i = 0; d <= yesterday && i < MAX_DAYS; d = addDays(d, 1), i++) {
+    // total misses: start .. two days ago. Today is still pending and yesterday
+    // sits in its one-day grace window, so neither counts as a miss yet.
+    const graceCutoff = addDays(todayMid, -2);
+    for (let d = new Date(start), i = 0; d <= graceCutoff && i < MAX_DAYS; d = addDays(d, 1), i++) {
       if (!set.has(ymd(d))) {
         totalMisses++;
         missesByWeekday[d.getDay()]++;

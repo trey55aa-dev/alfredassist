@@ -239,6 +239,10 @@ function DayCircle({
     case "today":
       cls = "border-2 border-gold/60 text-gold font-semibold";
       break;
+    case "pending":
+      // yesterday, still uncounted but within grace — inviting, not alarming
+      cls = "border border-dashed border-gold/35 text-muted-foreground/70";
+      break;
     case "future":
       cls = "text-muted-foreground/25";
       break;
@@ -254,7 +258,13 @@ function DayCircle({
 
   const title =
     cell.ymd +
-    (cell.state === "done" ? " · done" : cell.state === "missed" ? " · missed" : "") +
+    (cell.state === "done"
+      ? " · done"
+      : cell.state === "missed"
+        ? " · missed"
+        : cell.state === "pending"
+          ? " · not counted yet"
+          : "") +
     (cell.hour != null ? ` · logged ${formatHour(cell.hour)}` : "") +
     (onSelect ? " · tap to edit" : "");
 
@@ -294,9 +304,11 @@ function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => v
     ? "Completed"
     : isToday
       ? "Not done yet today"
-      : cell.state === "missed"
-        ? "Missed"
-        : "Not tracked";
+      : cell.state === "pending"
+        ? "Not counted yet"
+        : cell.state === "missed"
+          ? "Missed"
+          : "Not tracked";
 
   return (
     <div className="rounded-xl border border-border/60 bg-white/3 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
