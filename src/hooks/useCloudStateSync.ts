@@ -33,6 +33,8 @@ const SYNCED_KEYS = [
   "alfred.habitNotes",      // { habitId: comment }
   "alfred.habitLogTimes",   // { habitId|date: ms } — powers hour-of-day stats
   "alfred.goalDaily.done",  // { goalId|date: true } — daily goal check-ins
+  "alfred.decisions",       // accept/dismiss log — Alfred's learning follows you
+  "alfred.scene",           // chosen background scene — your look follows you
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's
@@ -41,6 +43,7 @@ const REFRESH_EVENTS: Record<string, string> = {
   "alfred.weeklyPlan.v1": "alfred.weeklyPlan:changed",
   "alfred.timer.history": "alfred.timer:changed",
   "alfred.mood.log": "alfred.mood:changed",
+  "alfred.scene": "alfred.scene:changed", // SceneBackground repaints live
 };
 
 const POLL_MS = 4000;

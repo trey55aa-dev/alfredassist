@@ -1691,6 +1691,13 @@ function AIBreakdown({
 
   const removePlan = () => {
     if (!confirm("Discard the AI plan?")) return;
+    // A discarded plan is a decision — Alfred learns this style didn't fit.
+    recordDecision({
+      source: "ai-plan",
+      key: `plan-${goal.id}`,
+      action: "dismissed",
+      label: `AI plan for "${goal.title}" (${subSteps.length} steps, ${subSteps.filter((s) => s.done).length} done)`,
+    });
     onChange({
       subSteps: undefined,
       planSummary: undefined,
