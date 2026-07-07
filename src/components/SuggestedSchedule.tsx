@@ -18,6 +18,10 @@ import { addLocalEvent } from "@/lib/agendaStore";
 import { isGoogleConnected, createGoogleEvent } from "@/lib/googleCalendar";
 import { eventsToIcs, downloadIcs } from "@/lib/ics";
 import type { AgendaEvent } from "@/lib/agenda";
+import { recordDecision, wasDismissed } from "@/lib/alfredAdapt";
+
+/** Declined blocks stay off the table for a week before they can reappear. */
+const DISMISS_WINDOW_MS = 7 * 24 * 3600_000;
 
 function fmtRange(startIso: string, endIso: string): string {
   const f = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -39,7 +43,11 @@ export function SuggestedSchedule({
   const activeGoals = goals.filter((g) => !g.done);
 
   const generate = () => {
-    const b = suggestSchedule(goals, events, { now, date: now });
+    // Filter out anything the user said "no" to recently — Alfred adapts to
+    // their decisions rather than re-pitching the same blocks.
+    const b = suggestSchedule(goals, events, { now, date: now }).filter(
+      (x) => !wasDismissed("schedule-block", `${x.goalId}-${x.title}`, DISMISS_WINDOW_MS),
+    );
     setBlocks(b);
     if (b.length === 0) {
       toast.message("No open slots today", {
@@ -80,13 +88,27 @@ export function SuggestedSchedule({
   const accept = async (b: SuggestedBlock) => {
     addLocalEvent(toEvent(b));
     await pushGoogle(b);
+    recordDecision({
+      source: "schedule-block",
+      key: `${b.goalId}-${b.title}`,
+      action: "accepted",
+      label: `${b.title} · ${fmtRange(b.start, b.end)}`,
+    });
     setBlocks((bs) => bs?.filter((x) => x !== b) ?? null);
     onAdded();
     toast.success("Added to your day");
   };
 
-  const dismiss = (b: SuggestedBlock) =>
+  const dismiss = (b: SuggestedBlock) => {
+    // Alfred learns from the "no" — declined blocks shape future suggestions.
+    recordDecision({
+      source: "schedule-block",
+      key: `${b.goalId}-${b.title}`,
+      action: "dismissed",
+      label: `${b.title} · ${fmtRange(b.start, b.end)}`,
+    });
     setBlocks((bs) => bs?.filter((x) => x !== b) ?? null);
+  };
 
   const addAll = async () => {
     if (!blocks || blocks.length === 0) return;

@@ -22,6 +22,7 @@ import {
   dowToPlanDay,
 } from "./weeklyPlan";
 import { levelFromXp } from "./gamification";
+import { adaptationSummary } from "./alfredAdapt";
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -156,6 +157,12 @@ export function buildContext(): string {
     "=== BRAIN DUMP (recent items) ===",
     brainSnippet || "Empty.",
   ];
+
+  // ── What the user decided about past recommendations — Alfred adapts. ──
+  const decisions = adaptationSummary();
+  if (decisions) {
+    lines.push("", decisions);
+  }
 
   return lines.join("\n");
 }

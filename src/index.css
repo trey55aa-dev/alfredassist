@@ -126,6 +126,15 @@
     animation: fade-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
+  /* Route change — quick, subtle slide-fade so moving between features feels
+     instant but not jarring. Re-triggered by keying the wrapper on pathname. */
+  .page-in {
+    animation: fade-in 0.18s ease-out both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .page-in { animation: none; }
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: hsl(var(--background)); }

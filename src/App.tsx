@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -32,6 +32,42 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
 
+/**
+ * Warm every route chunk once the browser is idle, so moving between features
+ * is instant — no "Awakening Alfred…" flash after the first minute of use.
+ * Purely a cache warm-up: failures are ignored (chunks load on demand anyway).
+ */
+function usePrefetchRoutes() {
+  useEffect(() => {
+    const prefetch = () => {
+      Promise.allSettled([
+        import("./pages/Dashboard"),
+        import("./pages/Checklist"),
+        import("./pages/Focus"),
+        import("./pages/BrainDump"),
+        import("./pages/Planner"),
+        import("./pages/Guide"),
+        import("./pages/Journal"),
+        import("./pages/Goals2026"),
+        import("./pages/Agenda"),
+        import("./pages/CustomLists"),
+        import("./pages/Health"),
+        import("./pages/Achievements"),
+        import("./pages/Schedule"),
+        import("./pages/Review"),
+        import("./pages/Mood"),
+        import("./pages/Notion"),
+      ]);
+    };
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(prefetch, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(prefetch, 2500);
+    return () => window.clearTimeout(t);
+  }, []);
+}
+
 function RouteFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -42,7 +78,9 @@ function RouteFallback() {
   );
 }
 
-const App = () => (
+const App = () => {
+  usePrefetchRoutes();
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -83,6 +121,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

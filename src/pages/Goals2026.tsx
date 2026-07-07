@@ -43,7 +43,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { awardXp, progressXp, XP_VALUES } from "@/lib/gamification";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
-import { Cloud, CloudOff, Minus, History } from "lucide-react";
+import { Cloud, CloudOff, Minus, History, X as XIcon } from "lucide-react";
+import { recordDecision, wasDismissed } from "@/lib/alfredAdapt";
 import {
   computeProjection,
   last14Days,
@@ -2870,8 +2871,24 @@ function SuggestedNextRow({ goal }: { goal: Goal }) {
   const [added, setAdded] = useState(() =>
     suggestion ? isSuggestionAdded(suggestion.dedupeKey) : false,
   );
+  // Respect earlier "no" — a dismissed suggestion stays gone (Alfred adapts).
+  const [dismissed, setDismissed] = useState(() =>
+    suggestion ? wasDismissed("goal-next-step", suggestion.dedupeKey) : false,
+  );
 
-  if (!suggestion) return null;
+  if (!suggestion || dismissed) return null;
+
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    recordDecision({
+      source: "goal-next-step",
+      key: suggestion.dedupeKey,
+      action: "dismissed",
+      label: `${suggestion.taskTitle} (goal: ${goal.title})`,
+    });
+    setDismissed(true);
+  };
 
   const handleAdd = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -2899,6 +2916,12 @@ function SuggestedNextRow({ goal }: { goal: Goal }) {
         addLocalEvent({ ...draft, id, source: "manual" });
       }
       markSuggestionAdded(suggestion.dedupeKey);
+      recordDecision({
+        source: "goal-next-step",
+        key: suggestion.dedupeKey,
+        action: "accepted",
+        label: `${suggestion.taskTitle} (goal: ${goal.title})`,
+      });
       setAdded(true);
       toast({
         title: "Added to your agenda",
@@ -2954,20 +2977,31 @@ function SuggestedNextRow({ goal }: { goal: Goal }) {
           {suggestion.rationale}
         </p>
       )}
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2">
         {added ? (
           <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
             Added to Sunday
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="inline-flex items-center gap-1 rounded border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-[9px] tracking-[0.2em] uppercase text-gold hover:bg-gold/20 transition-colors"
-          >
-            <Plus className="h-2.5 w-2.5" />
-            Add to agenda
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              title="Not for me — Alfred won't suggest this again"
+              className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-0.5 font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground/70 hover:text-foreground hover:border-border transition-colors"
+            >
+              <XIcon className="h-2.5 w-2.5" />
+              No thanks
+            </button>
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="inline-flex items-center gap-1 rounded border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono text-[9px] tracking-[0.2em] uppercase text-gold hover:bg-gold/20 transition-colors"
+            >
+              <Plus className="h-2.5 w-2.5" />
+              Add to agenda
+            </button>
+          </>
         )}
       </div>
     </div>

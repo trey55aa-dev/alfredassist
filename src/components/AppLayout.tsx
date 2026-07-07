@@ -46,6 +46,7 @@ export default function AppLayout() {
   useReminders();
   const [moodPrompt, dismissMoodPrompt] = useMoodPrompt();
   const pageTitle = usePageTitle();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     initAppIcon();
@@ -113,11 +114,12 @@ export default function AppLayout() {
           {/* Page content — extra bottom padding for mobile bottom nav + home bar */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
             <div
+              key={pathname}
               className="
                 max-w-6xl mx-auto
                 px-4 sm:px-6 lg:px-8
                 py-6 sm:py-8
-                fade-in
+                page-in
               "
               style={{
                 paddingBottom:
