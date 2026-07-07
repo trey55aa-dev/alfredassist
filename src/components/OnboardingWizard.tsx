@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Plus, Sparkles, Loader2, Target } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,7 @@ export function OnboardingWizard({
   setHabits: (next: Habit[]) => void;
   onDone: () => void;
 }) {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<GoalCategory>("Body");
@@ -188,6 +189,10 @@ export function OnboardingWizard({
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !finishing) skip(); }}>
       <DialogContent className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+        {showWelcome ? (
+          <WelcomeIntro onStart={() => setShowWelcome(false)} onSkip={skip} />
+        ) : (
+        <>
         <DialogHeader>
           <DialogTitle className="font-display text-xl flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-gold" /> Welcome — {stepTitle}
@@ -398,7 +403,64 @@ export function OnboardingWizard({
             </button>
           )}
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ---------- welcome / quick feature tour ---------- */
+
+function WelcomeIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
+  const features = [
+    { Icon: Target, name: "Goals", line: "Tell Alfred what matters. He turns it into small steps." },
+    { Icon: CheckCircle2, name: "Habits", line: "Do a little each day — your streak keeps you going." },
+    { Icon: Sparkles, name: "Ask Alfred", line: "Need a plan or a nudge? Just ask, any time." },
+  ];
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="font-display text-2xl">Welcome to Alfred</DialogTitle>
+      </DialogHeader>
+      <p className="text-sm text-muted-foreground/80 -mt-1">
+        Your calm companion for goals, habits, and getting life in order.
+        Set it up once — it grows with you.
+      </p>
+
+      <div className="space-y-3 py-2">
+        {features.map(({ Icon, name, line }) => (
+          <div key={name} className="flex items-start gap-3">
+            <div className="h-11 w-11 shrink-0 rounded-2xl bg-gold/12 border border-gold/25 flex items-center justify-center text-gold">
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="pt-0.5">
+              <div className="font-display text-base leading-tight">{name}</div>
+              <div className="text-[13px] text-muted-foreground/75 leading-snug">{line}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/50">
+        Takes about a minute · you can change anything later
+      </p>
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={onSkip}
+          className="rounded-xl px-3 py-2.5 text-xs font-mono tracking-wider uppercase text-muted-foreground/60 hover:text-foreground transition-colors"
+        >
+          Skip for now
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={onStart}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-gold text-primary-foreground px-5 py-2.5 text-xs font-mono tracking-wider uppercase font-semibold hover:bg-gold-soft active:scale-[0.98] transition-all"
+        >
+          Get started <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </>
   );
 }
