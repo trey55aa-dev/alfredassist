@@ -22,18 +22,25 @@ import {
   ENV_TAGS,
   NFL_INPUTS_KEY,
   NFL_WEIGHTS_KEY,
+  ensureWeights,
+  fetchDetailMap,
+  fetchInjuries,
+  fetchSeasonFlow,
   fetchStandings,
   fetchWeek,
   formatKickoff,
   gradeGame,
   groupByDay,
+  liveWinProb,
   predictGame,
+  styleProfile,
   type EnvTag,
   type Game,
+  type GameContext,
   type GameInput,
   type ModelWeights,
   type Prediction,
-  type StatsMap,
+  type TeamFlowStats,
 } from "@/lib/nflPredictor";
 
 type InputsMap = Record<string, GameInput>;
@@ -41,6 +48,11 @@ type InputsMap = Record<string, GameInput>;
 const WEIGHT_LABELS: { key: keyof ModelWeights; label: string; hint: string }[] = [
   { key: "record", label: "Record", hint: "Win-loss percentage gap" },
   { key: "scoring", label: "Scoring margin", hint: "Points for vs against, per game" },
+  { key: "production", label: "Production", hint: "Points → expected wins, yards-per-point" },
+  { key: "yardage", label: "Yardage", hint: "Total yards per game" },
+  { key: "flow", label: "Game flow", hint: "1st/2nd-half surges from quarter scoring" },
+  { key: "injuries", label: "Injuries", hint: "Injury-report burden, QB-weighted" },
+  { key: "style", label: "Style matchup", hint: "Offense type vs defense type" },
   { key: "homeField", label: "Home field", hint: "Baseline bump + home/road splits" },
   { key: "momentum", label: "Momentum", hint: "Current win/loss streaks" },
   { key: "reasoning", label: "My reasoning", hint: "Your lean, tags and notes" },
@@ -107,8 +119,16 @@ function WeightsPanel({
 
 /* ─── Probability bar ─────────────────────────────────── */
 
-function ProbBar({ game, prediction }: { game: Game; prediction: Prediction }) {
-  const homePct = Math.round(prediction.homeProb * 100);
+function ProbBar({
+  game,
+  homeProb,
+  winner,
+}: {
+  game: Game;
+  homeProb: number;
+  winner: "home" | "away";
+}) {
+  const homePct = Math.round(homeProb * 100);
   const awayColor = game.away.color ? `#${game.away.color}` : "hsl(var(--muted))";
   const homeColor = game.home.color ? `#${game.home.color}` : "hsl(var(--muted))";
   return (
@@ -118,10 +138,10 @@ function ProbBar({ game, prediction }: { game: Game; prediction: Prediction }) {
         <div style={{ width: `${homePct}%`, background: homeColor }} />
       </div>
       <div className="flex justify-between mt-1 font-mono text-[10px] text-muted-foreground">
-        <span className={prediction.winner === "away" ? "text-gold" : ""}>
+        <span className={winner === "away" ? "text-gold" : ""}>
           {game.away.abbreviation} {100 - homePct}%
         </span>
-        <span className={prediction.winner === "home" ? "text-gold" : ""}>
+        <span className={winner === "home" ? "text-gold" : ""}>
           {game.home.abbreviation} {homePct}%
         </span>
       </div>
@@ -131,7 +151,17 @@ function ProbBar({ game, prediction }: { game: Game; prediction: Prediction }) {
 
 /* ─── Game card ───────────────────────────────────────── */
 
-function TeamRow({ team, score, winner }: { team: Game["home"]; score?: number; winner: boolean }) {
+function TeamRow({
+  team,
+  score,
+  winner,
+  badges,
+}: {
+  team: Game["home"];
+  score?: number;
+  winner: boolean;
+  badges: string[];
+}) {
   return (
     <div className="flex items-center gap-2 min-w-0">
       {team.logo && <img src={team.logo} alt="" className="h-7 w-7 shrink-0" loading="lazy" />}
@@ -139,34 +169,104 @@ function TeamRow({ team, score, winner }: { team: Game["home"]; score?: number; 
         <div className={`text-sm truncate ${winner ? "text-gold" : "text-foreground"}`}>
           {team.shortName}
         </div>
-        <div className="font-mono text-[10px] text-muted-foreground">{team.record ?? ""}</div>
+        <div className="font-mono text-[10px] text-muted-foreground">
+          {team.record ?? ""}
+          {badges.length > 0 && (
+            <span className="text-muted-foreground/60"> · {badges.join(" · ")}</span>
+          )}
+        </div>
       </div>
       {score != null && <div className="ml-auto font-display text-xl text-foreground">{score}</div>}
     </div>
   );
 }
 
+function FlowChips({ team, flow }: { team: Game["home"]; flow?: TeamFlowStats }) {
+  if (!flow || flow.games === 0) return null;
+  const chips: string[] = [];
+  const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
+  chips.push(`1H ${fmt(flow.firstHalfMarginPg)}/gm`);
+  chips.push(`2H ${fmt(flow.secondHalfMarginPg)}/gm`);
+  if (flow.comebackWins > 0) chips.push(`${flow.comebackWins} comeback W${flow.comebackWins > 1 ? "s" : ""}`);
+  if (flow.blownLeads > 0) chips.push(`${flow.blownLeads} blown lead${flow.blownLeads > 1 ? "s" : ""}`);
+  chips.push(flow.avgQuarterSwing >= 7 ? "Volatile" : flow.avgQuarterSwing <= 4 ? "Steady" : "Ebbs & flows");
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="font-mono text-[10px] text-foreground/80 w-10">{team.abbreviation}</span>
+      {chips.map((c) => (
+        <span
+          key={c}
+          className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-muted-foreground"
+        >
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function InjuryList({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
+  const report = ctx.injuries?.[team.id];
+  if (!report || report.players.length === 0) return null;
+  const top = report.players.slice(0, 4);
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[10px] text-foreground/80 mb-1">{team.abbreviation}</div>
+      <ul className="space-y-0.5">
+        {top.map((p, i) => (
+          <li key={`${p.name}-${i}`} className="text-xs text-muted-foreground truncate">
+            {p.name} <span className="text-muted-foreground/60">{p.position}</span>{" "}
+            <span className={/out|reserve|ir/i.test(p.status) ? "text-red-400" : "text-amber-400/80"}>
+              {p.status}
+            </span>
+          </li>
+        ))}
+        {report.players.length > 4 && (
+          <li className="text-[10px] font-mono text-muted-foreground/60">
+            +{report.players.length - 4} more
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function teamBadges(team: Game["home"], ctx: GameContext): string[] {
+  const prof = styleProfile(ctx.detail?.[team.id], ctx.stats[team.id]);
+  const badges: string[] = [];
+  if (prof.offense) badges.push(prof.offense);
+  if (prof.offenseTier && prof.offenseTier !== "Average") badges.push(`${prof.offenseTier} O`);
+  if (prof.defenseTier && prof.defenseTier !== "Solid") badges.push(`${prof.defenseTier} D`);
+  return badges;
+}
+
 function GameCard({
   game,
-  stats,
+  ctx,
   weights,
   input,
   setInput,
 }: {
   game: Game;
-  stats: StatsMap;
+  ctx: GameContext;
   weights: ModelWeights;
   input: GameInput;
   setInput: (gi: GameInput) => void;
 }) {
   const [open, setOpen] = useState(false);
   const prediction = useMemo(
-    () => predictGame(game, stats, weights, input),
-    [game, stats, weights, input],
+    () => predictGame(game, ctx, weights, input),
+    [game, ctx, weights, input],
   );
   const pick = prediction.winner === "home" ? game.home : game.away;
   const graded = input.graded ?? null;
   const liveGrade = graded ? graded.correct : gradeGame(game, prediction);
+
+  // In-progress: reprice by score + clock (the comeback curve).
+  const live = game.state === "in" ? liveWinProb(game, prediction.homeProb) : null;
+  const liveLeader = live != null && live >= 0.5 ? game.home : game.away;
+  const trailerProbPct =
+    live != null ? Math.round((liveLeader.id === game.home.id ? 1 - live : live) * 100) : 0;
 
   const cycleTag = (tag: EnvTag) => {
     const cur = input.tags[tag];
@@ -177,6 +277,12 @@ function GameCard({
     setInput({ ...input, tags });
   };
 
+  const hasInjuries =
+    (ctx.injuries?.[game.home.id]?.players.length ?? 0) > 0 ||
+    (ctx.injuries?.[game.away.id]?.players.length ?? 0) > 0;
+  const homeFlow = ctx.flow?.[game.home.id];
+  const awayFlow = ctx.flow?.[game.away.id];
+
   return (
     <Card className="p-4 bg-gradient-card border-border">
       <div className="flex items-start justify-between gap-3">
@@ -185,11 +291,13 @@ function GameCard({
             team={game.away}
             score={game.state !== "pre" ? game.awayScore : undefined}
             winner={prediction.winner === "away"}
+            badges={teamBadges(game.away, ctx)}
           />
           <TeamRow
             team={game.home}
             score={game.state !== "pre" ? game.homeScore : undefined}
             winner={prediction.winner === "home"}
+            badges={teamBadges(game.home, ctx)}
           />
         </div>
         <div className="text-right shrink-0">
@@ -203,8 +311,41 @@ function GameCard({
       </div>
 
       <div className="mt-3">
-        <ProbBar game={game} prediction={prediction} />
+        <ProbBar game={game} homeProb={prediction.homeProb} winner={prediction.winner} />
       </div>
+
+      {live != null && (
+        <div className="mt-3 rounded-md bg-white/5 p-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-gold">
+              Live win probability
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {liveLeader.abbreviation} {Math.round(Math.max(live, 1 - live) * 100)}%
+            </span>
+          </div>
+          <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5">
+            <div
+              style={{
+                width: `${100 - Math.round(live * 100)}%`,
+                background: game.away.color ? `#${game.away.color}` : "hsl(var(--muted))",
+              }}
+            />
+            <div
+              style={{
+                width: `${Math.round(live * 100)}%`,
+                background: game.home.color ? `#${game.home.color}` : "hsl(var(--muted))",
+              }}
+            />
+          </div>
+          <div className="mt-1.5 font-mono text-[10px] text-muted-foreground/70">
+            Deficits are priced against the clock — {liveLeader.id === game.home.id
+              ? game.away.abbreviation
+              : game.home.abbreviation}{" "}
+            still wins {trailerProbPct}% of the time from here.
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -289,6 +430,32 @@ function GameCard({
             className="min-h-[64px] text-sm"
           />
 
+          {/* Game flow: per-half scoring, comebacks, volatility */}
+          {(homeFlow || awayFlow) && (
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
+                Game flow this season
+              </div>
+              <div className="space-y-1.5">
+                <FlowChips team={game.away} flow={awayFlow} />
+                <FlowChips team={game.home} flow={homeFlow} />
+              </div>
+            </div>
+          )}
+
+          {/* Injury report */}
+          {hasInjuries && (
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
+                Injury report
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <InjuryList team={game.away} ctx={ctx} />
+                <InjuryList team={game.home} ctx={ctx} />
+              </div>
+            </div>
+          )}
+
           {/* Factor breakdown */}
           <div className="space-y-1">
             <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
@@ -322,7 +489,12 @@ function GameCard({
 /* ─── Page ────────────────────────────────────────────── */
 
 export default function NFLPredictor() {
-  const [weights, setWeights] = useLocalStorage<ModelWeights>(NFL_WEIGHTS_KEY, DEFAULT_WEIGHTS);
+  const [storedWeights, setWeights] = useLocalStorage<ModelWeights>(
+    NFL_WEIGHTS_KEY,
+    DEFAULT_WEIGHTS,
+  );
+  // Older saves may predate newly added factors — fill them from defaults.
+  const weights = useMemo(() => ensureWeights(storedWeights), [storedWeights]);
   const [inputs, setInputs] = useLocalStorage<InputsMap>(NFL_INPUTS_KEY, {});
   const [selected, setSelected] = useState<{ season: number; week: number } | null>(null);
 
@@ -351,7 +523,45 @@ export default function NFLPredictor() {
   });
 
   const games = useMemo(() => schedule.data?.games ?? [], [schedule.data]);
-  const stats = standings.data ?? {};
+  const teamIds = useMemo(
+    () => Array.from(new Set(games.flatMap((g) => [g.home.id, g.away.id]))).sort(),
+    [games],
+  );
+
+  // Enrichment feeds — each optional; the model stays neutral where they fail.
+  const detail = useQuery({
+    queryKey: ["nfl", "detail", season, teamIds.join(",")],
+    queryFn: () => fetchDetailMap(season!, teamIds),
+    enabled: season != null && teamIds.length > 0,
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+
+  const injuries = useQuery({
+    queryKey: ["nfl", "injuries"],
+    queryFn: fetchInjuries,
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+
+  const flow = useQuery({
+    queryKey: ["nfl", "flow", season, week],
+    queryFn: () => fetchSeasonFlow(season!, week!),
+    enabled: season != null && week != null,
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });
+
+  const ctx: GameContext = useMemo(
+    () => ({
+      stats: standings.data ?? {},
+      detail: detail.data,
+      flow: flow.data,
+      injuries: injuries.data,
+    }),
+    [standings.data, detail.data, flow.data, injuries.data],
+  );
+
   const days = useMemo(() => groupByDay(games), [games]);
 
   // Lock in grades the first time a game is seen final, so later weight
@@ -362,7 +572,7 @@ export default function NFLPredictor() {
     for (const g of games) {
       const existing = inputs[g.id] ?? EMPTY_INPUT;
       if (existing.graded || !g.completed) continue;
-      const pred = predictGame(g, stats, weights, existing);
+      const pred = predictGame(g, ctx, weights, existing);
       const correct = gradeGame(g, pred);
       if (correct === null) continue;
       const pickedTeamId = pred.winner === "home" ? g.home.id : g.away.id;
@@ -370,7 +580,7 @@ export default function NFLPredictor() {
     }
     if (Object.keys(updates).length) setInputs({ ...inputs, ...updates });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [games, stats]);
+  }, [games, ctx]);
 
   // Accuracy: this week + all time, from locked grades.
   const record = useMemo(() => {
@@ -486,7 +696,7 @@ export default function NFLPredictor() {
                 <GameCard
                   key={g.id}
                   game={g}
-                  stats={stats}
+                  ctx={ctx}
                   weights={weights}
                   input={inputs[g.id] ?? EMPTY_INPUT}
                   setInput={(gi) => setInputs({ ...inputs, [g.id]: gi })}

@@ -3,7 +3,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import NFLPredictor from "@/pages/NFLPredictor";
 
-/** Minimal ESPN payloads: one final game + one upcoming game in week 15. */
+/**
+ * Minimal ESPN payloads: one final game (a second-half comeback), one
+ * upcoming game, and one live game where the home team is down 21-0 in Q1.
+ */
 
 const team = (id: string, abbr: string, name: string) => ({
   id,
@@ -22,18 +25,20 @@ const scoreboard = {
       name: "Las Vegas Raiders at Kansas City Chiefs",
       competitions: [
         {
-          status: { type: { state: "post", completed: true, shortDetail: "Final" } },
+          status: { period: 4, clock: 0, type: { state: "post", completed: true, shortDetail: "Final" } },
           competitors: [
             {
               homeAway: "home",
               score: "27",
               records: [{ type: "total", summary: "11-3" }],
+              linescores: [{ value: 0 }, { value: 7 }, { value: 10 }, { value: 10 }],
               team: team("12", "KC", "Kansas City Chiefs"),
             },
             {
               homeAway: "away",
               score: "17",
               records: [{ type: "total", summary: "5-9" }],
+              linescores: [{ value: 14 }, { value: 3 }, { value: 0 }, { value: 0 }],
               team: team("13", "LV", "Las Vegas Raiders"),
             },
           ],
@@ -58,6 +63,34 @@ const scoreboard = {
               homeAway: "away",
               records: [{ type: "total", summary: "10-4" }],
               team: team("2", "BUF", "Buffalo Bills"),
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "live1",
+      date: "2025-12-15T01:15:00Z",
+      name: "Denver Broncos at Los Angeles Chargers",
+      competitions: [
+        {
+          status: {
+            period: 1,
+            clock: 300,
+            type: { state: "in", completed: false, shortDetail: "Q1 5:00" },
+          },
+          competitors: [
+            {
+              homeAway: "home",
+              score: "0",
+              records: [{ type: "total", summary: "8-6" }],
+              team: team("24", "LAC", "Los Angeles Chargers"),
+            },
+            {
+              homeAway: "away",
+              score: "21",
+              records: [{ type: "total", summary: "8-6" }],
+              team: team("7", "DEN", "Denver Broncos"),
             },
           ],
         },
@@ -89,10 +122,33 @@ const standings = {
           standingsEntry("13", 5, 9, 280, 360),
           standingsEntry("15", 7, 7, 320, 330),
           standingsEntry("2", 10, 4, 400, 300),
+          standingsEntry("24", 8, 6, 330, 320),
+          standingsEntry("7", 8, 6, 340, 330),
         ],
       },
     },
   ],
+};
+
+const injuries = {
+  injuries: [
+    {
+      id: "15",
+      injuries: [
+        { status: "Out", athlete: { displayName: "Star QB", position: { abbreviation: "QB" } } },
+        { status: "Questionable", athlete: { displayName: "WR One", position: { abbreviation: "WR" } } },
+      ],
+    },
+  ],
+};
+
+const teamStatistics = {
+  splits: {
+    categories: [
+      { name: "passing", stats: [{ name: "netPassingYardsPerGame", value: 230 }] },
+      { name: "rushing", stats: [{ name: "rushingYardsPerGame", value: 115 }] },
+    ],
+  },
 };
 
 function mountPage() {
@@ -115,10 +171,17 @@ beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => ({
-      ok: true,
-      json: async () => (String(url).includes("standings") ? standings : scoreboard),
-    })),
+    vi.fn(async (url: string) => {
+      const u = String(url);
+      const body = u.includes("/injuries")
+        ? injuries
+        : u.includes("/statistics")
+          ? teamStatistics
+          : u.includes("/standings")
+            ? standings
+            : scoreboard;
+      return { ok: true, json: async () => body };
+    }),
   );
 });
 
@@ -128,9 +191,20 @@ describe("NFLPredictor page", () => {
     expect(await screen.findByText("Week 15")).toBeInTheDocument();
     expect((await screen.findAllByText("Chiefs")).length).toBeGreaterThan(0);
     expect(screen.getByText("Dolphins")).toBeInTheDocument();
-    // Model favors Bills (10-4, +100 pd) over Dolphins at home → away pick shown
     const pickLabels = screen.getAllByText("Pick");
-    expect(pickLabels).toHaveLength(2);
+    expect(pickLabels).toHaveLength(3);
+  });
+
+  it("shows a clock-priced live win probability for the 21-0 game", async () => {
+    mountPage();
+    expect(await screen.findByText("Live win probability")).toBeInTheDocument();
+    // Home team down 21-0 in Q1: still alive, single-digit-ish chance —
+    // the trailing-team note quotes a nonzero percentage.
+    const note = screen.getByText(/LAC still wins \d+% of the time from here/);
+    expect(note).toBeInTheDocument();
+    const pct = Number(/wins (\d+)%/.exec(note.textContent ?? "")?.[1]);
+    expect(pct).toBeGreaterThan(0);
+    expect(pct).toBeLessThan(20);
   });
 
   it("grades the final game and shows the all-time record", async () => {
@@ -139,7 +213,6 @@ describe("NFLPredictor page", () => {
     expect(await screen.findByText("Hit")).toBeInTheDocument();
     expect(screen.getByText("All-time")).toBeInTheDocument();
     expect(screen.getByText("1–0")).toBeInTheDocument();
-    // Grade is persisted
     const stored = JSON.parse(localStorage.getItem("alfred.nfl.gameInputs") ?? "{}");
     expect(stored.final1.graded.correct).toBe(true);
   });
@@ -155,12 +228,35 @@ describe("NFLPredictor page", () => {
     expect(stored.pre1.tags.Weather).toBe("home");
   });
 
-  it("shows the factor breakdown when a game is expanded", async () => {
+  it("shows the injury report for the banged-up team", async () => {
+    mountPage();
+    await screen.findAllByText("Chiefs");
+    fireEvent.click(screen.getAllByText("Your read")[1]); // MIA game
+    expect(await screen.findByText("Injury report")).toBeInTheDocument();
+    expect(screen.getByText("Star QB")).toBeInTheDocument();
+    expect(screen.getByText("Out")).toBeInTheDocument();
+  });
+
+  it("shows game-flow chips derived from quarter linescores", async () => {
+    mountPage();
+    await screen.findAllByText("Chiefs");
+    fireEvent.click(screen.getAllByText("Your read")[0]); // final KC game
+    expect(await screen.findByText("Game flow this season")).toBeInTheDocument();
+    // KC trailed 17-7 at half and won → comeback credit appears
+    expect(screen.getAllByText(/comeback W/).length).toBeGreaterThan(0);
+  });
+
+  it("shows the factor breakdown with the new factors", async () => {
     mountPage();
     await screen.findAllByText("Chiefs");
     fireEvent.click(screen.getAllByText("Your read")[0]);
     expect(await screen.findByText("Factor breakdown")).toBeInTheDocument();
-    expect(screen.getByText("Scoring margin")).toBeInTheDocument();
+    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByText("Yardage")).toBeInTheDocument();
+    expect(screen.getByText("Game flow")).toBeInTheDocument();
+    // "Injuries" appears both as an environment tag and a factor row
+    expect(screen.getAllByText("Injuries").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Style matchup")).toBeInTheDocument();
     expect(screen.getByText("Your reasoning")).toBeInTheDocument();
   });
 });
