@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { MoonStar, SlidersHorizontal } from "lucide-react";
+import { toast } from "sonner";
 import { useGamification } from "@/hooks/useGamification";
-import { BADGES, LEVELS } from "@/lib/gamification";
+import { BADGES, LEVELS, recalibrateToLevel } from "@/lib/gamification";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -7,6 +10,22 @@ import { Progress } from "@/components/ui/progress";
 export default function Achievements() {
   const { state, level, next, progress } = useGamification();
   const earned = new Set(state.earnedBadges);
+  const [pickedLevel, setPickedLevel] = useState<number | "">("");
+
+  // Most recent decay within the last week — worth explaining on the bar.
+  const lastDecay = (state.xpLog ?? [])
+    .filter((e) => e.kind === "decay" && e.at > Date.now() - 7 * 86_400_000)
+    .at(-1);
+
+  const applyRecalibrate = () => {
+    if (pickedLevel === "" || pickedLevel === level.level) return;
+    const entry = recalibrateToLevel(pickedLevel, "life changed — recalibrated");
+    if (entry) {
+      const dir = entry.delta > 0 ? "up" : "down";
+      toast.success(`Recalibrated ${dir} to Level ${pickedLevel}. The bar now matches your life.`);
+      setPickedLevel("");
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -52,6 +71,46 @@ export default function Achievements() {
             <span>{progress.needed} XP to {next.title}</span>
           </div>
         )}
+
+        {/* Away notice — the bar breathes with real life */}
+        {lastDecay && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+            <MoonStar className="h-3.5 w-3.5 text-teal shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Welcome back — {Math.abs(lastDecay.delta).toLocaleString()} XP eased off while you were{" "}
+              {lastDecay.note}. It comes back the same way it was earned.
+            </p>
+          </div>
+        )}
+
+        {/* Manual recalibration — the goalposts moved, match the bar to reality */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-gold/70 shrink-0" />
+          <span className="text-xs text-muted-foreground flex-1 min-w-[10rem]">
+            Life changed? Set the level that matches where you really are.
+          </span>
+          <select
+            value={pickedLevel}
+            onChange={(e) => setPickedLevel(e.target.value === "" ? "" : Number(e.target.value))}
+            className="bg-background/40 border border-border rounded-md px-2 py-1.5 text-[11px] font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-gold/40"
+            aria-label="Pick your real level"
+          >
+            <option value="">Level…</option>
+            {LEVELS.map((l) => (
+              <option key={l.level} value={l.level} disabled={l.level === level.level}>
+                {l.level} · {l.title}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={applyRecalibrate}
+            disabled={pickedLevel === "" || pickedLevel === level.level}
+            className="rounded-md border border-gold/40 bg-gold/10 px-2.5 py-1.5 font-mono text-[10px] tracking-wider uppercase text-gold hover:bg-gold/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Recalibrate
+          </button>
+        </div>
 
         {/* Level ladder */}
         <div className="mt-6 space-y-1.5">

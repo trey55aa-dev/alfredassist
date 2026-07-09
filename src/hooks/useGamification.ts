@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   GamificationState,
   XP_AWARDED,
+  XP_ADJUSTED,
   BADGE_UNLOCKED,
   LEVEL_UP,
   getGamification,
@@ -17,11 +18,13 @@ export function useGamification() {
   useEffect(() => {
     const sync = () => setState(getGamification());
     window.addEventListener(XP_AWARDED, sync);
+    window.addEventListener(XP_ADJUSTED, sync);
     window.addEventListener(BADGE_UNLOCKED, sync);
     window.addEventListener(LEVEL_UP, sync);
     window.addEventListener("storage", sync);
     return () => {
       window.removeEventListener(XP_AWARDED, sync);
+      window.removeEventListener(XP_ADJUSTED, sync);
       window.removeEventListener(BADGE_UNLOCKED, sync);
       window.removeEventListener(LEVEL_UP, sync);
       window.removeEventListener("storage", sync);

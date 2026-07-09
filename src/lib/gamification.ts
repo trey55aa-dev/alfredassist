@@ -118,6 +118,13 @@ export const BADGE_MAP = new Map(BADGES.map((b) => [b.id, b]));
 
 /* ---------- State ---------- */
 
+export interface XpLogEntry {
+  at: number;
+  kind: "decay" | "manual";
+  delta: number; // negative for losses
+  note: string;
+}
+
 export interface GamificationState {
   xp: number;
   earnedBadges: string[]; // badge ids
@@ -129,12 +136,114 @@ export interface GamificationState {
   progressLogs: number;
   focusSessions: number;
   earlyEvents: number; // events completed before noon
+  // Life happens — XP breathes with real usage instead of only accumulating.
+  lastActiveDay?: string;     // YYYY-MM-DD of the last XP-earning action
+  decayAppliedUpTo?: string;  // YYYY-MM-DD we've already reconciled decay through
+  xpLog?: XpLogEntry[];       // recent decay / manual recalibrations (capped)
 }
 
 const KEY = "alfred.gamification";
 export const XP_AWARDED = "alfred.xp:awarded";
 export const BADGE_UNLOCKED = "alfred.badge:unlocked";
 export const LEVEL_UP = "alfred.level:up";
+/** Fired when XP changes outside awardXp (decay / manual recalibration). */
+export const XP_ADJUSTED = "alfred.xp:adjusted";
+
+/* ---------- XP decay: the bar breathes with real usage ---------- */
+
+/** Yesterday is grace (same rule as habit misses) — decay starts the day after. */
+export const DECAY_GRACE_DAYS = 1;
+/** Each fully-missed day beyond grace costs 2% of XP, compounding. */
+export const DECAY_PER_DAY = 0.98;
+/** One absence can never take more than 75% — coming back never means zero. */
+export const DECAY_FLOOR_FACTOR = 0.25;
+const XP_LOG_MAX = 20;
+
+export function ymdOf(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function daysBetweenYmd(a: string, b: string): number {
+  const ms = new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+/** XP remaining after `absentDays` fully-missed days (pure, testable). */
+export function decayedXp(xp: number, absentDays: number): number {
+  if (xp <= 0 || absentDays <= 0) return Math.max(0, xp);
+  const factor = Math.max(DECAY_FLOOR_FACTOR, Math.pow(DECAY_PER_DAY, absentDays));
+  return Math.round(xp * factor);
+}
+
+function appendXpLog(s: GamificationState, entry: XpLogEntry): void {
+  s.xpLog = [...(s.xpLog ?? []), entry].slice(-XP_LOG_MAX);
+}
+
+/**
+ * Apply decay for days the user was away — call once on app open. Idempotent:
+ * `decayAppliedUpTo` tracks what's already been charged. First run only stamps
+ * today (no retroactive punishment). Returns the decay applied, or null.
+ */
+export function reconcileXpDecay(now = new Date()): XpLogEntry | null {
+  if (typeof window === "undefined") return null;
+  const s = getGamification();
+  const today = ymdOf(now);
+
+  if (!s.lastActiveDay) {
+    // Existing accounts start clean from today.
+    s.lastActiveDay = today;
+    s.decayAppliedUpTo = today;
+    saveGamification(s);
+    return null;
+  }
+
+  // Absent days = full days since last activity, minus grace, minus already-charged.
+  const absentTotal = Math.max(0, daysBetweenYmd(s.lastActiveDay, today) - DECAY_GRACE_DAYS);
+  const chargedThrough = s.decayAppliedUpTo ?? s.lastActiveDay;
+  const alreadyCharged = Math.max(0, daysBetweenYmd(s.lastActiveDay, chargedThrough) - DECAY_GRACE_DAYS);
+  const newAbsent = absentTotal - alreadyCharged;
+
+  s.decayAppliedUpTo = today;
+  if (newAbsent <= 0 || s.xp <= 0) {
+    saveGamification(s);
+    return null;
+  }
+
+  const before = s.xp;
+  s.xp = decayedXp(before, newAbsent);
+  const lost = before - s.xp;
+  // No fanfare on the way down — the UI just reflects the new level.
+  const entry: XpLogEntry = {
+    at: now.getTime(),
+    kind: "decay",
+    delta: -lost,
+    note: `away ${newAbsent + DECAY_GRACE_DAYS} day${newAbsent + DECAY_GRACE_DAYS === 1 ? "" : "s"}`,
+  };
+  appendXpLog(s, entry);
+  saveGamification(s);
+  window.dispatchEvent(new CustomEvent(XP_ADJUSTED, { detail: entry }));
+  return lost > 0 ? entry : null;
+}
+
+/**
+ * Manual recalibration — life changed, the goalposts moved. Sets XP to the
+ * chosen level's threshold (up or down) and logs why.
+ */
+export function recalibrateToLevel(targetLevel: number, note = "recalibrated"): XpLogEntry | null {
+  if (typeof window === "undefined") return null;
+  const def = LEVELS.find((l) => l.level === targetLevel);
+  if (!def) return null;
+  const s = getGamification();
+  const delta = def.minXp - s.xp;
+  if (delta === 0) return null;
+  s.xp = def.minXp;
+  const entry: XpLogEntry = { at: Date.now(), kind: "manual", delta, note };
+  appendXpLog(s, entry);
+  saveGamification(s);
+  window.dispatchEvent(new CustomEvent(XP_ADJUSTED, { detail: entry }));
+  return entry;
+}
 
 export const EMPTY_STATE: GamificationState = {
   xp: 0,
@@ -265,8 +374,14 @@ export function awardXp(
   const state = getGamification();
   const prevLevel = levelFromXp(state.xp);
 
-  // Bump counters
-  const next: GamificationState = { ...state, xp: state.xp + amount };
+  // Bump counters — and mark today active, which resets the decay clock.
+  const today = ymdOf(new Date());
+  const next: GamificationState = {
+    ...state,
+    xp: state.xp + amount,
+    lastActiveDay: today,
+    decayAppliedUpTo: today,
+  };
   if (reason === "habit") next.habitsCompleted += 1;
   if (reason === "event") {
     next.eventsCompleted += 1;

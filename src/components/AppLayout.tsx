@@ -26,6 +26,7 @@ import { useEventsSync } from "@/hooks/useEventsSync";
 import { useCloudStateSync } from "@/hooks/useCloudStateSync";
 import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
+import { reconcileXpDecay } from "@/lib/gamification";
 import { NAV_CATEGORIES } from "@/lib/navConfig";
 
 function usePageTitle(): string {
@@ -50,6 +51,8 @@ export default function AppLayout() {
 
   useEffect(() => {
     initAppIcon();
+    // Life happened while the app was closed — settle the XP bar with reality.
+    reconcileXpDecay();
   }, []);
 
   useEffect(() => {
