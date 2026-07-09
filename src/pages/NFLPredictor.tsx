@@ -25,13 +25,14 @@ import {
   ensureWeights,
   fetchDetailMap,
   fetchInjuries,
-  fetchSeasonFlow,
+  fetchSeasonHistory,
   fetchStandings,
   fetchWeek,
   formatKickoff,
   gradeGame,
   groupByDay,
   liveWinProb,
+  normalizeAbbr,
   predictGame,
   styleProfile,
   type EnvTag,
@@ -39,16 +40,19 @@ import {
   type GameContext,
   type GameInput,
   type ModelWeights,
-  type Prediction,
   type TeamFlowStats,
 } from "@/lib/nflPredictor";
+import { ADVANCED_SOURCE_LABELS, fetchAdvancedStats } from "@/lib/nflAdvancedStats";
 
 type InputsMap = Record<string, GameInput>;
 
 const WEIGHT_LABELS: { key: keyof ModelWeights; label: string; hint: string }[] = [
+  { key: "powerRating", label: "Power rating", hint: "nfelo / computed Elo differential" },
   { key: "record", label: "Record", hint: "Win-loss percentage gap" },
   { key: "scoring", label: "Scoring margin", hint: "Points for vs against, per game" },
   { key: "production", label: "Production", hint: "Points → expected wins, yards-per-point" },
+  { key: "epa", label: "Efficiency (EPA)", hint: "Offensive EPA per game (nflverse)" },
+  { key: "qbMetrics", label: "QB metrics", hint: "Primary QB CPOE (Next Gen Stats)" },
   { key: "yardage", label: "Yardage", hint: "Total yards per game" },
   { key: "flow", label: "Game flow", hint: "1st/2nd-half surges from quarter scoring" },
   { key: "injuries", label: "Injuries", hint: "Injury-report burden, QB-weighted" },
@@ -227,6 +231,32 @@ function InjuryList({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
           </li>
         )}
       </ul>
+    </div>
+  );
+}
+
+function AdvancedMetrics({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
+  const adv = ctx.advanced?.[normalizeAbbr(team.abbreviation)];
+  const elo = adv?.nfeloRating ?? ctx.elo?.[team.id];
+  const rows: string[] = [];
+  if (elo != null) rows.push(`${adv?.nfeloRating != null ? "nfelo" : "Elo"} ${Math.round(elo)}`);
+  if (adv?.offEpaPerGame != null) rows.push(`EPA ${adv.offEpaPerGame >= 0 ? "+" : ""}${adv.offEpaPerGame.toFixed(1)}/gm`);
+  if (adv?.qbName && adv?.cpoe != null) {
+    rows.push(`${adv.qbName} CPOE ${adv.cpoe >= 0 ? "+" : ""}${adv.cpoe.toFixed(1)}`);
+  }
+  if (adv?.timeToThrow != null) rows.push(`TTT ${adv.timeToThrow.toFixed(2)}s`);
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="font-mono text-[10px] text-foreground/80 w-10">{team.abbreviation}</span>
+      {rows.map((r) => (
+        <span
+          key={r}
+          className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-muted-foreground"
+        >
+          {r}
+        </span>
+      ))}
     </div>
   );
 }
@@ -430,6 +460,19 @@ function GameCard({
             className="min-h-[64px] text-sm"
           />
 
+          {/* Advanced metrics: power rating, EPA, QB (when sources are live) */}
+          {(ctx.elo || ctx.advanced) && (
+            <div>
+              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
+                Advanced metrics
+              </div>
+              <div className="space-y-1.5">
+                <AdvancedMetrics team={game.away} ctx={ctx} />
+                <AdvancedMetrics team={game.home} ctx={ctx} />
+              </div>
+            </div>
+          )}
+
           {/* Game flow: per-half scoring, comebacks, volatility */}
           {(homeFlow || awayFlow) && (
             <div>
@@ -544,10 +587,21 @@ export default function NFLPredictor() {
     retry: 1,
   });
 
-  const flow = useQuery({
-    queryKey: ["nfl", "flow", season, week],
-    queryFn: () => fetchSeasonFlow(season!, week!),
+  // One pass over the season's scoreboards feeds both the game-flow stats
+  // and the computed Elo power ratings.
+  const history = useQuery({
+    queryKey: ["nfl", "history", season, week],
+    queryFn: () => fetchSeasonHistory(season!, week!),
     enabled: season != null && week != null,
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });
+
+  // Advanced sources (EPA, NGS, PFR, nfelo) via the edge-function proxy.
+  const advanced = useQuery({
+    queryKey: ["nfl", "advanced", season],
+    queryFn: () => fetchAdvancedStats(season!),
+    enabled: season != null,
     staleTime: 30 * 60_000,
     retry: 1,
   });
@@ -556,10 +610,12 @@ export default function NFLPredictor() {
     () => ({
       stats: standings.data ?? {},
       detail: detail.data,
-      flow: flow.data,
+      flow: history.data?.flow,
+      elo: history.data?.elo,
       injuries: injuries.data,
+      advanced: advanced.data?.teams,
     }),
-    [standings.data, detail.data, flow.data, injuries.data],
+    [standings.data, detail.data, history.data, injuries.data, advanced.data],
   );
 
   const days = useMemo(() => groupByDay(games), [games]);
@@ -679,6 +735,40 @@ export default function NFLPredictor() {
           <p className="text-sm text-muted-foreground">
             No games on this week's slate — try another week.
           </p>
+        </Card>
+      )}
+
+      {/* Advanced data source health */}
+      {!loading && games.length > 0 && (
+        <Card className="p-3 bg-gradient-card border-border mb-6">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground/70 mr-1">
+              Advanced sources
+            </span>
+            {advanced.isError || (advanced.isSuccess && Object.keys(advanced.data.sources).length === 0) ? (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                offline — deploy the <code className="text-gold">nfl-advanced-stats</code> function to
+                light up EPA, Next Gen Stats, PFR and nfelo. The model still runs on ESPN data +
+                computed Elo.
+              </span>
+            ) : advanced.isLoading ? (
+              <span className="font-mono text-[10px] text-muted-foreground animate-pulse">loading…</span>
+            ) : (
+              Object.entries(advanced.data?.sources ?? {}).map(([key, s]) => (
+                <span
+                  key={key}
+                  title={s.status === "error" ? s.detail : `${s.teams ?? 0} teams`}
+                  className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
+                    s.status === "ok"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : "bg-white/5 text-muted-foreground/60 line-through"
+                  }`}
+                >
+                  {ADVANCED_SOURCE_LABELS[key] ?? key}
+                </span>
+              ))
+            )}
+          </div>
         </Card>
       )}
 

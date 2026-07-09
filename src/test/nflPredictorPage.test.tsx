@@ -1,6 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// The advanced-stats client pulls in the Supabase client (needs env vars),
+// so mock the whole module with a canned edge-function response.
+vi.mock("@/lib/nflAdvancedStats", () => ({
+  ADVANCED_SOURCE_LABELS: {
+    nflverse: "nflverse EPA",
+    ngs: "Next Gen Stats",
+    pfr: "Pro-Football-Reference",
+    nfelo: "nfelo power ratings",
+  },
+  fetchAdvancedStats: vi.fn(async () => ({
+    teams: {
+      MIA: { offEpaPerGame: -1.2, cpoe: -0.5, qbName: "Fins QB", nfeloRating: 1490 },
+      BUF: { offEpaPerGame: 5.4, cpoe: 3.1, qbName: "Bills QB", nfeloRating: 1610 },
+    },
+    sources: {
+      nflverse: { status: "ok", teams: 32 },
+      ngs: { status: "ok", teams: 32 },
+      pfr: { status: "error", detail: "403 from www.pro-football-reference.com" },
+      nfelo: { status: "ok", teams: 32 },
+    },
+  })),
+}));
+
 import NFLPredictor from "@/pages/NFLPredictor";
 
 /**
@@ -244,6 +268,25 @@ describe("NFLPredictor page", () => {
     expect(await screen.findByText("Game flow this season")).toBeInTheDocument();
     // KC trailed 17-7 at half and won → comeback credit appears
     expect(screen.getAllByText(/comeback W/).length).toBeGreaterThan(0);
+  });
+
+  it("shows advanced source health chips", async () => {
+    mountPage();
+    expect(await screen.findByText("Advanced sources")).toBeInTheDocument();
+    expect(await screen.findByText("nflverse EPA")).toBeInTheDocument();
+    expect(screen.getByText("nfelo power ratings")).toBeInTheDocument();
+    // failed source still listed (struck through), with the error on hover
+    expect(screen.getByText("Pro-Football-Reference")).toBeInTheDocument();
+  });
+
+  it("shows advanced metrics (nfelo, EPA, QB) in the expanded card", async () => {
+    mountPage();
+    await screen.findAllByText("Chiefs");
+    fireEvent.click(screen.getAllByText("Your read")[1]); // BUF @ MIA
+    expect(await screen.findByText("Advanced metrics")).toBeInTheDocument();
+    expect(screen.getByText("nfelo 1610")).toBeInTheDocument();
+    expect(screen.getByText("EPA +5.4/gm")).toBeInTheDocument();
+    expect(screen.getByText("Bills QB CPOE +3.1")).toBeInTheDocument();
   });
 
   it("shows the factor breakdown with the new factors", async () => {

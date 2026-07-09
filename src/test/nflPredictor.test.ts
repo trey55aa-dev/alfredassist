@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_WEIGHTS,
   EMPTY_INPUT,
+  computeEloRatings,
   computeFlowStats,
   ensureWeights,
+  normalizeAbbr,
   gradeGame,
   groupByDay,
   liveWinProb,
@@ -90,20 +92,59 @@ describe("predictGame", () => {
     expect(p.confidence).toBeGreaterThanOrEqual(0.5);
   });
 
-  it("reports per-factor contributions for all ten factors", () => {
+  it("reports per-factor contributions for all thirteen factors", () => {
     const p = predictGame(matchup, evenCtx(), DEFAULT_WEIGHTS, EMPTY_INPUT);
     expect(p.contributions.map((c) => c.label)).toEqual([
       "Record",
       "Scoring margin",
       "Home field",
       "Momentum",
+      "Power rating",
       "Production",
       "Yardage",
+      "Efficiency (EPA)",
+      "QB metrics",
       "Game flow",
       "Injuries",
       "Style matchup",
       "Your reasoning",
     ]);
+  });
+
+  it("uses computed Elo for the power-rating factor", () => {
+    const ctx: GameContext = { ...evenCtx(), elo: { "1": 1420, "2": 1620 } };
+    const base = predictGame(matchup, evenCtx(), DEFAULT_WEIGHTS);
+    const withElo = predictGame(matchup, ctx, DEFAULT_WEIGHTS);
+    expect(withElo.homeProb).toBeLessThan(base.homeProb);
+  });
+
+  it("prefers published nfelo ratings over computed Elo when available", () => {
+    // Computed Elo says away is far better; nfelo says home is — nfelo wins.
+    const ctx: GameContext = {
+      ...evenCtx(),
+      elo: { "1": 1400, "2": 1650 },
+      advanced: { KC: { nfeloRating: 1640 }, LV: { nfeloRating: 1450 } },
+    };
+    const p = predictGame(matchup, ctx, DEFAULT_WEIGHTS);
+    const power = p.contributions.find((c) => c.label === "Power rating")!;
+    expect(power.value).toBeGreaterThan(0); // home-positive despite Elo
+  });
+
+  it("moves with offensive EPA and QB CPOE differentials", () => {
+    const ctx: GameContext = {
+      ...evenCtx(),
+      advanced: {
+        KC: { offEpaPerGame: 6.2, cpoe: 4.1, qbName: "Star QB" },
+        LV: { offEpaPerGame: -3.5, cpoe: -2.4, qbName: "Backup QB" },
+      },
+    };
+    const base = predictGame(matchup, evenCtx(), DEFAULT_WEIGHTS);
+    const withAdv = predictGame(matchup, ctx, DEFAULT_WEIGHTS);
+    expect(withAdv.homeProb).toBeGreaterThan(base.homeProb);
+    const epa = withAdv.contributions.find((c) => c.label === "Efficiency (EPA)")!;
+    const qb = withAdv.contributions.find((c) => c.label === "QB metrics")!;
+    expect(epa.value).toBeGreaterThan(0);
+    expect(qb.value).toBeGreaterThan(0);
   });
 
   it("moves toward the team with a big yardage edge", () => {
@@ -326,6 +367,59 @@ describe("parseInjuries", () => {
     expect(map["12"].burden).toBeGreaterThan(map["13"].burden);
     expect(map["12"].players[0].name).toBe("Star QB"); // worst news sorted first
     expect(parseInjuries({})).toEqual({});
+  });
+});
+
+describe("computeEloRatings", () => {
+  const eloGame = (homeScore: number, awayScore: number, date = "2025-09-07T17:00:00Z"): Game => ({
+    id: `e-${date}-${homeScore}-${awayScore}`,
+    date,
+    name: "test",
+    ...matchup,
+    state: "post",
+    completed: true,
+    homeScore,
+    awayScore,
+  });
+
+  it("moves rating from loser to winner, zero-sum around 1500", () => {
+    const elo = computeEloRatings([{ games: [eloGame(27, 17)] }]);
+    expect(elo["1"]).toBeGreaterThan(1500);
+    expect(elo["2"]).toBeLessThan(1500);
+    expect(elo["1"] + elo["2"]).toBeCloseTo(3000, 6);
+  });
+
+  it("rewards a road upset more than a home win", () => {
+    const homeWin = computeEloRatings([{ games: [eloGame(24, 14)] }]);
+    const roadWin = computeEloRatings([{ games: [eloGame(14, 24)] }]);
+    const homeGain = homeWin["1"] - 1500;
+    const roadGain = roadWin["2"] - 1500;
+    expect(roadGain).toBeGreaterThan(homeGain);
+  });
+
+  it("scales with margin of victory and accumulates across weeks", () => {
+    const narrow = computeEloRatings([{ games: [eloGame(20, 17)] }]);
+    const blowout = computeEloRatings([{ games: [eloGame(41, 10)] }]);
+    expect(blowout["1"]).toBeGreaterThan(narrow["1"]);
+    const twoWeeks = computeEloRatings([
+      { games: [eloGame(27, 17, "2025-09-07T17:00:00Z")] },
+      { games: [eloGame(27, 17, "2025-09-14T17:00:00Z")] },
+    ]);
+    expect(twoWeeks["1"]).toBeGreaterThan(narrow["1"]);
+  });
+
+  it("ignores unfinished games", () => {
+    const g = { ...eloGame(0, 0), completed: false, state: "in" as const };
+    expect(computeEloRatings([{ games: [g] }])).toEqual({});
+  });
+});
+
+describe("normalizeAbbr", () => {
+  it("maps source variants to ESPN-style codes", () => {
+    expect(normalizeAbbr("WAS")).toBe("WSH");
+    expect(normalizeAbbr("jac")).toBe("JAX");
+    expect(normalizeAbbr("LA")).toBe("LAR");
+    expect(normalizeAbbr("KC")).toBe("KC");
   });
 });
 

@@ -124,6 +124,31 @@ export interface TeamInjuryReport {
 
 export type InjuryMap = Record<string, TeamInjuryReport>;
 
+/**
+ * Advanced per-team stats served by the nfl-advanced-stats edge function,
+ * keyed by canonical team abbreviation. Mirrors the function's payload.
+ */
+export interface AdvancedTeamStats {
+  offEpaPerGame?: number;
+  passEpaPerGame?: number;
+  rushEpaPerGame?: number;
+  epaGames?: number;
+  qbName?: string;
+  cpoe?: number;
+  timeToThrow?: number;
+  nfeloRating?: number;
+  pfr?: Record<string, number>;
+}
+
+export type AdvancedMap = Record<string, AdvancedTeamStats>;
+
+/** The proxy already normalizes team codes; this covers stray variants. */
+const ABBR_ALIASES: Record<string, string> = { WAS: "WSH", JAC: "JAX", LA: "LAR", OAK: "LV", SD: "LAC" };
+export function normalizeAbbr(abbr: string): string {
+  const up = abbr.trim().toUpperCase();
+  return ABBR_ALIASES[up] ?? up;
+}
+
 /** Everything the model can draw on. Only `stats` is required — every other
  *  feed degrades to a neutral factor when missing. */
 export interface GameContext {
@@ -131,6 +156,10 @@ export interface GameContext {
   detail?: DetailMap;
   flow?: FlowMap;
   injuries?: InjuryMap;
+  /** Elo power ratings computed from this season's results, by team id. */
+  elo?: Record<string, number>;
+  /** Advanced-source stats (EPA, QB metrics, nfelo), by team abbreviation. */
+  advanced?: AdvancedMap;
 }
 
 /** User-tunable factor weights, each 0–100. */
@@ -149,20 +178,29 @@ export interface ModelWeights {
   injuries: number;
   /** Offense type vs defense type matchup. */
   style: number;
+  /** Elo/nfelo power-rating differential. */
+  powerRating: number;
+  /** Offensive EPA per game (nflverse play-by-play aggregates). */
+  epa: number;
+  /** Primary-QB advanced metrics (CPOE, from Next Gen Stats). */
+  qbMetrics: number;
   /** How much the user's own lean + tags count. */
   reasoning: number;
 }
 
 export const DEFAULT_WEIGHTS: ModelWeights = {
-  record: 60,
-  scoring: 65,
+  record: 55,
+  scoring: 60,
   homeField: 45,
   momentum: 35,
   production: 50,
-  yardage: 55,
+  yardage: 50,
   flow: 40,
   injuries: 60,
   style: 35,
+  powerRating: 70,
+  epa: 60,
+  qbMetrics: 50,
   reasoning: 80,
 };
 
@@ -300,6 +338,8 @@ export function predictGame(
   const af = ctx.flow?.[game.away.id];
   const hi = ctx.injuries?.[game.home.id];
   const ai = ctx.injuries?.[game.away.id];
+  const hAdv = ctx.advanced?.[normalizeAbbr(game.home.abbreviation)];
+  const aAdv = ctx.advanced?.[normalizeAbbr(game.away.abbreviation)];
 
   const contributions: { label: string; value: number }[] = [];
   const add = (label: string, rawEdge: number, weight: number) => {
@@ -332,6 +372,19 @@ export function predictGame(
   const stEdge = h && a ? (h.streak - a.streak) / 5 : 0;
   edge += add("Momentum", stEdge, weights.momentum);
 
+  // Power rating: nfelo's published rating when the proxy delivered it,
+  // otherwise the Elo computed from this season's results. Both live on the
+  // classic Elo scale, where a 250-point gap is a heavy favorite.
+  let powerEdge = 0;
+  if (hAdv?.nfeloRating != null && aAdv?.nfeloRating != null) {
+    powerEdge = (hAdv.nfeloRating - aAdv.nfeloRating) / 250;
+  } else {
+    const he = ctx.elo?.[game.home.id];
+    const ae = ctx.elo?.[game.away.id];
+    if (he != null && ae != null) powerEdge = (he - ae) / 250;
+  }
+  edge += add("Power rating", powerEdge, weights.powerRating);
+
   // Production: points production converted to expected wins (Pythagorean),
   // plus yards-per-point efficiency when yardage is known — the "production
   // assumption to achieve wins".
@@ -355,6 +408,19 @@ export function predictGame(
   const yardEdge =
     hd?.totalYpg != null && ad?.totalYpg != null ? (hd.totalYpg - ad.totalYpg) / 100 : 0;
   edge += add("Yardage", yardEdge, weights.yardage);
+
+  // Efficiency: offensive EPA per game — the play-by-play view of how much
+  // each drive actually produces (an 8 EPA/game gap saturates).
+  const epaEdge =
+    hAdv?.offEpaPerGame != null && aAdv?.offEpaPerGame != null
+      ? (hAdv.offEpaPerGame - aAdv.offEpaPerGame) / 8
+      : 0;
+  edge += add("Efficiency (EPA)", epaEdge, weights.epa);
+
+  // QB metrics: primary passers' completion % over expectation (Next Gen
+  // Stats) — a ±6 CPOE gap saturates.
+  const qbEdge = hAdv?.cpoe != null && aAdv?.cpoe != null ? (hAdv.cpoe - aAdv.cpoe) / 6 : 0;
+  edge += add("QB metrics", qbEdge, weights.qbMetrics);
 
   // Game flow: how teams' games ebb and flow — second halves count most
   // (finishing strength), first halves some (fast starts), plus a nod to
@@ -698,15 +764,54 @@ export function computeFlowStats(weeks: { games: Game[] }[]): FlowMap {
   return map;
 }
 
-/** Fetch every played week's scoreboard and derive flow stats. */
-export async function fetchSeasonFlow(season: number, throughWeek: number): Promise<FlowMap> {
+/* ─── Elo power ratings from season results ───────────── */
+
+/**
+ * nfelo-style Elo power ratings computed from this season's games:
+ * everyone starts at 1500, K=20, ~48 points of home advantage, and a
+ * margin-of-victory multiplier that damps blowouts by heavy favorites.
+ * Used as the fallback when nfelo's published ratings aren't reachable.
+ */
+export function computeEloRatings(weeks: { games: Game[] }[]): Record<string, number> {
+  const R: Record<string, number> = {};
+  const get = (id: string) => (R[id] ??= 1500);
+  const games = weeks
+    .flatMap((w) => w.games)
+    .filter((g) => g.completed && g.homeScore != null && g.awayScore != null)
+    .sort((x, y) => x.date.localeCompare(y.date));
+  for (const g of games) {
+    const rh = get(g.home.id);
+    const ra = get(g.away.id);
+    const diff = rh + 48 - ra;
+    const expected = 1 / (1 + Math.pow(10, -diff / 400));
+    const actual = g.homeScore! > g.awayScore! ? 1 : g.homeScore! < g.awayScore! ? 0 : 0.5;
+    const margin = Math.abs(g.homeScore! - g.awayScore!);
+    const winnerDiff = actual === 1 ? diff : actual === 0 ? -diff : 0;
+    const mov = Math.log(margin + 1) * (2.2 / (winnerDiff * 0.001 + 2.2));
+    const delta = 20 * mov * (actual - expected);
+    R[g.home.id] = rh + delta;
+    R[g.away.id] = ra - delta;
+  }
+  return R;
+}
+
+export interface SeasonHistory {
+  flow: FlowMap;
+  elo: Record<string, number>;
+}
+
+/** Fetch every played week's scoreboard and derive flow stats + Elo. */
+export async function fetchSeasonHistory(
+  season: number,
+  throughWeek: number,
+): Promise<SeasonHistory> {
   const weekNums = Array.from({ length: Math.max(1, Math.min(throughWeek, 18)) }, (_, i) => i + 1);
   const weeks = await Promise.all(
     weekNums.map((w) =>
       fetchWeek(season, w).catch(() => ({ seasonYear: season, weekNumber: w, games: [] as Game[] })),
     ),
   );
-  return computeFlowStats(weeks);
+  return { flow: computeFlowStats(weeks), elo: computeEloRatings(weeks) };
 }
 
 /* ─── Helpers for the page ────────────────────────────── */
