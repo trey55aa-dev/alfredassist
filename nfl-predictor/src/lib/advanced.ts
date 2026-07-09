@@ -1,16 +1,15 @@
 /**
- * Client for the nfl-advanced-stats edge function, which aggregates
- * advanced-stat sources (nflverse EPA, Next Gen Stats passing, PFR advanced
- * tables, nfelo power ratings) server-side — browsers can't read those
- * sites directly.
+ * Client for the site's own /api/advanced serverless function, which
+ * aggregates advanced-stat sources (nflverse EPA, Next Gen Stats passing,
+ * PFR advanced tables, nfelo power ratings) server-side — browsers can't
+ * read those sites directly.
  *
- * The predictor treats this feed as optional: if the function isn't
- * deployed or every source fails, the model runs on ESPN data plus its own
- * computed Elo.
+ * The predictor treats this feed as optional: running the site without the
+ * API (plain `vite dev`, or a static-only host) just means the model falls
+ * back to ESPN data plus its own computed Elo.
  */
 
-import { supabase } from "@/integrations/supabase/client";
-import { normalizeAbbr, type AdvancedMap } from "./nflPredictor";
+import { normalizeAbbr, type AdvancedMap } from "./predictor";
 
 export interface AdvancedSourceStatus {
   status: "ok" | "error";
@@ -31,11 +30,9 @@ export const ADVANCED_SOURCE_LABELS: Record<string, string> = {
 };
 
 export async function fetchAdvancedStats(season: number): Promise<AdvancedStatsResult> {
-  const { data, error } = await supabase.functions.invoke("nfl-advanced-stats", {
-    body: { season },
-  });
-  if (error) throw new Error(error.message ?? "Advanced stats unavailable");
-  const payload = data as {
+  const res = await fetch(`/api/advanced?season=${season}`);
+  if (!res.ok) throw new Error(`Advanced stats unavailable (${res.status})`);
+  const payload = (await res.json()) as {
     teams?: Record<string, AdvancedMap[string]>;
     sources?: Record<string, AdvancedSourceStatus>;
   } | null;

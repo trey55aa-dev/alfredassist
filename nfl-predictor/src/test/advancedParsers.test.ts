@@ -8,7 +8,7 @@ import {
   parseNgsPassing,
   parsePfrTables,
   resolveTeam,
-} from "../../supabase/functions/nfl-advanced-stats/parsers";
+} from "@/lib/advancedParsers";
 
 describe("resolveTeam", () => {
   it("resolves full names, abbreviations, aliases and nicknames", () => {

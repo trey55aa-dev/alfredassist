@@ -20,7 +20,7 @@ import {
   type GameContext,
   type StatsMap,
   type TeamSeasonStats,
-} from "@/lib/nflPredictor";
+} from "@/lib/predictor";
 
 function mkStats(id: string, p: Partial<TeamSeasonStats> = {}): TeamSeasonStats {
   return {

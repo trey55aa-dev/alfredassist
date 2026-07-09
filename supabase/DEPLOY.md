@@ -44,10 +44,6 @@ supabase functions deploy breakdown-goal     --project-ref zsmnhphdagevtdooqpqp
 supabase functions deploy send-briefings     --project-ref zsmnhphdagevtdooqpqp
 supabase functions deploy generate-background --project-ref zsmnhphdagevtdooqpqp
 # (notion-proxy too, if you use the Notion sync)
-# (nfl-advanced-stats for the NFL Predictor's advanced sources —
-#  nflverse EPA, Next Gen Stats, PFR, nfelo. No secrets needed; the
-#  predictor works without it, just with fewer factors.)
-supabase functions deploy nfl-advanced-stats --project-ref zsmnhphdagevtdooqpqp
 ```
 
 `generate-background` reuses the `GEMINI_API_KEY` secret. If Gemini's default

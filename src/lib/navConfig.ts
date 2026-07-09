@@ -20,7 +20,6 @@ import {
   LineChart,
   Smile,
   Link2,
-  Swords,
 } from "lucide-react";
 
 export interface NavItem {
@@ -77,7 +76,6 @@ export const NAV_CATEGORIES: NavCategory[] = [
       { title: "Weekly Planner", url: "/planner",      icon: CalendarRange },
       { title: "Health",         url: "/health",       icon: Activity },
       { title: "Mood",           url: "/mood",         icon: Smile },
-      { title: "NFL Predictor",  url: "/nfl",          icon: Swords },
       { title: "Achievements",   url: "/achievements", icon: Trophy },
     ],
   },

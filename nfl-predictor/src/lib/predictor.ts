@@ -243,10 +243,10 @@ export interface Prediction {
   contributions: { label: string; value: number }[];
 }
 
-/* ─── Storage keys (picked up by cloud state sync like other alfred.* keys) ── */
+/* ─── Storage keys (the browser-local database; see storage.ts) ── */
 
-export const NFL_WEIGHTS_KEY = "alfred.nfl.weights";
-export const NFL_INPUTS_KEY = "alfred.nfl.gameInputs"; // Record<gameId, GameInput>
+export const NFL_WEIGHTS_KEY = "nflp.weights";
+export const NFL_INPUTS_KEY = "nflp.gameInputs"; // Record<gameId, GameInput>
 
 /* ─── Math helpers ────────────────────────────────────── */
 

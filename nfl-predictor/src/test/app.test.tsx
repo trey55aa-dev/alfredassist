@@ -2,9 +2,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// The advanced-stats client pulls in the Supabase client (needs env vars),
-// so mock the whole module with a canned edge-function response.
-vi.mock("@/lib/nflAdvancedStats", () => ({
+// Mock the /api/advanced client with a canned response.
+vi.mock("@/lib/advanced", () => ({
   ADVANCED_SOURCE_LABELS: {
     nflverse: "nflverse EPA",
     ngs: "Next Gen Stats",
@@ -25,7 +24,7 @@ vi.mock("@/lib/nflAdvancedStats", () => ({
   })),
 }));
 
-import NFLPredictor from "@/pages/NFLPredictor";
+import App from "@/App";
 
 /**
  * Minimal ESPN payloads: one final game (a second-half comeback), one
@@ -179,7 +178,7 @@ function mountPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <NFLPredictor />
+      <App />
     </QueryClientProvider>,
   );
 }
@@ -209,7 +208,7 @@ beforeEach(() => {
   );
 });
 
-describe("NFLPredictor page", () => {
+describe("App", () => {
   it("renders the week's games grouped by day with picks", async () => {
     mountPage();
     expect(await screen.findByText("Week 15")).toBeInTheDocument();
@@ -234,10 +233,10 @@ describe("NFLPredictor page", () => {
   it("grades the final game and shows the all-time record", async () => {
     mountPage();
     // KC 11-3 favored at home over LV 5-9; final KC 27-17 → hit
-    expect(await screen.findByText("Hit")).toBeInTheDocument();
+    expect(await screen.findByText(/Hit/)).toBeInTheDocument();
     expect(screen.getByText("All-time")).toBeInTheDocument();
     expect(screen.getByText("1–0")).toBeInTheDocument();
-    const stored = JSON.parse(localStorage.getItem("alfred.nfl.gameInputs") ?? "{}");
+    const stored = JSON.parse(localStorage.getItem("nflp.gameInputs") ?? "{}");
     expect(stored.final1.graded.correct).toBe(true);
   });
 
@@ -248,7 +247,7 @@ describe("NFLPredictor page", () => {
     const weather = await screen.findByText("Weather");
     fireEvent.click(weather);
     expect(screen.getByText("Weather → MIA")).toBeInTheDocument();
-    const stored = JSON.parse(localStorage.getItem("alfred.nfl.gameInputs") ?? "{}");
+    const stored = JSON.parse(localStorage.getItem("nflp.gameInputs") ?? "{}");
     expect(stored.pre1.tags.Weather).toBe("home");
   });
 

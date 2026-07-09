@@ -1,21 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  RotateCcw,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Textarea } from "@/components/ui/textarea";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import {
   DEFAULT_WEIGHTS,
   EMPTY_INPUT,
@@ -41,8 +25,9 @@ import {
   type GameInput,
   type ModelWeights,
   type TeamFlowStats,
-} from "@/lib/nflPredictor";
-import { ADVANCED_SOURCE_LABELS, fetchAdvancedStats } from "@/lib/nflAdvancedStats";
+} from "@/lib/predictor";
+import { ADVANCED_SOURCE_LABELS, fetchAdvancedStats } from "@/lib/advanced";
+import { downloadDatabase, importDatabase, useLocalStorage } from "@/lib/storage";
 
 type InputsMap = Record<string, GameInput>;
 
@@ -62,6 +47,10 @@ const WEIGHT_LABELS: { key: keyof ModelWeights; label: string; hint: string }[] 
   { key: "reasoning", label: "My reasoning", hint: "Your lean, tags and notes" },
 ];
 
+const label10 = "font-mono text-[10px] tracking-[0.15em] uppercase text-zinc-400";
+const ghostBtn =
+  "px-2 py-1 rounded-md font-mono text-[11px] text-zinc-400 hover:text-gold hover:bg-white/5 transition-colors disabled:opacity-30 disabled:pointer-events-none";
+
 /* ─── Weights panel ───────────────────────────────────── */
 
 function WeightsPanel({
@@ -73,19 +62,12 @@ function WeightsPanel({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="p-4 bg-gradient-card border-border mb-6">
-      <button
-        className="w-full flex items-center justify-between"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] uppercase text-gold">
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Model weights
+    <div className="card p-4 mb-6">
+      <button className="w-full flex items-center justify-between" onClick={() => setOpen((o) => !o)}>
+        <span className="font-mono text-[11px] tracking-[0.2em] uppercase text-gold">
+          Model weights
         </span>
-        {open ? (
-          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        )}
+        <span className="text-zinc-500 text-xs">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="mt-4 space-y-4">
@@ -93,31 +75,28 @@ function WeightsPanel({
             <div key={key}>
               <div className="flex items-center justify-between mb-1.5">
                 <div>
-                  <span className="text-sm text-foreground">{label}</span>
-                  <span className="ml-2 text-xs text-muted-foreground/70">{hint}</span>
+                  <span className="text-sm text-zinc-100">{label}</span>
+                  <span className="ml-2 text-xs text-zinc-500">{hint}</span>
                 </div>
                 <span className="font-mono text-xs text-gold w-8 text-right">{weights[key]}</span>
               </div>
-              <Slider
-                value={[weights[key]]}
+              <input
+                type="range"
                 min={0}
                 max={100}
                 step={5}
-                onValueChange={([v]) => setWeights({ ...weights, [key]: v })}
+                value={weights[key]}
+                onChange={(e) => setWeights({ ...weights, [key]: Number(e.target.value) })}
+                aria-label={label}
               />
             </div>
           ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setWeights({ ...DEFAULT_WEIGHTS })}
-          >
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset defaults
-          </Button>
+          <button className={ghostBtn} onClick={() => setWeights({ ...DEFAULT_WEIGHTS })}>
+            ↺ Reset defaults
+          </button>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -133,15 +112,15 @@ function ProbBar({
   winner: "home" | "away";
 }) {
   const homePct = Math.round(homeProb * 100);
-  const awayColor = game.away.color ? `#${game.away.color}` : "hsl(var(--muted))";
-  const homeColor = game.home.color ? `#${game.home.color}` : "hsl(var(--muted))";
+  const awayColor = game.away.color ? `#${game.away.color}` : "#3f3f46";
+  const homeColor = game.home.color ? `#${game.home.color}` : "#3f3f46";
   return (
     <div>
       <div className="flex h-2 rounded-full overflow-hidden bg-white/5">
         <div style={{ width: `${100 - homePct}%`, background: awayColor }} />
         <div style={{ width: `${homePct}%`, background: homeColor }} />
       </div>
-      <div className="flex justify-between mt-1 font-mono text-[10px] text-muted-foreground">
+      <div className="flex justify-between mt-1 font-mono text-[10px] text-zinc-400">
         <span className={winner === "away" ? "text-gold" : ""}>
           {game.away.abbreviation} {100 - homePct}%
         </span>
@@ -153,7 +132,7 @@ function ProbBar({
   );
 }
 
-/* ─── Game card ───────────────────────────────────────── */
+/* ─── Game card pieces ────────────────────────────────── */
 
 function TeamRow({
   team,
@@ -170,17 +149,15 @@ function TeamRow({
     <div className="flex items-center gap-2 min-w-0">
       {team.logo && <img src={team.logo} alt="" className="h-7 w-7 shrink-0" loading="lazy" />}
       <div className="min-w-0">
-        <div className={`text-sm truncate ${winner ? "text-gold" : "text-foreground"}`}>
+        <div className={`text-sm truncate ${winner ? "text-gold" : "text-zinc-100"}`}>
           {team.shortName}
         </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
+        <div className="font-mono text-[10px] text-zinc-400">
           {team.record ?? ""}
-          {badges.length > 0 && (
-            <span className="text-muted-foreground/60"> · {badges.join(" · ")}</span>
-          )}
+          {badges.length > 0 && <span className="text-zinc-500"> · {badges.join(" · ")}</span>}
         </div>
       </div>
-      {score != null && <div className="ml-auto font-display text-xl text-foreground">{score}</div>}
+      {score != null && <div className="ml-auto text-xl text-zinc-100">{score}</div>}
     </div>
   );
 }
@@ -191,18 +168,42 @@ function FlowChips({ team, flow }: { team: Game["home"]; flow?: TeamFlowStats })
   const fmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
   chips.push(`1H ${fmt(flow.firstHalfMarginPg)}/gm`);
   chips.push(`2H ${fmt(flow.secondHalfMarginPg)}/gm`);
-  if (flow.comebackWins > 0) chips.push(`${flow.comebackWins} comeback W${flow.comebackWins > 1 ? "s" : ""}`);
-  if (flow.blownLeads > 0) chips.push(`${flow.blownLeads} blown lead${flow.blownLeads > 1 ? "s" : ""}`);
-  chips.push(flow.avgQuarterSwing >= 7 ? "Volatile" : flow.avgQuarterSwing <= 4 ? "Steady" : "Ebbs & flows");
+  if (flow.comebackWins > 0)
+    chips.push(`${flow.comebackWins} comeback W${flow.comebackWins > 1 ? "s" : ""}`);
+  if (flow.blownLeads > 0)
+    chips.push(`${flow.blownLeads} blown lead${flow.blownLeads > 1 ? "s" : ""}`);
+  chips.push(
+    flow.avgQuarterSwing >= 7 ? "Volatile" : flow.avgQuarterSwing <= 4 ? "Steady" : "Ebbs & flows",
+  );
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="font-mono text-[10px] text-foreground/80 w-10">{team.abbreviation}</span>
+      <span className="font-mono text-[10px] text-zinc-300 w-10">{team.abbreviation}</span>
       {chips.map((c) => (
-        <span
-          key={c}
-          className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-muted-foreground"
-        >
+        <span key={c} className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-zinc-400">
           {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AdvancedMetrics({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
+  const adv = ctx.advanced?.[normalizeAbbr(team.abbreviation)];
+  const elo = adv?.nfeloRating ?? ctx.elo?.[team.id];
+  const rows: string[] = [];
+  if (elo != null) rows.push(`${adv?.nfeloRating != null ? "nfelo" : "Elo"} ${Math.round(elo)}`);
+  if (adv?.offEpaPerGame != null)
+    rows.push(`EPA ${adv.offEpaPerGame >= 0 ? "+" : ""}${adv.offEpaPerGame.toFixed(1)}/gm`);
+  if (adv?.qbName && adv?.cpoe != null)
+    rows.push(`${adv.qbName} CPOE ${adv.cpoe >= 0 ? "+" : ""}${adv.cpoe.toFixed(1)}`);
+  if (adv?.timeToThrow != null) rows.push(`TTT ${adv.timeToThrow.toFixed(2)}s`);
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="font-mono text-[10px] text-zinc-300 w-10">{team.abbreviation}</span>
+      {rows.map((r) => (
+        <span key={r} className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-zinc-400">
+          {r}
         </span>
       ))}
     </div>
@@ -215,48 +216,20 @@ function InjuryList({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
   const top = report.players.slice(0, 4);
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[10px] text-foreground/80 mb-1">{team.abbreviation}</div>
+      <div className="font-mono text-[10px] text-zinc-300 mb-1">{team.abbreviation}</div>
       <ul className="space-y-0.5">
         {top.map((p, i) => (
-          <li key={`${p.name}-${i}`} className="text-xs text-muted-foreground truncate">
-            {p.name} <span className="text-muted-foreground/60">{p.position}</span>{" "}
+          <li key={`${p.name}-${i}`} className="text-xs text-zinc-400 truncate">
+            {p.name} <span className="text-zinc-500">{p.position}</span>{" "}
             <span className={/out|reserve|ir/i.test(p.status) ? "text-red-400" : "text-amber-400/80"}>
               {p.status}
             </span>
           </li>
         ))}
         {report.players.length > 4 && (
-          <li className="text-[10px] font-mono text-muted-foreground/60">
-            +{report.players.length - 4} more
-          </li>
+          <li className="text-[10px] font-mono text-zinc-500">+{report.players.length - 4} more</li>
         )}
       </ul>
-    </div>
-  );
-}
-
-function AdvancedMetrics({ team, ctx }: { team: Game["home"]; ctx: GameContext }) {
-  const adv = ctx.advanced?.[normalizeAbbr(team.abbreviation)];
-  const elo = adv?.nfeloRating ?? ctx.elo?.[team.id];
-  const rows: string[] = [];
-  if (elo != null) rows.push(`${adv?.nfeloRating != null ? "nfelo" : "Elo"} ${Math.round(elo)}`);
-  if (adv?.offEpaPerGame != null) rows.push(`EPA ${adv.offEpaPerGame >= 0 ? "+" : ""}${adv.offEpaPerGame.toFixed(1)}/gm`);
-  if (adv?.qbName && adv?.cpoe != null) {
-    rows.push(`${adv.qbName} CPOE ${adv.cpoe >= 0 ? "+" : ""}${adv.cpoe.toFixed(1)}`);
-  }
-  if (adv?.timeToThrow != null) rows.push(`TTT ${adv.timeToThrow.toFixed(2)}s`);
-  if (rows.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="font-mono text-[10px] text-foreground/80 w-10">{team.abbreviation}</span>
-      {rows.map((r) => (
-        <span
-          key={r}
-          className="px-1.5 py-0.5 rounded bg-white/5 font-mono text-[10px] text-muted-foreground"
-        >
-          {r}
-        </span>
-      ))}
     </div>
   );
 }
@@ -269,6 +242,8 @@ function teamBadges(team: Game["home"], ctx: GameContext): string[] {
   if (prof.defenseTier && prof.defenseTier !== "Solid") badges.push(`${prof.defenseTier} D`);
   return badges;
 }
+
+/* ─── Game card ───────────────────────────────────────── */
 
 function GameCard({
   game,
@@ -314,7 +289,7 @@ function GameCard({
   const awayFlow = ctx.flow?.[game.away.id];
 
   return (
-    <Card className="p-4 bg-gradient-card border-border">
+    <div className="card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 flex-1 min-w-0">
           <TeamRow
@@ -331,11 +306,11 @@ function GameCard({
           />
         </div>
         <div className="text-right shrink-0">
-          <div className="font-mono text-[10px] text-muted-foreground">
+          <div className="font-mono text-[10px] text-zinc-400">
             {game.state === "pre" ? formatKickoff(game.date) : game.statusDetail}
           </div>
           {game.broadcast && game.state === "pre" && (
-            <div className="font-mono text-[10px] text-muted-foreground/60">{game.broadcast}</div>
+            <div className="font-mono text-[10px] text-zinc-500">{game.broadcast}</div>
           )}
         </div>
       </div>
@@ -350,7 +325,7 @@ function GameCard({
             <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-gold">
               Live win probability
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground">
+            <span className="font-mono text-[10px] text-zinc-400">
               {liveLeader.abbreviation} {Math.round(Math.max(live, 1 - live) * 100)}%
             </span>
           </div>
@@ -358,32 +333,31 @@ function GameCard({
             <div
               style={{
                 width: `${100 - Math.round(live * 100)}%`,
-                background: game.away.color ? `#${game.away.color}` : "hsl(var(--muted))",
+                background: game.away.color ? `#${game.away.color}` : "#3f3f46",
               }}
             />
             <div
               style={{
                 width: `${Math.round(live * 100)}%`,
-                background: game.home.color ? `#${game.home.color}` : "hsl(var(--muted))",
+                background: game.home.color ? `#${game.home.color}` : "#3f3f46",
               }}
             />
           </div>
-          <div className="mt-1.5 font-mono text-[10px] text-muted-foreground/70">
-            Deficits are priced against the clock — {liveLeader.id === game.home.id
-              ? game.away.abbreviation
-              : game.home.abbreviation}{" "}
-            still wins {trailerProbPct}% of the time from here.
+          <div className="mt-1.5 font-mono text-[10px] text-zinc-500">
+            Deficits are priced against the clock —{" "}
+            {liveLeader.id === game.home.id ? game.away.abbreviation : game.home.abbreviation} still
+            wins {trailerProbPct}% of the time from here.
           </div>
         </div>
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground/70">
+          <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-zinc-500">
             Pick
           </span>
           <span className="text-sm text-gold truncate">{pick.shortName}</span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-[10px] text-zinc-400">
             {Math.round(prediction.confidence * 100)}%
           </span>
           {game.completed && liveGrade !== null && (
@@ -392,13 +366,12 @@ function GameCard({
                 liveGrade ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
               }`}
             >
-              {liveGrade ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-              {liveGrade ? "Hit" : "Miss"}
+              {liveGrade ? "✓ Hit" : "✗ Miss"}
             </span>
           )}
         </div>
         <button
-          className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground hover:text-gold transition-colors shrink-0"
+          className="font-mono text-[10px] tracking-[0.15em] uppercase text-zinc-400 hover:text-gold transition-colors shrink-0"
           onClick={() => setOpen((o) => !o)}
         >
           {open ? "Close" : "Your read"}
@@ -409,28 +382,28 @@ function GameCard({
       </div>
 
       {open && (
-        <div className="mt-4 pt-4 border-t border-border/60 space-y-4">
+        <div className="mt-4 pt-4 border-t border-zinc-800/60 space-y-4">
           {/* Lean slider */}
           <div>
-            <div className="flex justify-between font-mono text-[10px] text-muted-foreground mb-1.5">
+            <div className="flex justify-between font-mono text-[10px] text-zinc-400 mb-1.5">
               <span>{game.away.abbreviation}</span>
               <span className="tracking-[0.15em] uppercase">Your lean</span>
               <span>{game.home.abbreviation}</span>
             </div>
-            <Slider
-              value={[input.lean]}
+            <input
+              type="range"
               min={-3}
               max={3}
               step={1}
-              onValueChange={([v]) => setInput({ ...input, lean: v })}
+              value={input.lean}
+              onChange={(e) => setInput({ ...input, lean: Number(e.target.value) })}
+              aria-label="Your lean"
             />
           </div>
 
           {/* Environment tags — tap to cycle: off → home → away → off */}
           <div>
-            <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
-              Environment edges
-            </div>
+            <div className={`${label10} mb-1.5`}>Environment edges</div>
             <div className="flex flex-wrap gap-1.5">
               {ENV_TAGS.map((tag) => {
                 const side = input.tags[tag];
@@ -441,7 +414,7 @@ function GameCard({
                     className={`px-2 py-1 rounded-md font-mono text-[10px] border transition-colors ${
                       side
                         ? "border-gold/60 text-gold bg-gold/10"
-                        : "border-border text-muted-foreground hover:border-gold/40"
+                        : "border-zinc-800 text-zinc-400 hover:border-gold/40"
                     }`}
                   >
                     {tag}
@@ -453,19 +426,17 @@ function GameCard({
           </div>
 
           {/* Notes */}
-          <Textarea
+          <textarea
             value={input.note}
             onChange={(e) => setInput({ ...input, note: e.target.value })}
             placeholder="Why do you like this side? (matchups, injuries, weather…)"
-            className="min-h-[64px] text-sm"
+            className="w-full min-h-[64px] text-sm rounded-md border border-zinc-800 bg-zinc-900/60 p-2 placeholder:text-zinc-600 focus:outline-none focus:border-gold/50"
           />
 
           {/* Advanced metrics: power rating, EPA, QB (when sources are live) */}
           {(ctx.elo || ctx.advanced) && (
             <div>
-              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
-                Advanced metrics
-              </div>
+              <div className={`${label10} mb-1.5`}>Advanced metrics</div>
               <div className="space-y-1.5">
                 <AdvancedMetrics team={game.away} ctx={ctx} />
                 <AdvancedMetrics team={game.home} ctx={ctx} />
@@ -476,9 +447,7 @@ function GameCard({
           {/* Game flow: per-half scoring, comebacks, volatility */}
           {(homeFlow || awayFlow) && (
             <div>
-              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
-                Game flow this season
-              </div>
+              <div className={`${label10} mb-1.5`}>Game flow this season</div>
               <div className="space-y-1.5">
                 <FlowChips team={game.away} flow={awayFlow} />
                 <FlowChips team={game.home} flow={homeFlow} />
@@ -489,9 +458,7 @@ function GameCard({
           {/* Injury report */}
           {hasInjuries && (
             <div>
-              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
-                Injury report
-              </div>
+              <div className={`${label10} mb-1.5`}>Injury report</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <InjuryList team={game.away} ctx={ctx} />
                 <InjuryList team={game.home} ctx={ctx} />
@@ -501,12 +468,10 @@ function GameCard({
 
           {/* Factor breakdown */}
           <div className="space-y-1">
-            <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground mb-1.5">
-              Factor breakdown
-            </div>
+            <div className={`${label10} mb-1.5`}>Factor breakdown</div>
             {prediction.contributions.map(({ label, value }) => (
               <div key={label} className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground w-28 shrink-0">{label}</span>
+                <span className="text-xs text-zinc-400 w-28 shrink-0">{label}</span>
                 <div className="flex-1 h-1.5 relative bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="absolute top-0 bottom-0 bg-gold/70"
@@ -515,9 +480,9 @@ function GameCard({
                       width: `${Math.abs(value) * 50}%`,
                     }}
                   />
-                  <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border" />
+                  <div className="absolute top-0 bottom-0 left-1/2 w-px bg-zinc-800" />
                 </div>
-                <span className="font-mono text-[10px] text-muted-foreground w-10 text-right">
+                <span className="font-mono text-[10px] text-zinc-400 w-10 text-right">
                   {value >= 0 ? game.home.abbreviation : game.away.abbreviation}
                 </span>
               </div>
@@ -525,13 +490,13 @@ function GameCard({
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
-/* ─── Page ────────────────────────────────────────────── */
+/* ─── App ─────────────────────────────────────────────── */
 
-export default function NFLPredictor() {
+export default function App() {
   const [storedWeights, setWeights] = useLocalStorage<ModelWeights>(
     NFL_WEIGHTS_KEY,
     DEFAULT_WEIGHTS,
@@ -540,6 +505,8 @@ export default function NFLPredictor() {
   const weights = useMemo(() => ensureWeights(storedWeights), [storedWeights]);
   const [inputs, setInputs] = useLocalStorage<InputsMap>(NFL_INPUTS_KEY, {});
   const [selected, setSelected] = useState<{ season: number; week: number } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   // First load: no args → ESPN tells us the current season + week.
   const currentWeek = useQuery({
@@ -597,7 +564,7 @@ export default function NFLPredictor() {
     retry: 1,
   });
 
-  // Advanced sources (EPA, NGS, PFR, nfelo) via the edge-function proxy.
+  // Advanced sources (EPA, NGS, PFR, nfelo) via this site's own /api proxy.
   const advanced = useQuery({
     queryKey: ["nfl", "advanced", season],
     queryFn: () => fetchAdvancedStats(season!),
@@ -659,100 +626,138 @@ export default function NFLPredictor() {
     setSelected({ season, week: Math.min(18, Math.max(1, week + delta)) });
   };
 
+  const onImportFile = async (file: File) => {
+    try {
+      const n = importDatabase(await file.text());
+      setImportMsg(`Imported ${n} data set${n > 1 ? "s" : ""} — reloading…`);
+      setTimeout(() => window.location.reload(), 800);
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : "Import failed");
+      setTimeout(() => setImportMsg(null), 4000);
+    }
+  };
+
   const loading = currentWeek.isLoading || schedule.isLoading;
   const error = currentWeek.error ?? schedule.error;
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <PageHeader
-        eyebrow="Game day"
-        title="NFL Predictor"
-        subtitle="Your model · your reasoning · projected winners"
-        actions={
-          record.allTot > 0 ? (
-            <div className="text-right">
-              <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground/70">
-                All-time
-              </div>
-              <div className="font-display text-xl text-gold">
-                {record.allHit}–{record.allTot - record.allHit}
-              </div>
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="h-1 w-1 rounded-full bg-gold inline-block" />
+              <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gold">
+                Game day
+              </span>
             </div>
-          ) : undefined
-        }
-      />
+            <h1 className="text-3xl sm:text-4xl text-zinc-100 leading-tight">NFL Predictor</h1>
+            <p className="mt-1.5 font-mono text-[11px] tracking-[0.15em] uppercase text-zinc-500">
+              Your model · your reasoning · projected winners
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            {record.allTot > 0 && (
+              <div className="text-right">
+                <div className={label10}>All-time</div>
+                <div className="text-xl text-gold">
+                  {record.allHit}–{record.allTot - record.allHit}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col items-end gap-1">
+              <button className={ghostBtn} onClick={downloadDatabase}>
+                ⭳ Export data
+              </button>
+              <button className={ghostBtn} onClick={() => fileRef.current?.click()}>
+                ⭱ Import data
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportFile(f);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        {importMsg && <div className="mt-2 font-mono text-[11px] text-gold">{importMsg}</div>}
+        <div className="mt-4 h-px bg-gradient-to-r from-gold/50 via-zinc-800 to-transparent" />
+      </div>
 
       {/* Week navigation */}
       <div className="flex items-center justify-between mb-4">
-        <Button variant="ghost" size="sm" onClick={() => nav(-1)} disabled={!week || week <= 1}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+        <button className={ghostBtn} onClick={() => nav(-1)} disabled={!week || week <= 1}>
+          ← Prev
+        </button>
         <div className="text-center">
           <div className="font-mono text-[11px] tracking-[0.2em] uppercase text-gold">
             {week ? `Week ${week}` : "…"}
           </div>
-          <div className="font-mono text-[10px] text-muted-foreground/60">
+          <div className="font-mono text-[10px] text-zinc-500">
             {season ?? ""}
             {record.wkTot > 0 && ` · ${record.wkHit}–${record.wkTot - record.wkHit} this week`}
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => nav(1)} disabled={!week || week >= 18}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+        <button className={ghostBtn} onClick={() => nav(1)} disabled={!week || week >= 18}>
+          Next →
+        </button>
       </div>
 
       <WeightsPanel weights={weights} setWeights={setWeights} />
 
       {loading && (
-        <Card className="p-10 bg-gradient-card border-border text-center">
+        <div className="card p-10 text-center">
           <div className="font-mono text-[11px] tracking-[0.3em] uppercase text-gold animate-pulse">
             Fetching the slate…
           </div>
-        </Card>
+        </div>
       )}
 
       {!loading && error != null && (
-        <Card className="p-10 bg-gradient-card border-border text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="card p-10 text-center">
+          <p className="text-sm text-zinc-400">
             Couldn't reach the schedule service. Check your connection and try again.
           </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-3 text-gold"
+          <button
+            className={`${ghostBtn} mt-3 text-gold`}
             onClick={() => {
               currentWeek.refetch();
               schedule.refetch();
             }}
           >
             Retry
-          </Button>
-        </Card>
+          </button>
+        </div>
       )}
 
       {!loading && !error && games.length === 0 && (
-        <Card className="p-10 bg-gradient-card border-border text-center">
-          <p className="text-sm text-muted-foreground">
-            No games on this week's slate — try another week.
-          </p>
-        </Card>
+        <div className="card p-10 text-center">
+          <p className="text-sm text-zinc-400">No games on this week's slate — try another week.</p>
+        </div>
       )}
 
       {/* Advanced data source health */}
       {!loading && games.length > 0 && (
-        <Card className="p-3 bg-gradient-card border-border mb-6">
+        <div className="card p-3 mb-6">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground/70 mr-1">
-              Advanced sources
-            </span>
-            {advanced.isError || (advanced.isSuccess && Object.keys(advanced.data.sources).length === 0) ? (
-              <span className="font-mono text-[10px] text-muted-foreground">
-                offline — deploy the <code className="text-gold">nfl-advanced-stats</code> function to
+            <span className={`${label10} mr-1`}>Advanced sources</span>
+            {advanced.isError ||
+            (advanced.isSuccess && Object.keys(advanced.data.sources).length === 0) ? (
+              <span className="font-mono text-[10px] text-zinc-400">
+                offline — run with the <code className="text-gold">/api/advanced</code> function
+                (deployed on Vercel, or locally via <code className="text-gold">vercel dev</code>) to
                 light up EPA, Next Gen Stats, PFR and nfelo. The model still runs on ESPN data +
                 computed Elo.
               </span>
             ) : advanced.isLoading ? (
-              <span className="font-mono text-[10px] text-muted-foreground animate-pulse">loading…</span>
+              <span className="font-mono text-[10px] text-zinc-400 animate-pulse">loading…</span>
             ) : (
               Object.entries(advanced.data?.sources ?? {}).map(([key, s]) => (
                 <span
@@ -761,7 +766,7 @@ export default function NFLPredictor() {
                   className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${
                     s.status === "ok"
                       ? "bg-emerald-500/15 text-emerald-400"
-                      : "bg-white/5 text-muted-foreground/60 line-through"
+                      : "bg-white/5 text-zinc-500 line-through"
                   }`}
                 >
                   {ADVANCED_SOURCE_LABELS[key] ?? key}
@@ -769,7 +774,7 @@ export default function NFLPredictor() {
               ))
             )}
           </div>
-        </Card>
+        </div>
       )}
 
       <div className="space-y-6">
@@ -777,7 +782,7 @@ export default function NFLPredictor() {
           <div key={label}>
             <div className="flex items-center gap-2 mb-2">
               <span className="h-1 w-1 rounded-full bg-gold inline-block" />
-              <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
+              <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-zinc-400">
                 {label}
               </span>
             </div>
@@ -796,6 +801,11 @@ export default function NFLPredictor() {
           </div>
         ))}
       </div>
+
+      <footer className="mt-10 pb-6 text-center font-mono text-[10px] text-zinc-600">
+        Data: ESPN · nflverse · Next Gen Stats · Pro-Football-Reference · nfelo — picks are graded
+        automatically when games go final. Your data lives in this browser; use Export to back it up.
+      </footer>
     </div>
   );
 }
