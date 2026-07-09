@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoonStar, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ChevronRight, MoonStar, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useGamification } from "@/hooks/useGamification";
 import { BADGES, LEVELS, recalibrateToLevel } from "@/lib/gamification";
@@ -11,6 +11,10 @@ export default function Achievements() {
   const { state, level, next, progress } = useGamification();
   const earned = new Set(state.earnedBadges);
   const [pickedLevel, setPickedLevel] = useState<number | "">("");
+  const [showJourney, setShowJourney] = useState(false);
+
+  // Level badges are spoilers until earned — everything else stays chaseable.
+  const visibleBadges = BADGES.filter((b) => !b.id.startsWith("level_") || earned.has(b.id));
 
   // Most recent decay within the last week — worth explaining on the bar.
   const lastDecay = (state.xpLog ?? [])
@@ -96,7 +100,8 @@ export default function Achievements() {
             aria-label="Pick your real level"
           >
             <option value="">Level…</option>
-            {LEVELS.map((l) => (
+            {/* Only levels you've walked (plus one up) — no spoiling the summit. */}
+            {LEVELS.filter((l) => l.level <= level.level + 1).map((l) => (
               <option key={l.level} value={l.level} disabled={l.level === level.level}>
                 {l.level} · {l.title}
               </option>
@@ -112,48 +117,68 @@ export default function Achievements() {
           </button>
         </div>
 
-        {/* Level ladder */}
-        <div className="mt-6 space-y-1.5">
-          {LEVELS.map((l) => {
-            const isCurrentLevel = l.level === level.level;
-            const isPast = l.level < level.level;
-            return (
-              <div
-                key={l.level}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 transition-all ${
-                  isCurrentLevel
-                    ? "bg-gold/10 border border-gold/30"
-                    : isPast
-                      ? "bg-background/30 border border-border/40"
-                      : "border border-dashed border-border/30 opacity-50"
-                }`}
-              >
-                <div
-                  className={`font-mono text-[10px] tracking-[0.2em] uppercase shrink-0 w-12 ${
-                    isCurrentLevel
-                      ? "text-gold"
-                      : isPast
-                        ? "text-muted-foreground"
-                        : "text-muted-foreground/50"
-                  }`}
-                >
-                  Lvl {l.level}
-                </div>
-                <div className={`text-sm flex-1 ${isCurrentLevel ? "text-foreground font-medium" : isPast ? "text-muted-foreground" : "text-muted-foreground/50"}`}>
-                  {l.title}
-                </div>
-                <div className="font-mono text-[9px] text-muted-foreground shrink-0">
-                  {l.minXp.toLocaleString()} XP
-                </div>
-                {isPast && <span className="text-gold text-xs shrink-0">✓</span>}
-                {isCurrentLevel && (
-                  <span className="font-mono text-[9px] text-gold uppercase tracking-wider shrink-0">
-                    You
-                  </span>
-                )}
-              </div>
-            );
-          })}
+        {/* Your journey — collapsed by default, and even open it only shows
+            where you've been plus the next rung. The rest of the path stays
+            out of sight: compare with yesterday's you, not the summit. */}
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => setShowJourney((v) => !v)}
+            className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-gold transition-colors"
+          >
+            {showJourney ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Your journey
+          </button>
+
+          {showJourney && (
+            <div className="mt-2 space-y-1.5">
+              {LEVELS.filter((l) => l.level <= level.level + 1).map((l) => {
+                const isCurrentLevel = l.level === level.level;
+                const isPast = l.level < level.level;
+                return (
+                  <div
+                    key={l.level}
+                    className={`flex items-center gap-3 rounded-md px-3 py-2 transition-all ${
+                      isCurrentLevel
+                        ? "bg-gold/10 border border-gold/30"
+                        : isPast
+                          ? "bg-background/30 border border-border/40"
+                          : "border border-dashed border-border/30 opacity-50"
+                    }`}
+                  >
+                    <div
+                      className={`font-mono text-[10px] tracking-[0.2em] uppercase shrink-0 w-12 ${
+                        isCurrentLevel
+                          ? "text-gold"
+                          : isPast
+                            ? "text-muted-foreground"
+                            : "text-muted-foreground/50"
+                      }`}
+                    >
+                      Lvl {l.level}
+                    </div>
+                    <div className={`text-sm flex-1 ${isCurrentLevel ? "text-foreground font-medium" : isPast ? "text-muted-foreground" : "text-muted-foreground/50"}`}>
+                      {l.title}
+                    </div>
+                    <div className="font-mono text-[9px] text-muted-foreground shrink-0">
+                      {l.minXp.toLocaleString()} XP
+                    </div>
+                    {isPast && <span className="text-gold text-xs shrink-0">✓</span>}
+                    {isCurrentLevel && (
+                      <span className="font-mono text-[9px] text-gold uppercase tracking-wider shrink-0">
+                        You
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {level.level + 1 < LEVELS.length && (
+                <p className="px-3 font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground/40">
+                  …the path continues from there
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -179,17 +204,19 @@ export default function Achievements() {
         </div>
       </Card>
 
-      {/* Badges */}
+      {/* Badges — unearned level badges stay hidden: their text ("Reach Level
+          10") is exactly the how-far-to-the-top reveal we keep out of sight.
+          They surface as a surprise the day they're earned. */}
       <Card className="p-6 bg-gradient-card border-border">
         <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
           <h3 className="font-display text-2xl">Badges</h3>
           <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-            {state.earnedBadges.length} / {BADGES.length}
+            {state.earnedBadges.length} / {visibleBadges.length}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {BADGES.map((b) => {
+          {visibleBadges.map((b) => {
             const isEarned = earned.has(b.id);
             return (
               <div
