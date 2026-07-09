@@ -28,6 +28,7 @@ const Schedule = lazy(() => import("./pages/Schedule"));
 const Review = lazy(() => import("./pages/Review"));
 const Mood = lazy(() => import("./pages/Mood"));
 const Notion = lazy(() => import("./pages/Notion"));
+const NFLPredictor = lazy(() => import("./pages/NFLPredictor"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
@@ -57,6 +58,7 @@ function usePrefetchRoutes() {
         import("./pages/Review"),
         import("./pages/Mood"),
         import("./pages/Notion"),
+        import("./pages/NFLPredictor"),
       ]);
     };
     if ("requestIdleCallback" in window) {
@@ -113,6 +115,7 @@ const App = () => {
                 <Route path="/review" element={<Review />} />
                 <Route path="/mood" element={<Mood />} />
                 <Route path="/notion" element={<Notion />} />
+                <Route path="/nfl" element={<NFLPredictor />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
