@@ -120,7 +120,7 @@ export const BADGE_MAP = new Map(BADGES.map((b) => [b.id, b]));
 
 export interface XpLogEntry {
   at: number;
-  kind: "decay" | "manual";
+  kind: "earn" | "decay" | "makeup" | "manual";
   delta: number; // negative for losses
   note: string;
 }
@@ -139,7 +139,10 @@ export interface GamificationState {
   // Life happens — XP breathes with real usage instead of only accumulating.
   lastActiveDay?: string;     // YYYY-MM-DD of the last XP-earning action
   decayAppliedUpTo?: string;  // YYYY-MM-DD we've already reconciled decay through
-  xpLog?: XpLogEntry[];       // recent decay / manual recalibrations (capped)
+  xpLog?: XpLogEntry[];       // recent earns / decay / make-ups / manual (capped)
+  // Per-day decay ledger: what each missed day cost, so making a day up later
+  // (backfilling it on the habit calendar) can refund exactly that charge.
+  decayByDay?: Record<string, number>;
 }
 
 const KEY = "alfred.gamification";
@@ -157,7 +160,9 @@ export const DECAY_GRACE_DAYS = 1;
 export const DECAY_PER_DAY = 0.98;
 /** One absence can never take more than 75% — coming back never means zero. */
 export const DECAY_FLOOR_FACTOR = 0.25;
-const XP_LOG_MAX = 20;
+const XP_LOG_MAX = 60;
+/** Ledger horizon — a missed day can be made up for up to 90 days. */
+const DECAY_LEDGER_DAYS = 90;
 
 export function ymdOf(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -169,11 +174,35 @@ export function daysBetweenYmd(a: string, b: string): number {
   return Math.round(ms / 86_400_000);
 }
 
+export function addDaysYmd(ymd: string, n: number): string {
+  const d = new Date(ymd + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return ymdOf(d);
+}
+
 /** XP remaining after `absentDays` fully-missed days (pure, testable). */
 export function decayedXp(xp: number, absentDays: number): number {
   if (xp <= 0 || absentDays <= 0) return Math.max(0, xp);
   const factor = Math.max(DECAY_FLOOR_FACTOR, Math.pow(DECAY_PER_DAY, absentDays));
   return Math.round(xp * factor);
+}
+
+/**
+ * Split an absence into per-day charges (pure, testable): 2% compounding per
+ * day, stopping at the 25% floor. Sum of charges = total lost. Powers the
+ * make-up refund: complete a missed day later and get that day's charge back.
+ */
+export function distributeDecay(xp: number, absentDays: number): number[] {
+  if (xp <= 0 || absentDays <= 0) return [];
+  const floorVal = Math.round(xp * DECAY_FLOOR_FACTOR);
+  const charges: number[] = [];
+  let cur = xp;
+  for (let i = 0; i < absentDays; i++) {
+    const next = Math.max(floorVal, Math.round(cur * DECAY_PER_DAY));
+    charges.push(cur - next);
+    cur = next;
+  }
+  return charges;
 }
 
 function appendXpLog(s: GamificationState, entry: XpLogEntry): void {
@@ -210,9 +239,24 @@ export function reconcileXpDecay(now = new Date()): XpLogEntry | null {
     return null;
   }
 
+  // Charge day-by-day so each missed day's cost is on the ledger and can be
+  // refunded later when the user goes back and makes that day up.
   const before = s.xp;
-  s.xp = decayedXp(before, newAbsent);
-  const lost = before - s.xp;
+  const charges = distributeDecay(before, newAbsent);
+  const ledger = { ...(s.decayByDay ?? {}) };
+  charges.forEach((lostThatDay, i) => {
+    // absent day #(alreadyCharged + 1 + i) = lastActiveDay + grace + that index
+    const day = addDaysYmd(s.lastActiveDay!, DECAY_GRACE_DAYS + alreadyCharged + 1 + i);
+    if (lostThatDay > 0) ledger[day] = (ledger[day] ?? 0) + lostThatDay;
+  });
+  // Prune ledger entries past the make-up horizon.
+  for (const day of Object.keys(ledger)) {
+    if (daysBetweenYmd(day, today) > DECAY_LEDGER_DAYS) delete ledger[day];
+  }
+  s.decayByDay = ledger;
+
+  const lost = charges.reduce((a, b) => a + b, 0);
+  s.xp = before - lost;
   // No fanfare on the way down — the UI just reflects the new level.
   const entry: XpLogEntry = {
     at: now.getTime(),
@@ -224,6 +268,28 @@ export function reconcileXpDecay(now = new Date()): XpLogEntry | null {
   saveGamification(s);
   window.dispatchEvent(new CustomEvent(XP_ADJUSTED, { detail: entry }));
   return lost > 0 ? entry : null;
+}
+
+/**
+ * Make up a missed day at any time: if that day was charged decay, refund
+ * exactly what it cost. Called when a past day is backfilled on the habit
+ * calendar. Returns the refund entry, or null if the day carried no charge.
+ */
+export function makeUpMissedDay(dayYmd: string): XpLogEntry | null {
+  if (typeof window === "undefined") return null;
+  const s = getGamification();
+  const charge = s.decayByDay?.[dayYmd] ?? 0;
+  if (charge <= 0) return null;
+  const ledger = { ...s.decayByDay };
+  delete ledger[dayYmd];
+  s.decayByDay = ledger;
+  s.xp += charge;
+  const pretty = new Date(dayYmd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const entry: XpLogEntry = { at: Date.now(), kind: "makeup", delta: charge, note: `made up ${pretty}` };
+  appendXpLog(s, entry);
+  saveGamification(s);
+  window.dispatchEvent(new CustomEvent(XP_ADJUSTED, { detail: entry }));
+  return entry;
 }
 
 /**
@@ -405,6 +471,18 @@ export function awardXp(
   }
   next.xp += bonusXp;
   next.earnedBadges = [...new Set([...state.earnedBadges, ...newBadgeIds])];
+
+  // History slide: earnings coalesce into one entry per day so the log stays
+  // readable — "earned today" grows instead of listing every single tick.
+  const log = [...(next.xpLog ?? [])];
+  const last = log[log.length - 1];
+  const gained = amount + bonusXp;
+  if (last && last.kind === "earn" && ymdOf(new Date(last.at)) === today) {
+    log[log.length - 1] = { ...last, at: Date.now(), delta: last.delta + gained };
+  } else {
+    log.push({ at: Date.now(), kind: "earn", delta: gained, note: "daily activity" });
+  }
+  next.xpLog = log.slice(-XP_LOG_MAX);
 
   const newLevel = levelFromXp(next.xp);
   const leveledUp = newLevel.level > prevLevel.level;

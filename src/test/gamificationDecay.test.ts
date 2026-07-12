@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DECAY_FLOOR_FACTOR,
+  addDaysYmd,
   daysBetweenYmd,
   decayedXp,
+  distributeDecay,
 } from "@/lib/gamification";
 
 describe("decayedXp", () => {
@@ -32,6 +34,37 @@ describe("decayedXp", () => {
 
   it("zero XP stays zero", () => {
     expect(decayedXp(0, 10)).toBe(0);
+  });
+});
+
+describe("distributeDecay (per-day ledger — powers make-up refunds)", () => {
+  it("per-day charges sum to the total decay", () => {
+    const charges = distributeDecay(1000, 6);
+    expect(charges).toHaveLength(6);
+    const total = charges.reduce((a, b) => a + b, 0);
+    expect(1000 - total).toBe(decayedXp(1000, 6)); // 886
+  });
+
+  it("first missed day of 1000 XP costs 20 (2%)", () => {
+    expect(distributeDecay(1000, 1)).toEqual([20]);
+  });
+
+  it("stops charging once the 25% floor is reached", () => {
+    const charges = distributeDecay(1000, 365);
+    const total = charges.reduce((a, b) => a + b, 0);
+    expect(1000 - total).toBe(250);
+    expect(charges.at(-1)).toBe(0); // late days cost nothing at the floor
+  });
+
+  it("no charges for zero xp or zero days", () => {
+    expect(distributeDecay(0, 5)).toEqual([]);
+    expect(distributeDecay(1000, 0)).toEqual([]);
+  });
+});
+
+describe("addDaysYmd", () => {
+  it("walks forward across month boundaries", () => {
+    expect(addDaysYmd("2026-06-28", 7)).toBe("2026-07-05");
   });
 });
 

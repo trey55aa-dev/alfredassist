@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { awardXp, XP_VALUES } from "@/lib/gamification";
+import { awardXp, makeUpMissedDay, XP_VALUES } from "@/lib/gamification";
+import { toast } from "sonner";
 import { Plus, Flame, Target as TargetIcon, ChevronRight, ArrowRight, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -157,13 +158,18 @@ export default function Checklist() {
       handleToggle(habit);
       return;
     }
-    // A past day only adjusts the record — no retroactive XP or goal bumps.
+    // A past day only adjusts the record — no retroactive XP or goal bumps,
+    // BUT making up a day refunds exactly what that day's decay cost.
     const has = logs.some((l) => l.habitId === habit.id && l.date === dateYmd);
     if (has) {
       setLogs(logs.filter((l) => !(l.habitId === habit.id && l.date === dateYmd)));
       removeHabitTime(habit.id, dateYmd);
     } else {
       setLogs([...logs, { habitId: habit.id, date: dateYmd }]);
+      const refund = makeUpMissedDay(dateYmd);
+      if (refund) {
+        toast.success(`Day made up — ${refund.delta} XP restored.`);
+      }
     }
   };
 

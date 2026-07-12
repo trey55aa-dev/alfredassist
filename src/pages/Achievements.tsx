@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, MoonStar, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ChevronRight, History, MoonStar, SlidersHorizontal, Sparkles, Undo2, TrendingDown } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import type { XpLogEntry } from "@/lib/gamification";
 import { toast } from "sonner";
 import { useGamification } from "@/hooks/useGamification";
 import { BADGES, LEVELS, recalibrateToLevel } from "@/lib/gamification";
@@ -47,8 +55,24 @@ export default function Achievements() {
               Level {level.level}
             </div>
             <h2 className="font-display text-4xl text-foreground">{level.title}</h2>
-            <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1">
+            <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-1 flex items-center gap-2">
               {state.xp.toLocaleString()} XP total
+              <Sheet>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-gold/70 hover:text-gold transition-colors normal-case tracking-normal"
+                  >
+                    <History className="h-3 w-3" /> History
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-full sm:max-w-sm bg-background/95 border-border/60 backdrop-blur-xl overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle className="font-display text-xl">XP history</SheetTitle>
+                  </SheetHeader>
+                  <XpHistoryList log={state.xpLog ?? []} />
+                </SheetContent>
+              </Sheet>
             </p>
           </div>
           <div className="text-right shrink-0">
@@ -258,5 +282,49 @@ export default function Achievements() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ─── XP history slide — the full story behind the bar ───────────── */
+
+const LOG_STYLE: Record<XpLogEntry["kind"], { icon: React.ElementType; tone: string; label: (e: XpLogEntry) => string }> = {
+  earn:   { icon: Sparkles,          tone: "text-gold",          label: () => "Daily activity" },
+  decay:  { icon: TrendingDown,      tone: "text-teal",          label: (e) => `Eased off — ${e.note}` },
+  makeup: { icon: Undo2,             tone: "text-gold",          label: (e) => `Made up a missed day (${e.note.replace("made up ", "")})` },
+  manual: { icon: SlidersHorizontal, tone: "text-muted-foreground", label: (e) => `Recalibrated — ${e.note}` },
+};
+
+function XpHistoryList({ log }: { log: XpLogEntry[] }) {
+  if (log.length === 0) {
+    return (
+      <p className="mt-6 text-sm text-muted-foreground/70 italic">
+        Nothing yet — your earns, eased-off days, and make-ups will show here.
+      </p>
+    );
+  }
+  const entries = [...log].reverse();
+  return (
+    <ul className="mt-4 space-y-1.5">
+      {entries.map((e, i) => {
+        const s = LOG_STYLE[e.kind];
+        const Icon = s.icon;
+        const when = new Date(e.at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return (
+          <li
+            key={`${e.at}-${i}`}
+            className="flex items-center gap-3 rounded-lg border border-border/50 bg-white/3 px-3 py-2"
+          >
+            <Icon className={`h-3.5 w-3.5 shrink-0 ${s.tone}`} />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-foreground leading-snug">{s.label(e)}</div>
+              <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60 mt-0.5">{when}</div>
+            </div>
+            <span className={`font-mono text-xs font-semibold shrink-0 ${e.delta >= 0 ? "text-gold" : "text-teal"}`}>
+              {e.delta >= 0 ? "+" : "−"}{Math.abs(e.delta).toLocaleString()}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
