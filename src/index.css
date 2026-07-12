@@ -126,6 +126,12 @@
     animation: fade-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
+  /* Simple mode — larger base type (all rem sizes scale) and roomier touch
+     targets, so a 12-year-old or a 75-year-old can read and tap everything. */
+  html.ui-simple {
+    font-size: 17px;
+  }
+
   /* Route change — quick, subtle slide-fade so moving between features feels
      instant but not jarring. Re-triggered by keying the wrapper on pathname. */
   .page-in {

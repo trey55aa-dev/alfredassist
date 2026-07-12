@@ -20,7 +20,8 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { ScenePicker } from "@/components/ScenePicker";
-import { NAV_CATEGORIES, FOCUS_SAFE } from "@/lib/navConfig";
+import { FOCUS_SAFE, navCategoriesFor } from "@/lib/navConfig";
+import { useUiMode, setUiMode } from "@/lib/uiMode";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,6 +57,9 @@ export function AppSidebar() {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
+  const uiMode = useUiMode();
+  const simple = uiMode === "simple";
+  const navCategories = navCategoriesFor(uiMode);
 
 
   // First run after sign-in with no name set: gently prompt once.
@@ -143,12 +147,13 @@ export function AppSidebar() {
 
         <div className="divider-gold mx-3" />
 
-        {/* ── Navigation — section-label style ── */}
-        {NAV_CATEGORIES.map((cat, catIdx) => {
+        {/* ── Navigation — section-label style; simple mode is one flat list ── */}
+        {navCategories.map((cat, catIdx) => {
           const CatIcon = cat.icon;
           return (
             <SidebarGroup key={cat.id} className="py-0 mt-1">
-              {/* Section sub-heading — hidden automatically in icon-collapsed mode */}
+              {/* Section sub-heading — hidden in simple mode (labels repeat the item) */}
+              {!simple && (
               <SidebarGroupLabel className="
                 flex items-center gap-1.5
                 font-mono text-[9px] tracking-[0.28em] uppercase
@@ -158,6 +163,7 @@ export function AppSidebar() {
                 <CatIcon className="h-3 w-3 shrink-0" />
                 {cat.label}
               </SidebarGroupLabel>
+              )}
 
               <SidebarGroupContent>
                 <SidebarMenu className="gap-px">
@@ -203,7 +209,7 @@ export function AppSidebar() {
               </SidebarGroupContent>
 
               {/* Thin separator between sections (not after the last one) */}
-              {catIdx < NAV_CATEGORIES.length - 1 && (
+              {!simple && catIdx < navCategories.length - 1 && (
                 <SidebarSeparator className="mx-3 mt-1 opacity-40" />
               )}
             </SidebarGroup>
@@ -212,6 +218,21 @@ export function AppSidebar() {
 
         <div className="mt-auto p-3 space-y-3">
           <div className="divider-gold mx-1" />
+
+          {/* Simple ↔ full interface. Simple is the default; this one switch
+              unlocks every screen and setting for power users. */}
+          {!collapsed && (
+            <label className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-sidebar-accent/40 transition-colors cursor-pointer">
+              <span className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground flex-1">
+                Show everything
+              </span>
+              <Switch
+                checked={!simple}
+                onCheckedChange={(on) => setUiMode(on ? "full" : "simple")}
+                aria-label="Show the full app"
+              />
+            </label>
+          )}
 
           {/* XP / Level mini bar */}
           <XpBar />
@@ -280,7 +301,7 @@ export function AppSidebar() {
           )}
 
           {/* Theme Color Picker */}
-          {!collapsed && (
+          {!collapsed && !simple && (
             <Popover>
               <PopoverTrigger asChild>
                 <button className="flex items-center gap-2 w-full mt-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
@@ -340,7 +361,7 @@ export function AppSidebar() {
           )}
 
           {/* Accent Color Picker */}
-          {!collapsed && (
+          {!collapsed && !simple && (
             <Popover>
               <PopoverTrigger asChild>
                 <button className="flex items-center gap-2 w-full mt-2 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors text-xs text-muted-foreground hover:text-gold">
@@ -401,9 +422,9 @@ export function AppSidebar() {
           )}
 
           {/* App Icon Customizer */}
-          {!collapsed && <AppIconCustomizer />}
+          {!collapsed && !simple && <AppIconCustomizer />}
 
-          {!collapsed && (
+          {!collapsed && !simple && (
             <div className="mt-3 px-2 space-y-3">
               {/* Toggle */}
               <div className="flex items-center justify-between">

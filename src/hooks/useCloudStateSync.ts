@@ -35,6 +35,7 @@ const SYNCED_KEYS = [
   "alfred.goalDaily.done",  // { goalId|date: true } — daily goal check-ins
   "alfred.decisions",       // accept/dismiss log — Alfred's learning follows you
   "alfred.scene",           // chosen background scene — your look follows you
+  "alfred.uiMode",          // simple vs full interface — one choice, every device
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

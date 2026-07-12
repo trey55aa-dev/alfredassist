@@ -46,6 +46,7 @@ import {
 } from "@/lib/goalDaily";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
+import { useUiMode } from "@/lib/uiMode";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { GoalEmoji } from "@/components/GoalEmoji";
@@ -67,6 +68,7 @@ export default function Checklist() {
   const { goals, setGoals } = useCloudGoals();
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   const [tab, setTab] = useState<Cadence>("daily");
+  const simple = useUiMode() === "simple";
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const activeHabits = useMemo(() => habits.filter((h) => !h.archived), [habits]);
@@ -189,9 +191,13 @@ export default function Checklist() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Daily protocol"
-        title="The Checklist"
-        description="Tap a habit to see its calendar and stats. Tick the period as you complete it; your streak holds as long as you do."
+        eyebrow={simple ? "Every day" : "Daily protocol"}
+        title={simple ? "Your habits" : "The Checklist"}
+        description={
+          simple
+            ? "Check off what you do each day. Tap a habit to see your progress."
+            : "Tap a habit to see its calendar and stats. Tick the period as you complete it; your streak holds as long as you do."
+        }
       />
 
       {/* Recovery */}

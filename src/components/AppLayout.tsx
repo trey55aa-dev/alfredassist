@@ -27,6 +27,7 @@ import { useCloudStateSync } from "@/hooks/useCloudStateSync";
 import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
 import { reconcileXpDecay } from "@/lib/gamification";
+import { useUiMode } from "@/lib/uiMode";
 import { NAV_CATEGORIES } from "@/lib/navConfig";
 
 function usePageTitle(): string {
@@ -48,6 +49,12 @@ export default function AppLayout() {
   const [moodPrompt, dismissMoodPrompt] = useMoodPrompt();
   const pageTitle = usePageTitle();
   const { pathname } = useLocation();
+  const uiMode = useUiMode();
+
+  // Simple mode bumps the root font size — every rem-based size grows with it.
+  useEffect(() => {
+    document.documentElement.classList.toggle("ui-simple", uiMode === "simple");
+  }, [uiMode]);
 
   useEffect(() => {
     initAppIcon();

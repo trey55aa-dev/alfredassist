@@ -45,6 +45,7 @@ import { awardXp, progressXp, XP_VALUES } from "@/lib/gamification";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { Cloud, CloudOff, Minus, History, X as XIcon } from "lucide-react";
 import { recordDecision, wasDismissed } from "@/lib/alfredAdapt";
+import { useUiMode } from "@/lib/uiMode";
 import {
   computeProjection,
   last14Days,
@@ -125,6 +126,7 @@ export default function Goals2026() {
     error: cloudError,
     signedIn,
   } = useCloudGoals();
+  const simpleUi = useUiMode() === "simple";
   const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [view, setView] = useState<"all" | "quarters" | "timeframe">("all");
   const [activeTags, setActiveTags] = useState<string[]>([]);
@@ -206,9 +208,13 @@ export default function Goals2026() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="The year ahead"
-        title="2026 Goals"
-        description="Define the campaign. Set deadlines. Conquer by quarter."
+        eyebrow={simpleUi ? "This year" : "The year ahead"}
+        title={simpleUi ? "Your goals" : "2026 Goals"}
+        description={
+          simpleUi
+            ? "What do you want to achieve? Add a goal and Alfred helps you get there."
+            : "Define the campaign. Set deadlines. Conquer by quarter."
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SyncIndicator

@@ -87,5 +87,46 @@ export const NAV_CATEGORIES: NavCategory[] = [
   },
 ];
 
+/**
+ * Simple mode — the whole app in five plain words. Each category is a single
+ * destination so both navs become one-tap: no sub-menus, no jargon.
+ */
+export const SIMPLE_NAV_CATEGORIES: NavCategory[] = [
+  {
+    id: "home",
+    label: "Home",
+    icon: LayoutDashboard,
+    items: [{ title: "Home", url: "/", icon: LayoutDashboard }],
+  },
+  {
+    id: "today",
+    label: "Today",
+    icon: CalendarDays,
+    items: [{ title: "Today", url: "/agenda", icon: CalendarDays }],
+  },
+  {
+    id: "habits",
+    label: "Habits",
+    icon: CheckSquare,
+    items: [{ title: "Habits", url: "/checklist", icon: CheckSquare }],
+  },
+  {
+    id: "goals",
+    label: "Goals",
+    icon: Target,
+    items: [{ title: "Goals", url: "/goals-2026", icon: Target }],
+  },
+  {
+    id: "guide",
+    label: "Help",
+    icon: BookOpen,
+    items: [{ title: "Help", url: "/guide", icon: BookOpen }],
+  },
+];
+
+export function navCategoriesFor(mode: "simple" | "full"): NavCategory[] {
+  return mode === "simple" ? SIMPLE_NAV_CATEGORIES : NAV_CATEGORIES;
+}
+
 /** Routes accessible without focus-mode confirmation. */
 export const FOCUS_SAFE = new Set<string>(["/agenda", "/schedule"]);

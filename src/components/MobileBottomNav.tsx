@@ -23,7 +23,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useFocusMode } from "@/hooks/useFocusMode";
-import { NAV_CATEGORIES, FOCUS_SAFE } from "@/lib/navConfig";
+import { FOCUS_SAFE, navCategoriesFor } from "@/lib/navConfig";
+import { useUiMode } from "@/lib/uiMode";
 
 const LAST_VISITED_KEY = "alfred.nav.lastVisited";
 
@@ -46,9 +47,10 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const focus = useFocusMode();
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const navCategories = navCategoriesFor(useUiMode());
 
   // Track last-visited page per category
-  const activeCat = NAV_CATEGORIES.find((cat) =>
+  const activeCat = navCategories.find((cat) =>
     cat.items.some((item) =>
       item.url === "/"
         ? location.pathname === "/"
@@ -58,7 +60,7 @@ export function MobileBottomNav() {
   if (activeCat) setLastVisited(activeCat.id, location.pathname);
 
   const handleTap = (catId: string) => {
-    const cat = NAV_CATEGORIES.find((c) => c.id === catId)!;
+    const cat = navCategories.find((c) => c.id === catId)!;
     const lastVisited = getLastVisited()[catId];
     const validLast =
       lastVisited &&
@@ -123,7 +125,7 @@ export function MobileBottomNav() {
             landscape:py-1
           "
         >
-          {NAV_CATEGORIES.map((cat) => {
+          {navCategories.map((cat) => {
             const isActive = cat.id === activeCat?.id;
             const Icon = cat.icon;
 
