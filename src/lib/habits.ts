@@ -311,7 +311,7 @@ export interface Recovery {
 const FLAVOR_BY_CADENCE: Record<Cadence, (title: string, missed: number) => string> = {
   daily: (t, m) =>
     m === 1
-      ? `Sir, ${t.toLowerCase()} slipped yesterday. One small motion tonight restores the rhythm.`
+      ? `Sir, ${t.toLowerCase()} slipped. One small motion tonight restores the rhythm.`
       : `Sir, ${t.toLowerCase()} has been quiet for ${m} days. The campaign waits — but not forever.`,
   weekly: (t, m) =>
     `Sir, ${t.toLowerCase()} missed ${m === 1 ? "this past week" : `${m} weeks`}. A modest start re-opens the cadence.`,
@@ -351,11 +351,23 @@ const DEFAULT_STEPS_BY_CADENCE: Record<Cadence, (title: string) => string[]> = {
   ],
 };
 
+// Daily habits get the same one-day grace as the habit calendar and XP decay:
+// yesterday is never a miss, and today isn't over yet, so neither counts toward
+// "days missed" (habitStats.ts's totalMisses uses the same today-2 cutoff).
+const DAILY_RECOVERY_GRACE_PERIODS = 2;
+
 export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()): Recovery | null {
   const missed = periodsSinceLast(habit, logs, today);
   if (missed === 0) return null; // current period already complete
+
+  const graced =
+    habit.cadence === "daily" && missed !== Infinity
+      ? Math.max(0, missed - DAILY_RECOVERY_GRACE_PERIODS)
+      : missed;
+  if (graced === 0) return null; // still within grace, not at risk yet
+
   // For brand-new habits never done, treat as "1 missed period" so we coach onboarding
-  const effectiveMissed = missed === Infinity ? 1 : missed;
+  const effectiveMissed = graced === Infinity ? 1 : graced;
   const lastKey =
     missed === Infinity
       ? null
