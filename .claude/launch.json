@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "alfred-dev",
+      "runtimeExecutable": "/Users/treyalsbrooks/.bun/bin/bun",
+      "runtimeArgs": ["run", "dev"],
+      "port": 8080
+    }
+  ]
+}
