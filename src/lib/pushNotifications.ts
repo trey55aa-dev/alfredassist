@@ -9,11 +9,37 @@ const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undef
 
 export type PushReason =
   | "unsupported"
+  | "needs-install"
   | "denied"
   | "dismissed"
   | "no-vapid-key"
   | "not-signed-in"
   | "save-failed";
+
+/** iPhone/iPad, including iPadOS 13+ which reports itself as a Mac. */
+function isIosLike(): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+/** Running as an installed web app rather than a browser tab. */
+export function isInstalledWebApp(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/**
+ * iOS only delivers Web Push to apps added to the Home Screen — in a plain
+ * Safari tab the APIs exist but subscribing never works. macOS web apps (and
+ * Safari on macOS) have no such requirement, so this is gated to iOS only.
+ */
+export function needsHomeScreenInstall(): boolean {
+  return isIosLike() && !isInstalledWebApp();
+}
 
 export interface PushResult {
   ok: boolean;
@@ -58,6 +84,8 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 /** Request permission, subscribe, and persist the subscription for this user. */
 export async function subscribeToPush(userId: string | undefined): Promise<PushResult> {
   if (!isPushSupported()) return { ok: false, reason: "unsupported" };
+  // Fail fast with actionable guidance instead of a confusing subscribe error.
+  if (needsHomeScreenInstall()) return { ok: false, reason: "needs-install" };
   if (!VAPID_PUBLIC_KEY) return { ok: false, reason: "no-vapid-key" };
   if (!userId) return { ok: false, reason: "not-signed-in" };
 

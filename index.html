@@ -17,6 +17,73 @@
     <meta name="apple-mobile-web-app-title" content="Alfred" />
     <meta name="mobile-web-app-capable" content="yes" />
 
+    <!--
+      Boot theme — runs BEFORE first paint.
+
+      The app's colours live in localStorage (scene, legacy theme, accent) and
+      used to be applied by React effects, i.e. after the browser had already
+      painted the CSS defaults. That produced a flash of the wrong theme on
+      every cold start, and on an installed iOS/macOS web app it reads as
+      "my theme reset itself" when the app is relaunched. Applying it here,
+      synchronously in <head>, means the very first paint is already correct.
+
+      Kept dependency-free and fully wrapped in try/catch: a corrupt value must
+      never be able to white-screen the app.
+    -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var read = function (k) {
+            try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; }
+          };
+          var set = function (k, v) { root.style.setProperty(k, v); };
+
+          // Larger base type for simple mode — applied here so the text doesn't
+          // visibly jump a step after hydration.
+          if ((read("alfred.uiMode") || "simple") !== "full") root.classList.add("ui-simple");
+
+          // Background/foreground: legacy theme first, then scene (scene wins).
+          var bg = null, fg = null;
+          var theme = read("alfred-theme-color");
+          if (theme && theme.background) { bg = theme.background; fg = theme.foreground; }
+          var scene = read("alfred.scene");
+          if (scene && scene.base) { bg = scene.base; fg = scene.fg || fg; }
+          if (bg) set("--background", bg);
+          if (fg) set("--foreground", fg);
+
+          // Match the OS window chrome (iOS status bar / macOS web-app titlebar)
+          // to the actual background instead of the hardcoded default.
+          if (bg) {
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute("content", "hsl(" + bg + ")");
+          }
+
+          // Accent — mirrors deriveAccentVariants() in hooks/useThemeColor.ts.
+          var accent = read("alfred-accent-color");
+          if (accent && accent.hsl) {
+            var p = String(accent.hsl).trim().split(/\s+/);
+            var h = parseFloat(p[0]) || 0;
+            var s = parseFloat(p[1]) || 50;
+            var l = parseFloat(p[2]) || 60;
+            var c = function (v) { return Math.max(0, Math.min(100, v)); };
+            var base = h + " " + s + "% " + l + "%";
+            var glow = h + " " + c(s + 15) + "% " + c(l + 8) + "%";
+            var soft = h + " " + c(s - 15) + "% " + c(l - 7) + "%";
+            var deep = (h - 4) + " " + c(s + 5) + "% " + c(l - 20) + "%";
+            set("--primary", base); set("--primary-glow", glow); set("--ring", base);
+            set("--gold", base); set("--gold-soft", soft); set("--gold-deep", deep);
+            set("--sidebar-primary", base); set("--sidebar-ring", base);
+            set("--gradient-gold", "linear-gradient(135deg, hsl(" + base + ") 0%, hsl(" + deep + ") 100%)");
+            set("--shadow-gold", "0 10px 40px -10px hsl(" + base + " / 0.35)");
+            set("--shadow-inset-gold", "inset 0 1px 0 0 hsl(" + base + " / 0.15)");
+          }
+
+          root.dataset.themeBootedAt = String(Math.round(performance.now()));
+        } catch (e) { /* never block boot */ }
+      })();
+    </script>
+
     <meta property="og:type" content="website" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />

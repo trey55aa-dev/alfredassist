@@ -5,7 +5,7 @@
 // Bump this version whenever cached behaviour changes — the activate handler
 // deletes every cache that isn't the current one, purging stale assets so a
 // restart can never serve an old bundle.
-const CACHE = "alfred-v3";
+const CACHE = "alfred-v4";
 const SHELL = ["/", "/index.html"];
 
 // External origins that must never be intercepted

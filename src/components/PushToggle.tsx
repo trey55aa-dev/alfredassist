@@ -12,6 +12,8 @@ import {
 
 const REASON: Record<PushReason, string> = {
   unsupported: "This browser doesn't support push notifications.",
+  "needs-install":
+    "On iPhone or iPad, add Alfred to your Home Screen first — tap Share, then “Add to Home Screen”, and open it from there.",
   denied: "Notifications are blocked — enable them in your browser settings for this site.",
   dismissed: "Permission dismissed. Tap again when you're ready.",
   "no-vapid-key": "Push isn't configured yet (missing VAPID key).",

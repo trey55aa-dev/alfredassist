@@ -1,11 +1,13 @@
 {
+  "id": "/",
   "name": "Alfred",
   "short_name": "Alfred",
   "description": "Your butler for habits, focus, goals, and the daily campaign.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#0a0d14",
   "theme_color": "#0a0d14",
   "icons": [

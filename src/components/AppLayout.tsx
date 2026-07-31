@@ -63,6 +63,10 @@ export default function AppLayout() {
   }, []);
 
   useEffect(() => {
+    // A chosen scene owns the background — don't let the legacy per-colour theme
+    // overwrite it. (SceneBackground is a child, so its effect runs first; without
+    // this guard the scene would be clobbered on every mount.)
+    if (localStorage.getItem("alfred.scene")) return;
     const saved = localStorage.getItem("alfred-theme-color");
     if (saved) {
       const parsed = JSON.parse(saved);

@@ -183,11 +183,21 @@ export function loadScene(): SceneState | null {
   }
 }
 
+/**
+ * Point the `theme-color` meta at a background colour so the OS window chrome
+ * matches — the iOS status bar and the macOS web-app title bar both read this.
+ */
+export function syncThemeColorMeta(hsl: string): void {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", `hsl(${hsl})`);
+}
+
 /** Set the base background/foreground CSS variables for a scene. */
 export function applySceneVars(state: SceneState): void {
   const root = document.documentElement.style;
   root.setProperty("--background", state.base);
   root.setProperty("--foreground", state.fg);
+  syncThemeColorMeta(state.base);
 }
 
 export function applyScene(state: SceneState): void {
@@ -210,5 +220,10 @@ export function clearScene(): void {
   const root = document.documentElement.style;
   root.removeProperty("--background");
   root.removeProperty("--foreground");
+  // Back to the stylesheet default, and put the OS chrome back with it.
+  syncThemeColorMeta(
+    getComputedStyle(document.documentElement).getPropertyValue("--background").trim() ||
+      "220 35% 6%",
+  );
   window.dispatchEvent(new Event(SCENE_CHANGED));
 }
