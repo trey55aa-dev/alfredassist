@@ -1,0 +1,5 @@
+# Auto-improvement run log
+
+One dated line per run: journey walked, what was done or found.
+
+- 2026-07-31: Walked "returning after several days away" (seeded goals/habits/gamification with last activity 2026-07-28, today 2026-07-31 — 3 days absent). Found: XP decay and the morning briefing worked well and felt on-mission. Bug: the "Get Back on Track" recovery panel (Dashboard, Habits, Agenda) showed "3 DAYS MISSED" for a daily habit when only 1 day had actually lapsed past the grace window — it wasn't applying the same one-day grace already implemented in habitStats.ts and the XP decay math, directly contradicting the "grace before penalty" principle. Fixed `buildRecovery()` in src/lib/habits.ts to use the same today-2 cutoff for daily cadences; added src/test/habitsRecovery.test.ts (6 cases). Also noticed but did NOT fix: undoing a habit checkbox for today doesn't refund the XP that was awarded for checking it (XP stayed at 819 after uncheck, should probably return to 809) — worth a future look, but out of scope for this run's single-change budget.
