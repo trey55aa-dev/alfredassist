@@ -25,6 +25,7 @@ import { useUiMode, setUiMode } from "@/lib/uiMode";
 import { ProfileNameDialog } from "@/components/ProfileNameDialog";
 import { AppIconCustomizer } from "@/components/AppIconCustomizer";
 import { useAuth } from "@/hooks/useAuth";
+import { isLocalMode, disableLocalMode } from "@/lib/localMode";
 import { useThemeColor, hslToHex } from "@/hooks/useThemeColor";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -57,6 +58,7 @@ export function AppSidebar() {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const { profile, user, signOut } = useAuth();
+  const offline = !user && isLocalMode();
   const uiMode = useUiMode();
   const simple = uiMode === "simple";
   const navCategories = navCategoriesFor(uiMode);
@@ -262,17 +264,23 @@ export function AppSidebar() {
                     <Pencil className="h-2.5 w-2.5 text-muted-foreground/50 group-hover/name:text-gold shrink-0" />
                   </div>
                   <div className="font-mono text-[9px] tracking-[0.15em] uppercase text-muted-foreground truncate">
-                    {user?.email}
+                    {offline ? "Offline · this device" : user?.email}
                   </div>
                 </button>
               )}
             </div>
             {!collapsed && (
               <button
-                onClick={() => signOut()}
+                onClick={async () => {
+                  // Offline mode has no session to end — leaving it just means
+                  // going back to the sign-in page.
+                  disableLocalMode();
+                  await signOut();
+                  navigate("/auth", { replace: true });
+                }}
                 className="text-muted-foreground/60 hover:text-gold transition-colors p-1"
-                aria-label="Sign out"
-                title="Sign out"
+                aria-label={offline ? "Sign in" : "Sign out"}
+                title={offline ? "Sign in" : "Sign out"}
               >
                 <LogOut className="h-3.5 w-3.5" />
               </button>

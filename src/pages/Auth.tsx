@@ -8,6 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { enableLocalMode } from "@/lib/localMode";
+
+/**
+ * A failed fetch (backend unreachable, offline, DNS gone) surfaces as a generic
+ * "Failed to fetch", which reads exactly like a rejected password and sends
+ * people hunting for the wrong problem. Name it for what it is.
+ */
+function isNetworkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(msg);
+}
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -18,6 +29,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
 
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
@@ -50,11 +62,23 @@ export default function Auth() {
         toast.success("At your service.");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong.";
-      toast.error(msg);
+      if (isNetworkError(err)) {
+        setUnreachable(true);
+        toast.error("Can't reach Alfred's server.", {
+          description: "This isn't your password — you can carry on offline.",
+        });
+      } else {
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        toast.error(msg);
+      }
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleOffline = () => {
+    enableLocalMode();
+    navigate(from, { replace: true });
   };
 
   const handleGoogle = async () => {
@@ -159,6 +183,27 @@ export default function Auth() {
           >
             <GoogleIcon className="h-4 w-4 mr-2" />
             Continue with Google
+          </Button>
+
+          {unreachable && (
+            <p className="mt-5 text-xs text-muted-foreground leading-relaxed border-t border-border pt-4">
+              Alfred's server can't be reached right now, so signing in isn't
+              possible. Your password is fine. Everything on this device still
+              works — carry on offline and sign in whenever it's back.
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleOffline}
+            className={
+              unreachable
+                ? "w-full mt-3 bg-gold text-primary-foreground hover:bg-gold-soft"
+                : "w-full mt-4 text-muted-foreground hover:text-foreground"
+            }
+          >
+            Use Alfred offline on this device
           </Button>
         </Card>
       </div>
