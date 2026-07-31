@@ -4,6 +4,35 @@ A butler-themed personal productivity web app: goals, habits, mood, AI chat,
 scheduling, gamification. Vite + React + TypeScript + shadcn/ui + Tailwind,
 Supabase for auth/DB/edge functions. It is a **PWA, not a native app**.
 
+## Why Alfred exists
+
+Alfred is modelled on Batman's Alfred and Iron Man's JARVIS — a genuinely
+capable assistant who handles things *with* you, not a tracker that reports
+numbers back at you.
+
+It was built to solve a specific personal problem: **difficulty understanding
+and feeling time.** Chronically late, hard to plan ahead, and needing a pile of
+separate apps just to keep up. Alfred is the attempt at one place that replaces
+that pile and actually helps the user reach the goals they set.
+
+This is the lens for every decision in this repo:
+
+- **Make time concrete.** Time-blindness is the founding problem. Always prefer
+  showing where you *should* be by now, what today actually demands, and how
+  long something really takes — over abstract dates and raw totals.
+- **Make goals feel achievable.** A goal should look reachable and broken into
+  a real next step, never a distant number that intimidates. This is why pace
+  checkpoints exist and why the level ladder stays collapsed.
+- **Work with the user when they fall short.** Falling behind is the normal
+  case, not the failure case. Every feature needs an answer to "I missed a
+  week" that helps the user re-enter — never one that punishes or shames.
+- **Improvement is everything.** Progress over perfection. The measure is
+  "better than last week," never "unbroken streak."
+- **One place, not five apps.** When weighing more depth in an existing area
+  against covering a real daily need that would otherwise send the user to
+  another app, lean toward covering the need — but never at the cost of
+  overwhelming simple mode.
+
 ## Commands that actually work here
 
 ```bash
