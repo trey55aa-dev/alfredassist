@@ -63,8 +63,8 @@ export function RecoveryPanel({ recoveries, onMarkDone, compact, limit }: Props)
             key={r.habit.id}
             className="rounded-md bg-background/40 border border-border/60 p-4"
           >
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0 sm:flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm text-foreground font-medium">{r.habit.title}</span>
                   <span className="px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-[0.15em] bg-muted/40 text-muted-foreground border-border">
