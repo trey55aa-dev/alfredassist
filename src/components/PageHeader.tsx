@@ -17,8 +17,8 @@ export function PageHeader({ eyebrow, title, subtitle, description, actions, act
 
   return (
     <div className="mb-6 sm:mb-8">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 shrink-0">
           {eyebrow && (
             <div className="flex items-center gap-2 mb-2">
               <span className="h-1 w-1 rounded-full bg-gold inline-block" />
@@ -37,7 +37,7 @@ export function PageHeader({ eyebrow, title, subtitle, description, actions, act
           )}
         </div>
         {acts && (
-          <div className="flex flex-wrap gap-2 shrink-0 mt-1 sm:mt-0">
+          <div className="flex flex-wrap gap-2 min-w-0 max-w-full mt-1 sm:mt-0">
             {acts}
           </div>
         )}
