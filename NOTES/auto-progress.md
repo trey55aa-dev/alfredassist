@@ -1,0 +1,5 @@
+# Auto-improvement run log
+
+One dated line per run: journey walked, what was found, what (if anything) shipped.
+
+- 2026-08-02: Walked "returning after several days away" (habits streak break + XP decay/grace, agenda, achievements). Core recovery mechanics (habit "Get Back on Track" list, XP decay-with-refund, "Welcome back" message on Achievements) already work well and match the mission. Found and fixed a real layout bug: on Agenda (and any PageHeader page with many action buttons — the default new-user state with push/calendar integrations unconfigured), the header's action-button row didn't wrap, squeezing the date/title into an unreadable sliver and clipping the last button off-viewport. Fixed in `src/components/PageHeader.tsx` (branch `auto/ux-pass-2026-08-02`). NOT fixed, noted for later: on mobile width (375px), the "Start fresh today" button in the habit recovery card overlaps the habit title text instead of wrapping below it — a separate bug in the recovery-card component, out of scope for this run's single-change budget.
