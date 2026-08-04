@@ -66,4 +66,21 @@ describe("computeProjection", () => {
     expect(proj.requiredDailyRate!).toBeLessThan(11); // 100 / ~10 days
     expect(proj.daysLeft).toBe(10);
   });
+
+  it("keeps the far-behind message supportive, not shaming (grace before penalty)", () => {
+    // Way behind pace: 60 days elapsed of a 90-day window, barely any progress.
+    const start = new Date(2026, 0, 1, 12, 0, 0);
+    const now = new Date(2026, 2, 2, 12, 0, 0); // 60 days after start
+    const goal = mkGoal({
+      target: 100,
+      current: 2,
+      createdAt: start.getTime(),
+      deadline: new Date(2026, 3, 1, 12, 0, 0).toISOString(), // 90 days after start
+    });
+    const proj = computeProjection(goal, now);
+    expect(proj.status).toBe("behind_critical");
+    expect(proj.label.toLowerCase()).not.toContain("falling apart");
+    expect(proj.detail?.toLowerCase()).not.toContain("slips further");
+    expect(proj.detail?.toLowerCase()).not.toContain("cut the target");
+  });
 });

@@ -331,8 +331,8 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
     tone = "text-orange-400";
   } else if (ratio > 0) {
     status = "behind_critical";
-    label = `Falling apart — ${daysLate} days late at this rate`;
-    detail = `Required ${requiredDailyRate.toFixed(2)}${unit}/day. Current ${actualDailyRate.toFixed(2)}${unit}/day. Cut the target or extend the deadline before this slips further.`;
+    label = `Well behind — ${daysLate} day${daysLate === 1 ? "" : "s"} off pace`;
+    detail = `Needs ${requiredDailyRate.toFixed(2)}${unit}/day to catch up; current pace is ${actualDailyRate.toFixed(2)}${unit}/day. Worth adjusting the target or deadline.`;
     tone = "text-destructive";
   } else {
     status = "missing";
