@@ -35,8 +35,11 @@ import {
   HabitLog,
   habitsAtRisk,
   isCompleteForPeriod,
+  loadHabitTimes,
   toggleHabitForToday,
 } from "@/lib/habits";
+import { computeMonthOverview } from "@/lib/monthOverview";
+import { MonthOverviewCard } from "@/components/MonthOverviewCard";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
@@ -292,6 +295,19 @@ export default function Dashboard() {
   const week = last7Days(streak);
 
   const recoveries = useMemo(() => habitsAtRisk(habits, habitLogs), [habits, habitLogs]);
+  const monthOverview = useMemo(
+    () =>
+      computeMonthOverview(
+        goals,
+        habits,
+        habitLogs,
+        loadHabitTimes(),
+        now.getFullYear(),
+        now.getMonth(),
+        now,
+      ),
+    [goals, habits, habitLogs, now],
+  );
 
   const stats: Array<{ icon: React.ElementType; label: string; value: string | number; to: string; color: TileColor }> = [
     { icon: CheckSquare, label: "Tasks complete",  value: `${tasksDone}/${tasksTotal}`,                              to: "/checklist",   color: "teal"   },
@@ -355,6 +371,13 @@ export default function Dashboard() {
       <section>
         <TodayNowNext />
       </section>
+
+      {/* This Month — missed days + projected pace, one glance */}
+      {(goals.length > 0 || habits.length > 0) && (
+        <section>
+          <MonthOverviewCard days={monthOverview} />
+        </section>
+      )}
 
       {/* ── Bold stat tiles ── */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 stagger-in">
