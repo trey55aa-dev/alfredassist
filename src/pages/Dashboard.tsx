@@ -49,6 +49,8 @@ import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
 import { AlfredBriefing } from "@/components/AlfredBriefing";
+import { TodayFocusCard } from "@/components/TodayFocusCard";
+import { pickTodayFocus } from "@/lib/priorities";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -292,6 +294,10 @@ export default function Dashboard() {
   const week = last7Days(streak);
 
   const recoveries = useMemo(() => habitsAtRisk(habits, habitLogs), [habits, habitLogs]);
+  const todayFocus = useMemo(
+    () => pickTodayFocus(goals, habits, habitLogs),
+    [goals, habits, habitLogs],
+  );
 
   const stats: Array<{ icon: React.ElementType; label: string; value: string | number; to: string; color: TileColor }> = [
     { icon: CheckSquare, label: "Tasks complete",  value: `${tasksDone}/${tasksTotal}`,                              to: "/checklist",   color: "teal"   },
@@ -355,6 +361,21 @@ export default function Dashboard() {
       <section>
         <TodayNowNext />
       </section>
+
+      {/* Do this first — Alfred's single prioritized pick */}
+      {(goals.length > 0 || habits.length > 0) && (
+        <section>
+          <TodayFocusCard
+            pick={todayFocus}
+            onMarkHabitDone={(id) => {
+              const habit = habits.find((h) => h.id === id);
+              if (!habit) return;
+              setHabitLogs(toggleHabitForToday(habit, habitLogs).logs);
+            }}
+            onQuickLogGoal={handleQuickLog}
+          />
+        </section>
+      )}
 
       {/* ── Bold stat tiles ── */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 stagger-in">
