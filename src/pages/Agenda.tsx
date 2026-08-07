@@ -361,7 +361,7 @@ export default function Agenda() {
         }
       />
 
-      <ChallengeHeader />
+      <ChallengeHeader habits={habits} habitLogs={habitLogs} />
 
       {/* Hero — current / next */}
       {(ongoing || upcoming) && (

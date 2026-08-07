@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Flame, Pencil } from "lucide-react";
 import {
   Popover,
@@ -11,8 +11,11 @@ import {
   getChallenge,
   setChallenge,
   challengeStatus,
+  computeAdherence,
   type ChallengeConfig,
 } from "@/lib/challenge";
+import type { Habit, HabitLog } from "@/lib/habits";
+import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
 
 function fmtDate(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
@@ -27,11 +30,40 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function ChallengeHeader() {
+/**
+ * Habits/habitLogs come in as props rather than a fresh useCloudHabits() call
+ * here — every page that hosts this header already calls that hook once for
+ * its own UI, and a second independent instance wouldn't share React state
+ * with the first. Toggling a habit through the page's own controls would
+ * persist to localStorage fine but silently fail to refresh this component
+ * until a full reload. Pass the same habits/habitLogs the page already has.
+ */
+export function ChallengeHeader({
+  habits,
+  habitLogs,
+}: {
+  habits: Habit[];
+  habitLogs: HabitLog[];
+}) {
   const [cfg, setCfg] = useState<ChallengeConfig>(() => getChallenge());
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
   const status = challengeStatus(cfg);
+
+  // Recurring templates/completions live in plain localStorage, not a hook —
+  // re-read on the same change event the rest of the app already listens for.
+  const [recurringTick, setRecurringTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setRecurringTick((n) => n + 1);
+    window.addEventListener(RECURRING_CHANGED, onChange);
+    return () => window.removeEventListener(RECURRING_CHANGED, onChange);
+  }, []);
+
+  const adherence = useMemo(
+    () => computeAdherence(cfg, habits, habitLogs, loadTemplates(), loadCompletions()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cfg, habits, habitLogs, recurringTick],
+  );
 
   const save = () => {
     setChallenge(draft);
@@ -150,15 +182,23 @@ export function ChallengeHeader() {
         </div>
       </div>
 
-      <div className="relative mt-5 h-1.5 rounded-full bg-white/15 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{
-            width: `${Math.round(status.pctElapsed * 100)}%`,
-            background: "linear-gradient(90deg, hsl(35 90% 55%), hsl(15 85% 55%))",
-          }}
-        />
-      </div>
+      {status.state !== "upcoming" && adherence.applicable > 0 && (
+        <>
+          <div className="relative mt-5 h-1.5 rounded-full bg-white/15 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${Math.round(adherence.pct * 100)}%`,
+                background: "linear-gradient(90deg, hsl(35 90% 55%), hsl(15 85% 55%))",
+              }}
+            />
+          </div>
+          <p className="relative mt-2 font-mono text-[9px] tracking-[0.2em] uppercase text-white/60">
+            {Math.round(adherence.pct * 100)}% of your routine actually done so far ({adherence.completed}/
+            {adherence.applicable})
+          </p>
+        </>
+      )}
     </div>
   );
 }

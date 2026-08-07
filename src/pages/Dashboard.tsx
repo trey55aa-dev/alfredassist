@@ -49,6 +49,7 @@ import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
 import { AlfredBriefing } from "@/components/AlfredBriefing";
+import { ChallengeHeader } from "@/components/ChallengeHeader";
 
 interface FocusStats { date: string; sessions: number; minutes: number; }
 
@@ -350,6 +351,8 @@ export default function Dashboard() {
           <BackupRestore />
         </div>
       </div>
+
+      <ChallengeHeader habits={habits} habitLogs={habitLogs} />
 
       {/* Right now / Up next */}
       <section>

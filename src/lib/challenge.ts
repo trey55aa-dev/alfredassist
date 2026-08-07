@@ -2,6 +2,10 @@
 // has no generic multi-challenge system; this is deliberately one small,
 // editable record so the header never shows a permanently-wrong date.
 
+import { todayKey } from "./alfred";
+import type { Habit, HabitLog } from "./habits";
+import { isApplicableToDate, type RecurringTemplate } from "./recurring";
+
 export interface ChallengeConfig {
   title: string;
   startDate: string; // YYYY-MM-DD, local
@@ -84,4 +88,61 @@ export function challengeStatus(cfg: ChallengeConfig, now = new Date()): Challen
     daysUntilStart: 0,
     pctElapsed: (elapsedDays + 1) / cfg.totalDays,
   };
+}
+
+/* ---------- Adherence: did the routine actually happen? ---------- */
+
+export interface AdherenceResult {
+  /** Completed items / applicable items across every elapsed day. 0 if no days have elapsed yet. */
+  pct: number;
+  completed: number;
+  applicable: number;
+}
+
+/**
+ * "The routine" = every non-archived daily habit (always applicable) plus
+ * every enabled recurring block on the days it's scheduled — the same set
+ * that already drives the Dashboard's Daily Protocol ring. Walks from the
+ * challenge's start date through today (or the challenge's last day,
+ * whichever is sooner), so a still-in-progress today counts partially
+ * rather than waiting for midnight.
+ */
+export function computeAdherence(
+  cfg: ChallengeConfig,
+  habits: Habit[],
+  habitLogs: HabitLog[],
+  templates: RecurringTemplate[],
+  completions: Record<string, true>,
+  now = new Date(),
+): AdherenceResult {
+  const start = dateOnly(new Date(cfg.startDate + "T00:00:00"));
+  const today = dateOnly(now);
+  if (today < start) return { pct: 0, completed: 0, applicable: 0 };
+
+  const lastPossible = new Date(start);
+  lastPossible.setDate(lastPossible.getDate() + cfg.totalDays - 1);
+  const end = today < lastPossible ? today : lastPossible;
+
+  const dailyHabits = habits.filter((h) => !h.archived && h.cadence === "daily");
+  const enabledTemplates = templates.filter((t) => t.enabled);
+
+  let completed = 0;
+  let applicable = 0;
+
+  for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+    const dateStr = todayKey(cursor);
+
+    for (const h of dailyHabits) {
+      applicable++;
+      if (habitLogs.some((l) => l.habitId === h.id && l.date === dateStr)) completed++;
+    }
+
+    for (const t of enabledTemplates) {
+      if (!isApplicableToDate(t, cursor)) continue;
+      applicable++;
+      if (completions[`${t.id}:${dateStr}`]) completed++;
+    }
+  }
+
+  return { completed, applicable, pct: applicable > 0 ? completed / applicable : 0 };
 }

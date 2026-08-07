@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { challengeStatus, type ChallengeConfig } from "@/lib/challenge";
+import { challengeStatus, computeAdherence, type ChallengeConfig } from "@/lib/challenge";
+import type { Habit, HabitLog } from "@/lib/habits";
+import type { RecurringTemplate } from "@/lib/recurring";
 
 const CFG: ChallengeConfig = { title: "35-Day Reset", startDate: "2026-08-08", totalDays: 35 };
 
@@ -45,5 +47,78 @@ describe("challengeStatus", () => {
     expect(s2.state).toBe("complete");
     expect(s2.dayNumber).toBe(35);
     expect(s2.pctElapsed).toBe(1);
+  });
+});
+
+describe("computeAdherence", () => {
+  const dailyHabit: Habit = { id: "h1", title: "Drink water", cadence: "daily", createdAt: 0 };
+  const weekdayBlock: RecurringTemplate = {
+    id: "t1",
+    title: "Recruiting Outreach",
+    startTime: "09:00",
+    endTime: "10:00",
+    recurrence: "weekdays",
+    days: [],
+    enabled: true,
+  };
+
+  it("is zero before the challenge starts", () => {
+    const r = computeAdherence(CFG, [dailyHabit], [], [], {}, new Date(2026, 7, 5));
+    expect(r).toEqual({ pct: 0, completed: 0, applicable: 0 });
+  });
+
+  it("is 100% when every applicable item is logged every elapsed day", () => {
+    // Aug 8 (Sat) through Aug 10 (Mon) — 3 days. weekdayBlock only applies Mon.
+    const logs: HabitLog[] = [
+      { habitId: "h1", date: "2026-08-08" },
+      { habitId: "h1", date: "2026-08-09" },
+      { habitId: "h1", date: "2026-08-10" },
+    ];
+    const completions = { "t1:2026-08-10": true as const };
+    const r = computeAdherence(
+      CFG,
+      [dailyHabit],
+      logs,
+      [weekdayBlock],
+      completions,
+      new Date(2026, 7, 10),
+    );
+    // 3 habit days + 1 weekday-block day (only Mon) = 4 applicable, all done
+    expect(r.applicable).toBe(4);
+    expect(r.completed).toBe(4);
+    expect(r.pct).toBe(1);
+  });
+
+  it("counts a miss correctly and excludes the block on a day it doesn't apply", () => {
+    // Same 3-day window, but the habit was skipped on Aug 9 (Sun).
+    const logs: HabitLog[] = [
+      { habitId: "h1", date: "2026-08-08" },
+      { habitId: "h1", date: "2026-08-10" },
+    ];
+    const r = computeAdherence(CFG, [dailyHabit], logs, [weekdayBlock], {}, new Date(2026, 7, 10));
+    expect(r.applicable).toBe(4); // 3 habit-days + 1 weekday-block day
+    expect(r.completed).toBe(2); // habit done twice, block never logged
+    expect(r.pct).toBe(0.5);
+  });
+
+  it("ignores a disabled template and an archived habit", () => {
+    const archived: Habit = { ...dailyHabit, id: "h2", archived: true };
+    const disabled: RecurringTemplate = { ...weekdayBlock, id: "t2", enabled: false };
+    const r = computeAdherence(
+      CFG,
+      [dailyHabit, archived],
+      [{ habitId: "h1", date: "2026-08-08" }],
+      [weekdayBlock, disabled],
+      {},
+      new Date(2026, 7, 8),
+    );
+    // Only h1 (daily, not archived) applies on Aug 8 (Sat) — weekdayBlock doesn't apply on Saturday.
+    expect(r.applicable).toBe(1);
+    expect(r.completed).toBe(1);
+  });
+
+  it("returns 0 applicable (not NaN) when there's no routine at all", () => {
+    const r = computeAdherence(CFG, [], [], [], {}, new Date(2026, 7, 8));
+    expect(r).toEqual({ pct: 0, completed: 0, applicable: 0 });
   });
 });
