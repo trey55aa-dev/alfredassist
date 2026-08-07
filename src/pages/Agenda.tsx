@@ -56,6 +56,7 @@ import {
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { SuggestedRetimes } from "@/components/SuggestedRetimes";
 import { DailyRecap } from "@/components/DailyRecap";
+import { ChallengeHeader } from "@/components/ChallengeHeader";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { ReminderSettings } from "@/components/ReminderSettings";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
@@ -359,6 +360,8 @@ export default function Agenda() {
           </div>
         }
       />
+
+      <ChallengeHeader />
 
       {/* Hero — current / next */}
       {(ongoing || upcoming) && (
