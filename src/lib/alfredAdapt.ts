@@ -7,7 +7,8 @@ export type DecisionSource =
   | "goal-next-step"   // SuggestedNextRow on a goal card
   | "schedule-block"   // SuggestedSchedule day blocks
   | "ai-plan"          // AI-drafted goal plans
-  | "briefing";        // morning/evening briefing nudges
+  | "briefing"         // morning/evening briefing nudges
+  | "block-retime";    // SuggestedRetimes — recurring block time changes
 
 export type DecisionAction = "accepted" | "dismissed" | "overridden";
 
@@ -80,6 +81,7 @@ const SOURCE_LABEL: Record<DecisionSource, string> = {
   "schedule-block": "suggested schedule blocks",
   "ai-plan": "AI-drafted plans",
   briefing: "briefing nudges",
+  "block-retime": "block retime suggestions",
 };
 
 /**

@@ -52,6 +52,9 @@ export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TEMPLATES_KEY   = "alfred.recurring.templates";
 const COMPLETIONS_KEY = "alfred.recurring.completions"; // Record<"id:YYYY-MM-DD", true>
 const SKIPPED_KEY     = "alfred.recurring.skipped";     // Record<"id:YYYY-MM-DD", true>
+/** ms-timestamp a block was actually ticked, keyed like COMPLETIONS_KEY.
+ *  Powers the daily recap's "done at HH:MM" and the retime suggester. */
+const COMPLETION_TIMES_KEY = "alfred.recurring.completionTimes";
 
 /* ---------- CRUD ---------- */
 
@@ -122,6 +125,16 @@ export function isRecurringCompleted(templateId: string, dateStr: string): boole
   return !!readRecord(COMPLETIONS_KEY)[compKey(templateId, dateStr)];
 }
 
+/** Bulk readers for the retime suggester — avoids one localStorage read per
+ *  template per day when scanning history. */
+export function loadCompletions(): Record<string, true> {
+  return readRecord(COMPLETIONS_KEY);
+}
+
+export function loadCompletionTimes(): Record<string, number> {
+  return readTimes();
+}
+
 export function setRecurringCompleted(
   templateId: string,
   dateStr: string,
@@ -132,7 +145,41 @@ export function setRecurringCompleted(
   if (value) rec[k] = true;
   else delete rec[k];
   writeRecord(COMPLETIONS_KEY, rec);
+  setRecurringCompletedAt(templateId, dateStr, value ? Date.now() : null);
   dispatchChanged();
+}
+
+/* ---------- Actual completion time (device-local) ----------
+   Templates carry a scheduled startTime, but not when the user actually
+   ticked the box. Kept separately so the daily recap can show "done at
+   HH:MM" and the retime suggester can learn your real pattern. */
+
+function readTimes(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(COMPLETION_TIMES_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getRecurringCompletedAt(
+  templateId: string,
+  dateStr: string,
+): number | undefined {
+  return readTimes()[compKey(templateId, dateStr)];
+}
+
+export function setRecurringCompletedAt(
+  templateId: string,
+  dateStr: string,
+  ts: number | null,
+): void {
+  const times = readTimes();
+  const k = compKey(templateId, dateStr);
+  if (ts !== null) times[k] = ts;
+  else delete times[k];
+  localStorage.setItem(COMPLETION_TIMES_KEY, JSON.stringify(times));
 }
 
 export function isRecurringSkipped(templateId: string, dateStr: string): boolean {
@@ -229,6 +276,7 @@ export function templateToAgendaEvent(
     emoji: template.emoji,
     calendarColor: tocssColor(template.color),
     completed: isRecurringCompleted(template.id, dateStr),
+    completedAt: getRecurringCompletedAt(template.id, dateStr),
   };
 }
 

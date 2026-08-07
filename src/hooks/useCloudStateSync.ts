@@ -36,6 +36,8 @@ const SYNCED_KEYS = [
   "alfred.decisions",       // accept/dismiss log — Alfred's learning follows you
   "alfred.scene",           // chosen background scene — your look follows you
   "alfred.uiMode",          // simple vs full interface — one choice, every device
+  "alfred.recurring.completionTimes", // { templateId:date: ms } — powers the daily recap + retime suggestions
+  "alfred.dailyFeedback",   // { date: note } — your day-end reflection follows you
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

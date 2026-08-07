@@ -21,6 +21,8 @@ export interface AgendaEvent {
   emoji?: string;
   /** Marked complete by the user — drives the ambient pattern intensity. */
   completed?: boolean;
+  /** ms-timestamp the event was actually marked complete (recurring blocks only, device-local). */
+  completedAt?: number;
   /** ISO date (YYYY-MM-DD) the event was originally scheduled for, if it has been carried over. */
   originalDate?: string;
   /** How many times this event has been carried forward (0 if never). */

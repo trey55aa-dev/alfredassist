@@ -54,6 +54,8 @@ import {
   scheduleUpcomingReminders,
 } from "@/lib/notifications";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
+import { SuggestedRetimes } from "@/components/SuggestedRetimes";
+import { DailyRecap } from "@/components/DailyRecap";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { ReminderSettings } from "@/components/ReminderSettings";
 import { currentStreakFor, habitsAtRisk, toggleHabitForToday } from "@/lib/habits";
@@ -405,6 +407,9 @@ export default function Agenda() {
       {/* Suggested schedule from goals — fills gaps around the calendar */}
       <SuggestedSchedule events={events ?? []} now={now} onAdded={refresh} />
 
+      {/* Retime suggestions — learned from when blocks are actually done */}
+      <SuggestedRetimes now={now} onChanged={refresh} />
+
       {/* Day view */}
       <Card className="p-6 bg-gradient-card border-border">
         <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
@@ -606,6 +611,9 @@ export default function Agenda() {
           })()
         )}
       </Card>
+
+      {/* Crossed-off recap of the day + copy-out for Notes/Reminders/Calendar */}
+      <DailyRecap events={today} habits={habits} habitLogs={habitLogs} now={now} />
     </div>
   );
 }
