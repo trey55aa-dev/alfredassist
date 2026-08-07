@@ -188,7 +188,11 @@ export function OnboardingWizard({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !finishing) skip(); }}>
-      <DialogContent className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-md bg-background/95 border-border/60 backdrop-blur-xl max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         {showWelcome ? (
           <WelcomeIntro onStart={() => setShowWelcome(false)} onSkip={skip} />
         ) : (
