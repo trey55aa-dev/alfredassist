@@ -14,6 +14,7 @@ import {
   HABITS_KEY,
   HABIT_LOGS_KEY,
   SEED_HABITS,
+  normalizeHabit,
   type Habit,
   type HabitLog,
 } from "@/lib/habits";
@@ -265,8 +266,14 @@ function readHabitsCache(): Habit[] {
   try {
     const raw = localStorage.getItem(HABITS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Habit[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Partial<Habit>[];
+    if (!Array.isArray(parsed)) return [];
+    // Defensive: a stray write, cross-device sync of pre-cadence-era data, or
+    // manual tampering can leave a habit with a missing/invalid cadence or
+    // title, which otherwise crashes the whole Dashboard downstream.
+    return parsed
+      .filter((h): h is Partial<Habit> & { id: string } => !!h && typeof h.id === "string")
+      .map(normalizeHabit);
   } catch {
     return [];
   }

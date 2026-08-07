@@ -5,7 +5,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
-import type { Cadence, Habit, HabitLog } from "./habits";
+import { normalizeHabit, type Cadence, type Habit, type HabitLog } from "./habits";
 
 type HabitInsert = TablesInsert<"habits">;
 type HabitLogInsert = TablesInsert<"habit_logs">;
@@ -36,17 +36,17 @@ interface HabitLogRow {
 /* ---------- mapping ---------- */
 
 function rowToHabit(row: HabitRow): Habit {
-  return {
+  return normalizeHabit({
     id: row.client_id,
     title: row.title,
-    cadence: (row.cadence as Cadence) ?? "daily",
+    cadence: row.cadence as Cadence,
     goalId: row.goal_id ?? undefined,
     goalIncrement: row.goal_increment ?? undefined,
     target: row.target ?? undefined,
     recoverySteps: row.recovery_steps ?? undefined,
     archived: row.archived,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-  };
+  });
 }
 
 function habitToInsert(habit: Habit, userId: string): HabitInsert {

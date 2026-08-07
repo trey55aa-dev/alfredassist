@@ -38,6 +38,27 @@ export interface HabitLog {
   date: string; // YYYY-MM-DD
 }
 
+/**
+ * Coerce a possibly-malformed habit (corrupt localStorage write, cross-device
+ * sync of pre-cadence-era data, a DB column the cast lied about) into a valid
+ * one. An invalid `cadence` otherwise crashes the whole Dashboard downstream
+ * (`DEFAULT_STEPS_BY_CADENCE[habit.cadence]` is not a function) — see
+ * "nothing is unrecoverable" in CLAUDE.md.
+ */
+export function normalizeHabit(h: Partial<Habit> & { id: string }): Habit {
+  return {
+    id: h.id,
+    title: typeof h.title === "string" && h.title.trim() ? h.title : "Untitled habit",
+    cadence: CADENCES.includes(h.cadence as Cadence) ? (h.cadence as Cadence) : "daily",
+    goalId: h.goalId,
+    goalIncrement: h.goalIncrement,
+    target: h.target,
+    recoverySteps: h.recoverySteps,
+    createdAt: typeof h.createdAt === "number" ? h.createdAt : Date.now(),
+    archived: h.archived,
+  };
+}
+
 export const HABITS_KEY = "alfred.habits";
 export const HABIT_LOGS_KEY = "alfred.habitLogs";
 
