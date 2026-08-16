@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Sparkles, Check, Wand2, Flag, RefreshCw, Trophy } from "lucide-react";
+import { Sparkles, Check, Wand2, Flag, RefreshCw, Trophy, Shuffle } from "lucide-react";
+import { REWARD_TAGS, getRewardPrefs, toggleRewardPref, suggestRewards, type RewardTag } from "@/lib/rewards";
 import {
   Dialog,
   DialogContent,
@@ -187,6 +188,92 @@ function SubQuestions({
   );
 }
 
+/**
+ * Shown only when "Celebrate & reward myself" is picked. Lets the user tell
+ * Alfred what they enjoy (once, editable anytime) and offers concrete ideas
+ * matched to that instead of a blank "anything specific in mind?" box.
+ */
+function RewardIdeas({ value, onPick }: { value?: string; onPick: (v: string) => void }) {
+  const [prefs, setPrefs] = useState<RewardTag[]>(() => getRewardPrefs());
+  const [ideas, setIdeas] = useState<string[]>(() => suggestRewards(getRewardPrefs()));
+
+  const reroll = (nextPrefs = prefs) => setIdeas(suggestRewards(nextPrefs));
+  const isPreset = value != null && ideas.includes(value);
+
+  return (
+    <div className="mt-2.5 pl-3 border-l-2 border-gold/25 space-y-2.5 fade-in">
+      <div className="space-y-1.5">
+        <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60">
+          What do you like? (tap any — helps Alfred suggest ideas)
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {REWARD_TAGS.map((tag) => {
+            const active = prefs.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => {
+                  const next = toggleRewardPref(tag);
+                  setPrefs(next);
+                  reroll(next);
+                }}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-mono border transition-all ${
+                  active
+                    ? "bg-gold/20 text-gold border-gold/50"
+                    : "bg-background/40 border-border/60 text-muted-foreground hover:border-gold/40 hover:text-foreground"
+                }`}
+              >
+                {tag}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/60">
+            Ideas
+          </div>
+          <button
+            type="button"
+            onClick={() => reroll()}
+            title="Show different ideas"
+            className="inline-flex items-center gap-1 text-[9px] font-mono uppercase text-muted-foreground/70 hover:text-gold transition-colors"
+          >
+            <Shuffle className="h-3 w-3" /> Shuffle
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {ideas.map((idea) => {
+            const active = value === idea;
+            return (
+              <button
+                key={idea}
+                type="button"
+                onClick={() => onPick(idea)}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-mono border transition-all ${
+                  active
+                    ? "bg-gold text-primary-foreground border-gold"
+                    : "bg-background/40 border-border/60 text-muted-foreground hover:border-gold/40 hover:text-foreground"
+                }`}
+              >
+                {idea}
+              </button>
+            );
+          })}
+        </div>
+        <input
+          value={isPreset ? "" : value ?? ""}
+          onChange={(e) => onPick(e.target.value)}
+          placeholder="…or type your own"
+          className={INPUT}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** The 4-question blueprint form — reused by the creation dialog and inline editing. */
 export function GoalSurveyForm({
   value,
@@ -260,8 +347,15 @@ export function GoalSurveyForm({
               value={value.ifReached}
               onChange={(v) => set({ ifReached: v })}
             />
-            {value.ifReached && (
-              <SubQuestions items={REACH_SUBQ} details={value.details} onChange={setDetail} />
+            {value.ifReached === "Celebrate & reward myself" ? (
+              <RewardIdeas
+                value={value.details?.["reach.how"]}
+                onPick={(v) => setDetail("reach.how", v)}
+              />
+            ) : (
+              value.ifReached && (
+                <SubQuestions items={REACH_SUBQ} details={value.details} onChange={setDetail} />
+              )
             )}
           </div>
           <div className="space-y-1.5">

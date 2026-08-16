@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Pencil } from "lucide-react";
+import { Flame, Pencil, Shuffle } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +16,8 @@ import {
 } from "@/lib/challenge";
 import type { Habit, HabitLog } from "@/lib/habits";
 import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
+import { suggestRewards } from "@/lib/rewards";
+import { awardXp, getGamification, XP_VALUES } from "@/lib/gamification";
 
 function fmtDate(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
@@ -49,6 +51,16 @@ export function ChallengeHeader({
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
   const status = challengeStatus(cfg);
+  const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
+
+  // One-time huge XP award on completion. Idempotent via the earned-badges
+  // set, so a remount (or the challenge staying "complete" for weeks) never
+  // re-fires — only the transition into "complete" the first time does.
+  useEffect(() => {
+    if (status.state !== "complete") return;
+    if (getGamification().earnedBadges.includes("challenge_complete")) return;
+    awardXp(XP_VALUES.CHALLENGE_COMPLETE, "challenge", { challengeComplete: true });
+  }, [status.state]);
 
   // Recurring templates/completions live in plain localStorage, not a hook —
   // re-read on the same change event the rest of the app already listens for.
@@ -198,6 +210,22 @@ export function ChallengeHeader({
             {adherence.applicable})
           </p>
         </>
+      )}
+
+      {status.state === "complete" && rewardIdea && (
+        <div className="relative mt-5 flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5">
+          <p className="text-sm text-white/85 min-w-0">
+            You made it. Maybe: <span className="font-medium">{rewardIdea}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setRewardIdea(suggestRewards(undefined, 1)[0] ?? "")}
+            title="Show a different idea"
+            className="shrink-0 inline-flex items-center gap-1 text-[9px] font-mono uppercase text-white/60 hover:text-white transition-colors"
+          >
+            <Shuffle className="h-3 w-3" /> Shuffle
+          </button>
+        </div>
       )}
     </div>
   );

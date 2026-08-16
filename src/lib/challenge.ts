@@ -1,6 +1,6 @@
-// A single active "challenge" — the 35-Day Reset and things like it. Alfred
-// has no generic multi-challenge system; this is deliberately one small,
-// editable record so the header never shows a permanently-wrong date.
+// A single active "challenge" — the 30-Day Hard routine and things like it.
+// Alfred has no generic multi-challenge system; this is deliberately one
+// small, editable record so the header never shows a permanently-wrong date.
 
 import { todayKey } from "./alfred";
 import type { Habit, HabitLog } from "./habits";
@@ -15,9 +15,9 @@ export interface ChallengeConfig {
 const KEY = "alfred.challenge";
 
 export const DEFAULT_CHALLENGE: ChallengeConfig = {
-  title: "35-Day Reset",
-  startDate: "2026-08-08",
-  totalDays: 35,
+  title: "30-Day Hard",
+  startDate: "2026-08-16",
+  totalDays: 30,
 };
 
 export function getChallenge(): ChallengeConfig {

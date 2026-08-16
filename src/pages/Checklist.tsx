@@ -49,6 +49,7 @@ import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { useUiMode } from "@/lib/uiMode";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
+import { HabitRings } from "@/components/HabitRings";
 import { GoalEmoji } from "@/components/GoalEmoji";
 
 // Legacy export kept for any external importers.
@@ -202,6 +203,16 @@ export default function Checklist() {
 
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />
+
+      {/* Today at a glance — one ring per daily habit, tap to complete */}
+      {dailyHabits.length > 0 && (
+        <Card className="p-6 bg-gradient-card border-border">
+          <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground mb-4">
+            Today
+          </p>
+          <HabitRings habits={dailyHabits} logs={logs} onToggle={handleToggle} />
+        </Card>
+      )}
 
       {/* Auto-generated daily to-dos from the 2026 goals */}
       <GoalDailyTasks goals={goals} setGoals={setGoals} />

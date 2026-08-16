@@ -116,6 +116,8 @@ Key names are easy to get wrong — goals are **`alfred.goals2026`**, not
 | `alfred.scene` | chosen background scene |
 | `alfred.uiMode` | `"simple"` (default) or `"full"` |
 | `alfred.decisions` | accept/dismiss log that Alfred adapts to |
+| `alfred.challenge` | `{ title, startDate, totalDays }` — the active challenge banner |
+| `alfred.rewardPrefs` | string[] of reward tags — powers "treat yourself" suggestions in `src/lib/rewards.ts` |
 
 Goals and habits have dedicated cloud repos. Everything else syncs through
 `SYNCED_KEYS` in `src/hooks/useCloudStateSync.ts` — **add new persisted keys

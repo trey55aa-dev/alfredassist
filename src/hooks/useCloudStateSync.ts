@@ -39,6 +39,7 @@ const SYNCED_KEYS = [
   "alfred.recurring.completionTimes", // { templateId:date: ms } — powers the daily recap + retime suggestions
   "alfred.dailyFeedback",   // { date: note } — your day-end reflection follows you
   "alfred.challenge",       // { title, startDate, totalDays } — the active challenge banner
+  "alfred.rewardPrefs",     // string[] of reward tags — treat-yourself suggestions follow you
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

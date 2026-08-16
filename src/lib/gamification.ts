@@ -13,6 +13,7 @@ export const XP_VALUES = {
   STREAK_30: 200,
   STREAK_90: 500,
   FOCUS_SESSION: 15,
+  CHALLENGE_COMPLETE: 750, // finishing a 30-Day-Hard-style challenge — the biggest single award in the game
 } as const;
 
 /**
@@ -112,6 +113,8 @@ export const BADGES: BadgeDef[] = [
   // Levels
   { id: "level_5",       title: "Halfway Up",         description: "Reach Level 5",                       icon: "⭐", xpBonus: 0   },
   { id: "level_10",      title: "Alfred's Champion",  description: "Reach Level 10 — the pinnacle",       icon: "🏆", xpBonus: 0   },
+  // Challenge
+  { id: "challenge_complete", title: "Went the Distance", description: "Complete an Alfred challenge, start to finish", icon: "🏁", xpBonus: 0 },
 ];
 
 export const BADGE_MAP = new Map(BADGES.map((b) => [b.id, b]));
@@ -156,8 +159,8 @@ export const XP_ADJUSTED = "alfred.xp:adjusted";
 
 /** Yesterday is grace (same rule as habit misses) — decay starts the day after. */
 export const DECAY_GRACE_DAYS = 1;
-/** Each fully-missed day beyond grace costs 2% of XP, compounding. */
-export const DECAY_PER_DAY = 0.98;
+/** Each fully-missed day beyond grace costs 1.5% of XP, compounding. */
+export const DECAY_PER_DAY = 0.985;
 /** One absence can never take more than 75% — coming back never means zero. */
 export const DECAY_FLOOR_FACTOR = 0.25;
 const XP_LOG_MAX = 60;
@@ -188,7 +191,7 @@ export function decayedXp(xp: number, absentDays: number): number {
 }
 
 /**
- * Split an absence into per-day charges (pure, testable): 2% compounding per
+ * Split an absence into per-day charges (pure, testable): 1.5% compounding per
  * day, stopping at the 25% floor. Sum of charges = total lost. Powers the
  * make-up refund: complete a missed day later and get that day's charge back.
  */
@@ -349,6 +352,7 @@ interface BadgeCheckArgs {
   goalCurrent?: number;
   goalTarget?: number;
   unit?: string;
+  challengeComplete?: boolean;
 }
 
 function checkBadges(args: BadgeCheckArgs): string[] {
@@ -384,6 +388,9 @@ function checkBadges(args: BadgeCheckArgs): string[] {
   if (reason === "focus") {
     if (state.focusSessions >= 1) tryUnlock("focus_1");
     if (state.focusSessions >= 10) tryUnlock("focus_10");
+  }
+  if (reason === "challenge") {
+    if (args.challengeComplete) tryUnlock("challenge_complete");
   }
   // Goal-metric-specific badges
   if (reason === "progress" && args.goalCurrent !== undefined) {

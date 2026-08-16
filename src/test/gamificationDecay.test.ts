@@ -13,18 +13,18 @@ describe("decayedXp", () => {
     expect(decayedXp(1000, -3)).toBe(1000);
   });
 
-  it("one missed day beyond grace costs 2%", () => {
-    expect(decayedXp(1000, 1)).toBe(980);
+  it("one missed day beyond grace costs 1.5%", () => {
+    expect(decayedXp(1000, 1)).toBe(985);
   });
 
   it("compounds over a week away", () => {
-    // 0.98^6 ≈ 0.8858
-    expect(decayedXp(1000, 6)).toBe(886);
+    // 0.985^6 ≈ 0.9133
+    expect(decayedXp(1000, 6)).toBe(913);
   });
 
   it("a month away drops meaningfully but never wipes out", () => {
     const after = decayedXp(3200, 29); // Elite-level XP, ~a month gone
-    expect(after).toBeLessThan(3200 * 0.6);
+    expect(after).toBeLessThan(3200 * 0.7);
     expect(after).toBeGreaterThanOrEqual(3200 * DECAY_FLOOR_FACTOR);
   });
 
@@ -42,11 +42,11 @@ describe("distributeDecay (per-day ledger — powers make-up refunds)", () => {
     const charges = distributeDecay(1000, 6);
     expect(charges).toHaveLength(6);
     const total = charges.reduce((a, b) => a + b, 0);
-    expect(1000 - total).toBe(decayedXp(1000, 6)); // 886
+    expect(1000 - total).toBe(decayedXp(1000, 6)); // 913
   });
 
-  it("first missed day of 1000 XP costs 20 (2%)", () => {
-    expect(distributeDecay(1000, 1)).toEqual([20]);
+  it("first missed day of 1000 XP costs 15 (1.5%)", () => {
+    expect(distributeDecay(1000, 1)).toEqual([15]);
   });
 
   it("stops charging once the 25% floor is reached", () => {
