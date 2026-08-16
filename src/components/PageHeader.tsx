@@ -17,12 +17,12 @@ export function PageHeader({ eyebrow, title, subtitle, description, actions, act
 
   return (
     <div className="mb-6 sm:mb-8">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 sm:min-w-[220px] flex-1">
           {eyebrow && (
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-1 w-1 rounded-full bg-gold inline-block" />
-              <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.3em] uppercase text-gold">
+            <div className="flex items-center gap-2 mb-2 min-w-0">
+              <span className="h-1 w-1 rounded-full bg-gold inline-block shrink-0" />
+              <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.3em] uppercase text-gold truncate">
                 {eyebrow}
               </span>
             </div>
@@ -37,7 +37,7 @@ export function PageHeader({ eyebrow, title, subtitle, description, actions, act
           )}
         </div>
         {acts && (
-          <div className="flex flex-wrap gap-2 shrink-0 mt-1 sm:mt-0">
+          <div className="flex flex-wrap gap-2 mt-1 sm:mt-0 sm:ml-auto sm:justify-end">
             {acts}
           </div>
         )}

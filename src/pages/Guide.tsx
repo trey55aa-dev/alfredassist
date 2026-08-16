@@ -97,7 +97,7 @@ export default function Guide() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Manual"
-        title="Tiimo Feature Guide"
+        title="Feature Guide"
         description="Ten capabilities, ten habits. Master them in order, sir."
       />
 

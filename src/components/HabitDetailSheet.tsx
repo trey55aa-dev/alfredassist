@@ -35,6 +35,7 @@ import {
   monthCells,
   computeHabitStats,
   WEEKDAY_SHORT,
+  WEEKDAY_FULL,
   formatHour,
   type DayCell,
 } from "@/lib/habitStats";
@@ -378,7 +379,7 @@ function StatsTab({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
               <WeekdayBars data={s.missesByWeekday} worst={s.worstWeekday} />
               {s.worstWeekday != null && s.totalMisses > 0 && (
                 <p className="text-xs text-muted-foreground/70 mt-2">
-                  You miss most on <span className="text-coral">{WEEKDAY_SHORT[s.worstWeekday]}days</span>.
+                  You miss most on <span className="text-coral">{WEEKDAY_FULL[s.worstWeekday]}</span>.
                 </p>
               )}
             </div>

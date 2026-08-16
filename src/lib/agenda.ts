@@ -33,7 +33,7 @@ export interface AgendaEvent {
   actualMinutes?: number;
 }
 
-/** Curated palette + emojis for the Tiimo-style timeline. */
+/** Curated palette + emojis for the event timeline. */
 export const EVENT_COLORS: { name: string; hsl: string }[] = [
   { name: "Gold", hsl: "45 80% 55%" },
   { name: "Teal", hsl: "175 55% 45%" },

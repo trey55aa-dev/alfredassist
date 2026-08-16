@@ -2836,7 +2836,7 @@ function ProgressInsight({
         </button>
         <Input
           type="number"
-          placeholder="amount"
+          placeholder="amt"
           aria-label="Log custom amount"
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;

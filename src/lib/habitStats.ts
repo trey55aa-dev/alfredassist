@@ -232,6 +232,15 @@ export function computeHabitStats(
 /* ---------- formatting helpers ---------- */
 
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const WEEKDAY_FULL = [
+  "Sundays",
+  "Mondays",
+  "Tuesdays",
+  "Wednesdays",
+  "Thursdays",
+  "Fridays",
+  "Saturdays",
+];
 
 export function formatHour(h: number): string {
   if (h === 0) return "12 AM";
