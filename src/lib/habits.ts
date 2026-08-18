@@ -352,8 +352,11 @@ const DEFAULT_STEPS_BY_CADENCE: Record<Cadence, (title: string) => string[]> = {
 };
 
 export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()): Recovery | null {
-  const missed = periodsSinceLast(habit, logs, today);
-  if (missed === 0) return null; // current period already complete
+  // Grace before penalty: the current period is still open and is never a miss.
+  // Anchor on the last fully-elapsed period (yesterday, for daily habits) instead.
+  const anchor = previousPeriodDate(habit.cadence, today);
+  const missed = periodsSinceLast(habit, logs, anchor);
+  if (missed === 0) return null; // last fully-elapsed period was completed
   // For brand-new habits never done, treat as "1 missed period" so we coach onboarding
   const effectiveMissed = missed === Infinity ? 1 : missed;
   const lastKey =
@@ -361,7 +364,7 @@ export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()
       ? null
       : (() => {
           const set = completedPeriods(habit, logs);
-          let cursor = previousPeriodDate(habit.cadence, today);
+          let cursor = anchor;
           for (let i = 0; i < 366; i++) {
             const k = periodKey(habit.cadence, cursor);
             if (set.has(k)) return k;
@@ -384,7 +387,7 @@ export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()
   };
 }
 
-/** All non-archived habits whose current period is incomplete, sorted by severity. */
+/** All non-archived habits whose last fully-elapsed period is incomplete, sorted by severity. */
 export function habitsAtRisk(habits: Habit[], logs: HabitLog[], today = new Date()): Recovery[] {
   return habits
     .filter((h) => !h.archived)
