@@ -229,6 +229,55 @@ export function computeHabitStats(
   };
 }
 
+/* ---------- 365-day heatmap ---------- */
+
+export interface HeatCell {
+  date: Date;
+  ymd: string;
+  done: boolean;
+  /** false for days before the habit existed — rendered as empty space, not "not done" */
+  inRange: boolean;
+}
+
+export interface YearHeatmap {
+  /** Sunday-first columns, oldest to newest, each with 7 day-cells. */
+  weeks: HeatCell[][];
+  /** Count of completions within the trailing `days` window (like the Streaks app's yearly tally). */
+  totalDone: number;
+  rangeStart: string;
+  rangeEnd: string;
+}
+
+/** Trailing N-day (default 365) activity grid — how many times a habit was done, laid out like a
+ *  GitHub/Streaks-style heatmap. Weeks are Sunday-aligned so the grid renders as clean columns. */
+export function yearHeatmap(
+  habit: Habit,
+  logs: HabitLog[],
+  today = new Date(),
+  days = 365,
+): YearHeatmap {
+  const set = completedDates(habit, logs);
+  const todayMid = startOfDay(today);
+  const start = habitStart(habit, logs);
+  const rangeStart = addDays(todayMid, -(days - 1));
+  const alignedStart = addDays(rangeStart, -rangeStart.getDay());
+
+  const cells: HeatCell[] = [];
+  let totalDone = 0;
+  for (let d = new Date(alignedStart); d <= todayMid; d = addDays(d, 1)) {
+    const key = ymd(d);
+    const done = set.has(key);
+    const inRange = d >= start;
+    if (done && d >= rangeStart) totalDone++;
+    cells.push({ date: new Date(d), ymd: key, done, inRange });
+  }
+
+  const weeks: HeatCell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  return { weeks, totalDone, rangeStart: ymd(rangeStart), rangeEnd: ymd(todayMid) };
+}
+
 /* ---------- formatting helpers ---------- */
 
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

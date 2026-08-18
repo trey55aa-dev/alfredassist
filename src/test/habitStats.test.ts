@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeHabitStats, monthCells, ymd } from "@/lib/habitStats";
+import { computeHabitStats, monthCells, yearHeatmap, ymd } from "@/lib/habitStats";
 import type { Habit, HabitLog } from "@/lib/habits";
 
 function dailyHabit(createdAt: Date): Habit {
@@ -80,6 +80,41 @@ describe("monthCells", () => {
     const may31 = cells.find((c) => c.ymd === "2026-05-31");
     expect(may31).toBeTruthy();
     expect(may31!.state).not.toBe("missed");
+  });
+});
+
+describe("yearHeatmap", () => {
+  const heat = yearHeatmap(dailyHabit(CREATED), seedLogs(), TODAY);
+
+  it("counts total completions in the trailing window, matching totalCompleted", () => {
+    // Same 13 done days as computeHabitStats.totalCompleted — all within the last 365 days.
+    expect(heat.totalDone).toBe(13);
+  });
+
+  it("lays out Sunday-aligned weeks, each starting on a Sunday, up to today", () => {
+    // Every week but the last (which stops at today, not necessarily a Saturday) is full.
+    for (const week of heat.weeks.slice(0, -1)) {
+      expect(week).toHaveLength(7);
+      expect(week[0].date.getDay()).toBe(0); // Sunday
+    }
+    const last = heat.weeks[heat.weeks.length - 1];
+    expect(last[0].date.getDay()).toBe(0);
+    expect(last[last.length - 1].ymd).toBe(ymd(TODAY));
+  });
+
+  it("marks the completed days done and pre-tracking days out of range", () => {
+    const flat = heat.weeks.flat();
+    const at = (d: string) => flat.find((c) => c.ymd === d)!;
+    expect(at("2026-06-09").done).toBe(true);
+    expect(at("2026-06-08").done).toBe(false);
+    // May 31 is before the habit's createdAt (Jun 1) — out of range, not a false "miss".
+    expect(at("2026-05-31").inRange).toBe(false);
+  });
+
+  it("respects a custom window size", () => {
+    const short = yearHeatmap(dailyHabit(CREATED), seedLogs(), TODAY, 7);
+    // 7-day window starting Jun 9, Sunday-aligned back to Jun 7 → still counts only real logs.
+    expect(short.totalDone).toBe(6); // Jun 9–14 done, Jun 15 (today) not yet
   });
 });
 

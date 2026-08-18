@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ import type { Goal } from "@/lib/goals";
 import {
   monthCells,
   computeHabitStats,
+  yearHeatmap,
   WEEKDAY_SHORT,
   WEEKDAY_FULL,
   formatHour,
@@ -96,7 +97,7 @@ export function HabitDetailSheet({ habit, open, onClose, logs, goals, onUpdate, 
           ))}
         </div>
 
-        <div className="pt-2">
+        <div className="min-w-0 pt-2">
           {tab === "calendar" && (
             <CalendarTab habit={habit} logs={logs} view={view} setView={setView} onToggleDate={onToggleDate} />
           )}
@@ -357,6 +358,9 @@ function StatsTab({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
         <MiniStat label="Last 30 days" value={`${s.last30Done}/30`} sub={`${s.last30Pct}%`} />
       </div>
 
+      {/* 365-day activity — how many times, like the Streaks app */}
+      <YearHeatmap habit={habit} logs={logs} />
+
       {/* Advanced */}
       <div className="rounded-xl border border-border/50 bg-white/3 p-4 space-y-4">
         <p className="font-mono text-[9px] tracking-[0.28em] uppercase text-muted-foreground/70">
@@ -412,6 +416,64 @@ function StatsTab({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
             </p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function YearHeatmap({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
+  const data = useMemo(() => yearHeatmap(habit, logs), [habit, logs]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Land scrolled to today (right edge) so the most recent activity is visible first.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [data]);
+
+  return (
+    <div className="min-w-0 rounded-xl border border-border/50 bg-white/3 p-4 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <p className="font-mono text-[9px] tracking-[0.28em] uppercase text-muted-foreground/70">
+          Past 365 days
+        </p>
+        <span className="font-display text-xl text-gold leading-none">
+          {data.totalDone}
+          <span className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground/60 ml-1.5">
+            times
+          </span>
+        </span>
+      </div>
+
+      <div ref={scrollRef} className="w-full min-w-0 overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-[3px] w-max">
+          {data.weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-[3px]">
+              {week.map((cell, di) => (
+                <div
+                  key={di}
+                  title={`${cell.ymd}${cell.done ? " · done" : ""}`}
+                  className={`h-[10px] w-[10px] rounded-[2px] ${
+                    cell.done
+                      ? "bg-gradient-gold"
+                      : cell.inRange
+                        ? "bg-muted/40"
+                        : "bg-white/5"
+                  }`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 font-mono text-[9px] tracking-wider uppercase text-muted-foreground/50">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-[2px] bg-gradient-gold inline-block" /> Done
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-[2px] bg-muted/40 inline-block" /> Not done
+        </span>
       </div>
     </div>
   );
