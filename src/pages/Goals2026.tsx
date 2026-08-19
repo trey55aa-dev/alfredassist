@@ -90,9 +90,7 @@ import {
   collectTags,
   daysUntil,
   effectiveQuarter,
-  effectiveQuarterLabel,
   quarterEnd,
-  quarterFromDate,
   paceStatus,
   progressPct,
 } from "@/lib/goals";
@@ -213,7 +211,7 @@ export default function Goals2026() {
         description={
           simpleUi
             ? "What do you want to achieve? Add a goal and Alfred helps you get there."
-            : "Define the campaign. Set deadlines. Conquer by quarter."
+            : "Define the campaign. Set deadlines. Take the next step."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -442,7 +440,6 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<GoalCategory>("Life");
   const [timeframe, setTimeframe] = useState<GoalTimeframe>("annual");
-  const [quarter, setQuarter] = useState<GoalQuarter>(null);
   const [target, setTarget] = useState("");
   const [unit, setUnit] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
@@ -457,7 +454,8 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
       title: title.trim(),
       category,
       timeframe,
-      quarter,
+      // Quarter is derived from the deadline, never set by hand.
+      quarter: null,
       deadline: deadline ? deadline.toISOString() : undefined,
       target: target ? Number(target) : undefined,
       current: target ? 0 : undefined,
@@ -489,7 +487,7 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Select value={category} onChange={(v) => setCategory(v as GoalCategory)} options={CATEGORIES} />
         <Select
           value={timeframe}
@@ -497,21 +495,7 @@ function AddGoalForm({ onAdd }: { onAdd: (g: Omit<Goal, "id" | "createdAt">) => 
           options={TIMEFRAMES}
           render={(t) => TIMEFRAME_LABEL[t as GoalTimeframe]}
         />
-        {deadline ? (
-          <div
-            className="bg-background/40 border border-border rounded-md px-2 py-2 text-xs font-mono uppercase tracking-wider text-gold/80 flex items-center justify-center text-center"
-            title="Quarter follows the deadline you picked"
-          >
-            {quarterFromDate(deadline)} · from date
-          </div>
-        ) : (
-          <Select
-            value={quarter ?? ""}
-            onChange={(v) => setQuarter((v || null) as GoalQuarter)}
-            options={["", ...QUARTERS]}
-            render={(q) => (q === "" ? "No quarter" : q)}
-          />
-        )}
+        {/* No quarter picker — the deadline decides the quarter. */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -1270,10 +1254,9 @@ function GoalRow({
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <Badge>{goal.category}</Badge>
               <Badge variant="muted">{goal.timeframe}</Badge>
-              {/* Single quarter badge — follows the deadline when one is set */}
-              {effectiveQuarterLabel(goal) && (
-                <Badge variant="gold">{effectiveQuarterLabel(goal)}</Badge>
-              )}
+              {/* No quarter badge — a quarter is only ever inferred from the
+                  deadline, so showing it duplicated the date and went stale
+                  the moment a deadline moved. The deadline itself is the truth. */}
               {goal.deadline && (
                 <Badge variant={days !== null && days < 0 ? "destructive" : "muted"}>
                   {format(new Date(goal.deadline), "MMM d, yyyy")}
@@ -1341,27 +1324,13 @@ function GoalRow({
               {/* Analytics panel — streak tracker or quarterly pace */}
               <GoalAnalyticsPanel goal={goal} onChange={onChange} />
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <Select
                   value={goal.timeframe}
                   onChange={(v) => onChange({ timeframe: v as GoalTimeframe })}
                   options={TIMEFRAMES}
                 />
-                {goal.deadline ? (
-                  <div
-                    className="bg-background/40 border border-border rounded-md px-2 py-2 text-[11px] font-mono uppercase tracking-wider text-muted-foreground/70 flex items-center justify-center text-center"
-                    title="Quarter follows the deadline"
-                  >
-                    {effectiveQuarter(goal) ?? "—"} · from date
-                  </div>
-                ) : (
-                  <Select
-                    value={goal.quarter ?? ""}
-                    onChange={(v) => onChange({ quarter: (v || null) as GoalQuarter })}
-                    options={["", ...QUARTERS]}
-                    render={(q) => (q === "" ? "No quarter" : q)}
-                  />
-                )}
+                {/* No quarter picker — the deadline decides the quarter. */}
                 <Select
                   value={goal.goalType ?? "metric"}
                   onChange={(v) => onChange({ goalType: v as "metric" | "streak" })}

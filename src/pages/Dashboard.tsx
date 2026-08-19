@@ -33,16 +33,17 @@ import { BackupRestore } from "@/components/BackupRestore";
 import {
   Habit,
   HabitLog,
+  currentStreakFor,
   habitsAtRisk,
   isCompleteForPeriod,
   toggleHabitForToday,
 } from "@/lib/habits";
+import { applyHabitToggle } from "@/lib/habitToggle";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { TodayNowNext } from "@/components/TodayNowNext";
-import { HealthSummaryCard } from "@/components/HealthSummaryCard";
 import { useAuth } from "@/hooks/useAuth";
 import { computeProjection } from "@/lib/goalsHistory";
 import { ProgressRing } from "@/components/ProgressRing";
@@ -352,7 +353,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <ChallengeHeader habits={habits} habitLogs={habitLogs} goals={goals} />
+      <ChallengeHeader
+        habits={habits}
+        habitLogs={habitLogs}
+        goals={goals}
+        onToggleHabit={(habit) => {
+          const next = applyHabitToggle(habit, habitLogs, goals);
+          setHabitLogs(next.logs);
+          if (next.goals !== goals) setGoals(next.goals);
+        }}
+      />
 
       {/* Right now / Up next */}
       <section>
@@ -419,6 +429,9 @@ export default function Dashboard() {
             <div className="mt-5 space-y-1.5">
               {dailyHabits.slice(0, 5).map((h) => {
                 const done = isCompleteForPeriod(h, habitLogs);
+                // Each habit carries its own streak — computed from its logs,
+                // not read off the habit record (which never held one).
+                const streak = currentStreakFor(h, habitLogs);
                 return (
                   <div key={h.id} className="flex items-center gap-3 py-1.5">
                     <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${done ? "bg-teal border-teal" : "border-border/50"}`}>
@@ -427,9 +440,12 @@ export default function Dashboard() {
                     <span className={`text-sm transition-colors ${done ? "line-through text-muted-foreground/40" : "text-foreground/80"}`}>
                       {h.title}
                     </span>
-                    {h.streak > 1 && (
-                      <span className="ml-auto font-mono text-[9px] text-gold/70 shrink-0">
-                        🔥 {h.streak}
+                    {streak > 0 && (
+                      <span
+                        title={`${streak}-day streak`}
+                        className="ml-auto font-mono text-[9px] text-gold/70 shrink-0"
+                      >
+                        🔥 {streak}
                       </span>
                     )}
                   </div>
@@ -448,7 +464,7 @@ export default function Dashboard() {
         <div className="lg:col-span-2 glass-card p-5 sm:p-6 flex flex-col">
           <p className="flex items-center gap-2 font-mono text-[10px] tracking-[0.28em] uppercase text-muted-foreground mb-1">
             <span className="h-1 w-1 rounded-full bg-gold inline-block" />
-            Daily Streak
+            Perfect days
           </p>
 
           <div className="flex items-center gap-4 mt-3">
@@ -494,7 +510,9 @@ export default function Dashboard() {
           {dailyPct === 100
             ? <p className="mt-4 text-sm text-gold font-display italic">Today is conquered.</p>
             : <p className="mt-4 text-sm text-muted-foreground/60">
-                {current > 0 ? "Finish today's protocol to hold the streak." : "Complete the protocol to begin."}
+                {current > 0
+                  ? "Every habit done today holds this one."
+                  : "Days where every habit is done. Each habit keeps its own streak too."}
               </p>}
         </div>
       </section>
@@ -523,11 +541,6 @@ export default function Dashboard() {
       {/* Today's agenda */}
       <section>
         <TodayAgendaCard />
-      </section>
-
-      {/* Health summary */}
-      <section>
-        <HealthSummaryCard />
       </section>
 
       {/* ── 2026 Campaign ── */}

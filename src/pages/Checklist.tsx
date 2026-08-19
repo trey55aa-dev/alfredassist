@@ -48,6 +48,7 @@ import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { useUiMode } from "@/lib/uiMode";
 import { useChallenge, challengeHabits } from "@/lib/challenge";
+import { applyHabitToggle } from "@/lib/habitToggle";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
@@ -116,48 +117,9 @@ export default function Checklist() {
   /* ----- mutations ----- */
 
   const handleToggle = (habit: Habit) => {
-    const wasDone = isCompleteForPeriod(habit, logs);
-    const { logs: nextLogs, nowComplete } = toggleHabitForToday(habit, logs);
-    setLogs(nextLogs);
-
-    // Record / clear the local completion time (powers hour-of-day stats)
-    if (nowComplete && !wasDone) recordHabitTime(habit.id, todayKey());
-    else if (!nowComplete && wasDone) removeHabitTime(habit.id, todayKey());
-
-    if (nowComplete && !wasDone) {
-      const streakDays = currentStreakFor(habit, nextLogs);
-      awardXp(XP_VALUES.HABIT_COMPLETE, "habit", { streakDays });
-    }
-
-    // Auto-increment linked goal
-    if (habit.goalId && nowComplete && !wasDone) {
-      const inc = habit.goalIncrement ?? 1;
-      const now = Date.now();
-      setGoals(
-        goals.map((g) =>
-          g.id === habit.goalId
-            ? {
-                ...g,
-                current:
-                  typeof g.target === "number"
-                    ? Math.min(g.target, (g.current ?? 0) + inc)
-                    : (g.current ?? 0) + inc,
-                localUpdatedAt: now,
-              }
-            : g
-        )
-      );
-    } else if (habit.goalId && !nowComplete && wasDone) {
-      const inc = habit.goalIncrement ?? 1;
-      const now = Date.now();
-      setGoals(
-        goals.map((g) =>
-          g.id === habit.goalId
-            ? { ...g, current: Math.max(0, (g.current ?? 0) - inc), localUpdatedAt: now }
-            : g
-        )
-      );
-    }
+    const next = applyHabitToggle(habit, logs, goals);
+    setLogs(next.logs);
+    if (next.goals !== goals) setGoals(next.goals);
   };
 
   const handleRecover = (habitId: string) => {
@@ -213,7 +175,12 @@ export default function Checklist() {
         }
       />
 
-      <ChallengeHeader habits={activeHabits} habitLogs={logs} goals={goals} />
+      <ChallengeHeader
+        habits={activeHabits}
+        habitLogs={logs}
+        goals={goals}
+        onToggleHabit={handleToggle}
+      />
 
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />

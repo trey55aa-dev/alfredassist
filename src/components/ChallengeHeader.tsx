@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Pencil, Shuffle, Target as TargetIcon } from "lucide-react";
+import { Flame, Pencil, Shuffle, Target as TargetIcon, Check, ChevronDown } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -15,7 +15,7 @@ import {
   computeAdherence,
   type ChallengeConfig,
 } from "@/lib/challenge";
-import type { Habit, HabitLog } from "@/lib/habits";
+import { currentStreakFor, isCompleteForPeriod, type Habit, type HabitLog } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
 import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
 import { suggestRewards } from "@/lib/rewards";
@@ -46,19 +46,27 @@ export function ChallengeHeader({
   habits,
   habitLogs,
   goals,
+  onToggleHabit,
 }: {
   habits: Habit[];
   habitLogs: HabitLog[];
   goals: Goal[];
+  /** Tick a habit straight from the challenge card. Omit to render read-only. */
+  onToggleHabit?: (habit: Habit) => void;
 }) {
   const cfg = useChallenge();
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const status = challengeStatus(cfg);
   const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
 
   const linkedGoal = goals.find((g) => g.id === cfg.goalId);
   const trackedHabits = useMemo(() => challengeHabits(cfg, habits), [cfg, habits]);
+  const doneToday = useMemo(
+    () => trackedHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
+    [trackedHabits, habitLogs],
+  );
 
   // One-time huge XP award on completion. Idempotent via the earned-badges
   // set, so a remount (or the challenge staying "complete" for weeks) never
@@ -240,6 +248,80 @@ export function ChallengeHeader({
           <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-white/60 mt-1">Day</p>
         </div>
       </div>
+
+      {/* Today's list — what this challenge actually asks of you right now. */}
+      {status.state === "active" && trackedHabits.length > 0 && (
+        <div className="relative mt-5">
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+            className="w-full flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-left hover:bg-white/10 transition-colors"
+          >
+            <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-white/75">
+              Today · {doneToday}/{trackedHabits.length} done
+            </span>
+            <span className="flex items-center gap-1.5 shrink-0 font-mono text-[9px] uppercase tracking-wider text-white/55">
+              {expanded ? "Hide" : "Show"}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+              />
+            </span>
+          </button>
+
+          {expanded && (
+            <ul className="mt-2 space-y-1.5">
+              {trackedHabits.map((h) => {
+                const done = isCompleteForPeriod(h, habitLogs);
+                const streak = currentStreakFor(h, habitLogs);
+                const Row = onToggleHabit ? "button" : "div";
+                return (
+                  <li key={h.id}>
+                    <Row
+                      {...(onToggleHabit
+                        ? {
+                            type: "button" as const,
+                            onClick: () => onToggleHabit(h),
+                            "aria-pressed": done,
+                            title: done ? `Undo "${h.title}" for today` : `Mark "${h.title}" done`,
+                          }
+                        : {})}
+                      className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                        done
+                          ? "border-white/10 bg-white/5"
+                          : "border-white/15 bg-white/[0.07]"
+                      } ${onToggleHabit ? "hover:bg-white/15 active:scale-[0.99]" : ""}`}
+                    >
+                      <span
+                        className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                          done ? "bg-amber-300 border-amber-300" : "border-white/40"
+                        }`}
+                      >
+                        {done && <Check className="h-3 w-3 text-amber-950" strokeWidth={3} />}
+                      </span>
+                      <span
+                        className={`flex-1 min-w-0 text-sm truncate ${
+                          done ? "line-through text-white/45" : "text-white/90"
+                        }`}
+                      >
+                        {h.title}
+                      </span>
+                      {streak > 0 && (
+                        <span
+                          title={`${streak}-day streak`}
+                          className="shrink-0 font-mono text-[10px] text-amber-200/80"
+                        >
+                          🔥 {streak}
+                        </span>
+                      )}
+                    </Row>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
 
       {status.state !== "upcoming" && adherence.applicable > 0 && (
         <>
