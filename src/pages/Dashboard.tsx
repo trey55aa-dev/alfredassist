@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckSquare,
-  Timer,
-  Brain,
-  Mic,
   ArrowRight,
   Flame,
   Target,
@@ -27,8 +23,6 @@ import {
   last7Days,
   reconcileToday,
 } from "@/lib/streak";
-import type { BrainEntry } from "./BrainDump";
-import type { JournalEntry } from "./Journal";
 import { BackupRestore } from "@/components/BackupRestore";
 import {
   Habit,
@@ -52,8 +46,6 @@ import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
 import { AlfredBriefing } from "@/components/AlfredBriefing";
 import { ChallengeHeader } from "@/components/ChallengeHeader";
 
-interface FocusStats { date: string; sessions: number; minutes: number; }
-
 const SNAP_KEY = "alfred.goals.dailySnap";
 
 function fmtGoalVal(n: number, unit: string | undefined): string {
@@ -62,49 +54,6 @@ function fmtGoalVal(n: number, unit: string | undefined): string {
   if (isMonetary) return `$${Math.round(n).toLocaleString()}`;
   const str = n >= 10 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, "");
   return unit ? `${str} ${unit}` : str;
-}
-
-/** Coloured tile for each stat. */
-const TILE_COLORS = {
-  teal:   { text: "hsl(180 40% 58%)", iconBg: "bg-teal/15",   icon: "text-teal"   },
-  violet: { text: "hsl(263 58% 75%)", iconBg: "bg-violet/15", icon: "text-violet" },
-  gold:   { text: "hsl(42 55% 65%)",  iconBg: "bg-gold/15",   icon: "text-gold"   },
-  coral:  { text: "hsl(348 72% 72%)", iconBg: "bg-coral/15",  icon: "text-coral"  },
-} as const;
-type TileColor = keyof typeof TILE_COLORS;
-
-function StatTile({
-  icon: Icon,
-  label,
-  value,
-  to,
-  color,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  to: string;
-  color: TileColor;
-}) {
-  const c = TILE_COLORS[color];
-  return (
-    <Link to={to} className="block h-full">
-      <div className={`stat-tile stat-tile-${color} rounded-2xl p-4 sm:p-5 flex flex-col h-full border border-transparent`}>
-        <div className="flex items-start justify-between mb-4">
-          <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${c.iconBg}`}>
-            <Icon className={`h-5 w-5 ${c.icon}`} />
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground/30" />
-        </div>
-        <div className="font-display text-5xl leading-none" style={{ color: c.text }}>
-          {value}
-        </div>
-        <div className="mt-2 font-mono text-[10px] tracking-[0.22em] uppercase text-muted-foreground/70">
-          {label}
-        </div>
-      </div>
-    </Link>
-  );
 }
 
 /** Today at a Glance — goal logging rows. */
@@ -211,13 +160,6 @@ export default function Dashboard() {
   }, []);
 
   const { habits, setHabits, habitLogs, setHabitLogs, loading: habitsLoading } = useCloudHabits();
-  const [brain] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
-  const [focus] = useLocalStorage<FocusStats>("alfred.focus.stats", {
-    date: todayKey(),
-    sessions: 0,
-    minutes: 0,
-  });
-  const [journal] = useLocalStorage<JournalEntry[]>("alfred.journal", []);
   const { goals, setGoals, loading: goalsLoading } = useCloudGoals();
 
   /* ── First-run onboarding: brand-new account, nothing set up yet ── */
@@ -274,7 +216,6 @@ export default function Dashboard() {
     return { total, done, pct, active };
   }, [goals]);
 
-  const todaysBrain = useMemo(() => brain.filter((b) => b.date === todayKey()).length, [brain]);
 
   const dailyHabits = useMemo(() => habits.filter((h) => h.cadence === "daily" && !h.archived), [habits]);
   const tasksDone = useMemo(() => dailyHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length, [dailyHabits, habitLogs]);
@@ -295,12 +236,11 @@ export default function Dashboard() {
 
   const recoveries = useMemo(() => habitsAtRisk(habits, habitLogs), [habits, habitLogs]);
 
-  const stats: Array<{ icon: React.ElementType; label: string; value: string | number; to: string; color: TileColor }> = [
-    { icon: CheckSquare, label: "Tasks complete",  value: `${tasksDone}/${tasksTotal}`,                              to: "/checklist",   color: "teal"   },
-    { icon: Timer,       label: "Focus sessions",  value: focus.date === todayKey() ? focus.sessions : 0,            to: "/focus",       color: "violet" },
-    { icon: Brain,       label: "Brain dumps",     value: todaysBrain,                                              to: "/brain-dump",  color: "gold"   },
-    { icon: Mic,         label: "Journal entries", value: journal.length,                                           to: "/journal",     color: "coral"  },
-  ];
+  // The stat-tile row (Tasks complete / Focus sessions / Brain dumps / Journal
+  // entries) used to sit here. Focus, Brain dump and Journal are counts you
+  // read, not things you act on, and "Tasks complete" only restated the Daily
+  // Protocol ring directly below — so the whole row was scrolling without
+  // substance. All four pages remain a tap away in the nav.
 
   return (
     <div className="space-y-10">
@@ -367,13 +307,6 @@ export default function Dashboard() {
       {/* Right now / Up next */}
       <section>
         <TodayNowNext />
-      </section>
-
-      {/* ── Bold stat tiles ── */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 stagger-in">
-        {stats.map((s) => (
-          <StatTile key={s.label} {...s} />
-        ))}
       </section>
 
       {/* ── Today's Targets ── */}

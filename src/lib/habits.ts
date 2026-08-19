@@ -352,6 +352,12 @@ const DEFAULT_STEPS_BY_CADENCE: Record<Cadence, (title: string) => string[]> = {
 };
 
 export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()): Recovery | null {
+  // A habit with a live streak has already restarted — whatever it missed
+  // before, the comeback happened. Nagging it to "start fresh today" when
+  // today is already ticked reads as Alfred not noticing, so recovery only
+  // applies while the streak is actually at zero.
+  if (currentStreakFor(habit, logs, today) > 0) return null;
+
   // Grace before penalty: the current period is still open and is never a miss.
   // Anchor on the last fully-elapsed period (yesterday, for daily habits) instead.
   const anchor = previousPeriodDate(habit.cadence, today);

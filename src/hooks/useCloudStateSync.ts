@@ -40,6 +40,8 @@ const SYNCED_KEYS = [
   "alfred.dailyFeedback",   // { date: note } — your day-end reflection follows you
   "alfred.challenge",       // { title, startDate, totalDays } — the active challenge banner
   "alfred.rewardPrefs",     // string[] of reward tags — treat-yourself suggestions follow you
+  "alfred.goalTargets",     // GoalDailyTarget[] — daily sub-goals hanging off a 2026 goal
+  "alfred.goalTargetLog",   // { targetId|date: entry } — each day's answer to them
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's
@@ -49,6 +51,8 @@ const REFRESH_EVENTS: Record<string, string> = {
   "alfred.timer.history": "alfred.timer:changed",
   "alfred.mood.log": "alfred.mood:changed",
   "alfred.scene": "alfred.scene:changed", // SceneBackground repaints live
+  "alfred.goalTargets": "alfred.goalTargets:changed",
+  "alfred.goalTargetLog": "alfred.goalTargets:changed",
 };
 
 const POLL_MS = 4000;

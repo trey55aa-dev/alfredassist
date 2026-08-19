@@ -54,6 +54,7 @@ import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { ChallengeHeader } from "@/components/ChallengeHeader";
+import { GoalDailyTargets } from "@/components/GoalDailyTargets";
 
 // Legacy export kept for any external importers.
 export const DAILY = SEED_HABITS.filter((h) => h.cadence === "daily").map((h) => h.title);
@@ -194,6 +195,9 @@ export default function Checklist() {
           <HabitRings habits={dailyHabits} logs={logs} onToggle={handleToggle} />
         </Card>
       )}
+
+      {/* Daily sub-goals — the concrete ask behind each 2026 goal */}
+      <GoalDailyTargets goals={goals} setGoals={setGoals} />
 
       {/* Auto-generated daily to-dos from the 2026 goals */}
       <GoalDailyTasks goals={goals} setGoals={setGoals} />

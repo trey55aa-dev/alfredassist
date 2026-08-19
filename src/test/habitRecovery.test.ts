@@ -38,6 +38,19 @@ describe("buildRecovery — grace before penalty", () => {
     expect(recovery!.missedPeriods).toBe(7);
   });
 
+  it("stops nagging once a new streak has started, even after a long gap", () => {
+    const habit = dailyHabit("h1", "Meditate", CREATED);
+    // Missed Aug 11-17 outright, but picked it back up TODAY (Aug 18).
+    const logs: HabitLog[] = [{ habitId: "h1", date: "2026-08-10" }, { habitId: "h1", date: "2026-08-18" }];
+    expect(buildRecovery(habit, logs, TODAY)).toBeNull();
+  });
+
+  it("keeps flagging a lapsed habit that has not been picked back up today", () => {
+    const habit = dailyHabit("h1", "Meditate", CREATED);
+    const logs: HabitLog[] = [{ habitId: "h1", date: "2026-08-10" }];
+    expect(buildRecovery(habit, logs, TODAY)).not.toBeNull();
+  });
+
   it("still coaches onboarding for a habit never done at all", () => {
     const habit = dailyHabit("h4", "Stretch", CREATED);
     const recovery = buildRecovery(habit, [], TODAY);
@@ -60,5 +73,14 @@ describe("habitsAtRisk — grace before penalty", () => {
     ];
     const atRisk = habitsAtRisk(habits, logs, TODAY);
     expect(atRisk.map((r) => r.habit.id)).toEqual(["h3"]);
+  });
+
+  it("drops a habit from the list the moment it is ticked today", () => {
+    const habits: Habit[] = [dailyHabit("h3", "Journal", CREATED)];
+    const lapsed: HabitLog[] = [{ habitId: "h3", date: "2026-08-10" }];
+    expect(habitsAtRisk(habits, lapsed, TODAY)).toHaveLength(1);
+
+    const pickedBackUp = [...lapsed, { habitId: "h3", date: "2026-08-18" }];
+    expect(habitsAtRisk(habits, pickedBackUp, TODAY)).toHaveLength(0);
   });
 });

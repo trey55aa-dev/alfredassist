@@ -17,6 +17,8 @@ import {
 } from "@/lib/challenge";
 import { currentStreakFor, isCompleteForPeriod, type Habit, type HabitLog } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
+import { getDailyFeedback, setDailyFeedback } from "@/lib/dailyFeedback";
+import { todayKey } from "@/lib/alfred";
 import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
 import { suggestRewards } from "@/lib/rewards";
 import { awardXp, getGamification, XP_VALUES } from "@/lib/gamification";
@@ -67,6 +69,16 @@ export function ChallengeHeader({
     () => trackedHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
     [trackedHabits, habitLogs],
   );
+
+  // Today's recap note. Same store the Agenda's recap card writes to, so this
+  // is one note about the day rather than a second copy of it.
+  const dateStr = todayKey();
+  const [note, setNote] = useState(() => getDailyFeedback(dateStr));
+  useEffect(() => setNote(getDailyFeedback(dateStr)), [dateStr]);
+  const saveNote = (text: string) => {
+    setNote(text);
+    setDailyFeedback(dateStr, text);
+  };
 
   // One-time huge XP award on completion. Idempotent via the earned-badges
   // set, so a remount (or the challenge staying "complete" for weeks) never
@@ -270,7 +282,8 @@ export function ChallengeHeader({
           </button>
 
           {expanded && (
-            <ul className="mt-2 space-y-1.5">
+            <>
+              <ul className="mt-2 space-y-1.5">
               {trackedHabits.map((h) => {
                 const done = isCompleteForPeriod(h, habitLogs);
                 const streak = currentStreakFor(h, habitLogs);
@@ -318,7 +331,25 @@ export function ChallengeHeader({
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+
+              <div className="mt-3">
+                <label
+                  htmlFor="challenge-recap-note"
+                  className="font-mono text-[9px] tracking-wider uppercase text-white/55 mb-1.5 block"
+                >
+                  How did today go?
+                </label>
+                <textarea
+                  id="challenge-recap-note"
+                  value={note}
+                  onChange={(e) => saveNote(e.target.value)}
+                  rows={2}
+                  placeholder="Optional — a note for yourself, saved as you type"
+                  className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white/90 placeholder:text-white/35 outline-none transition-colors focus:border-white/35 resize-none"
+                />
+              </div>
+            </>
           )}
         </div>
       )}

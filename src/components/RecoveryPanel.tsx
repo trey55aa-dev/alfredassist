@@ -63,7 +63,10 @@ export function RecoveryPanel({ recoveries, onMarkDone, compact, limit }: Props)
             key={r.habit.id}
             className="rounded-md bg-background/40 border border-border/60 p-4"
           >
-            <div className="flex items-start justify-between gap-3 flex-wrap">
+            {/* Stacks on narrow screens. As a wrapping row the text column
+                could shrink to a few characters beside the fixed-width button,
+                breaking the coaching copy onto one word per line. */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm text-foreground font-medium">{r.habit.title}</span>
@@ -84,7 +87,7 @@ export function RecoveryPanel({ recoveries, onMarkDone, compact, limit }: Props)
               <Button
                 size="sm"
                 onClick={() => onMarkDone(r.habit.id)}
-                className="bg-gold text-primary-foreground hover:bg-gold-soft flex-shrink-0"
+                className="bg-gold text-primary-foreground hover:bg-gold-soft flex-shrink-0 w-full sm:w-auto"
               >
                 Start fresh today <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
