@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { challengeStatus, computeAdherence, type ChallengeConfig } from "@/lib/challenge";
+import { challengeStatus, computeAdherence, challengeHabits, type ChallengeConfig } from "@/lib/challenge";
 import type { Habit, HabitLog } from "@/lib/habits";
 import type { RecurringTemplate } from "@/lib/recurring";
 
@@ -120,5 +120,39 @@ describe("computeAdherence", () => {
   it("returns 0 applicable (not NaN) when there's no routine at all", () => {
     const r = computeAdherence(CFG, [], [], [], {}, new Date(2026, 7, 8));
     expect(r).toEqual({ pct: 0, completed: 0, applicable: 0 });
+  });
+});
+
+describe("challengeHabits — goal-linked challenges", () => {
+  const forGoal: Habit = { id: "h1", title: "Log meals", cadence: "daily", createdAt: 0, goalId: "g1" };
+  const unrelated: Habit = { id: "h2", title: "Water plants", cadence: "daily", createdAt: 0 };
+  const otherGoal: Habit = { id: "h3", title: "Practice guitar", cadence: "daily", createdAt: 0, goalId: "g2" };
+  const weekly: Habit = { id: "h4", title: "Meal prep", cadence: "weekly", createdAt: 0, goalId: "g1" };
+  const archived: Habit = { id: "h5", title: "Old habit", cadence: "daily", createdAt: 0, goalId: "g1", archived: true };
+  const habits = [forGoal, unrelated, otherGoal, weekly, archived];
+
+  it("with no goal linked, tracks every non-archived daily habit", () => {
+    expect(challengeHabits(CFG, habits).map((h) => h.id).sort()).toEqual(["h1", "h2", "h3"]);
+  });
+
+  it("linked to a goal, narrows to that goal's daily habits only", () => {
+    const linked: ChallengeConfig = { ...CFG, goalId: "g1" };
+    // h1 matches the goal; h2/h3 don't; h4 matches but isn't daily; h5 matches but is archived.
+    expect(challengeHabits(linked, habits).map((h) => h.id)).toEqual(["h1"]);
+  });
+
+  const weekdayBlock: RecurringTemplate = {
+    id: "t1", title: "Recruiting Outreach", startTime: "09:00", endTime: "10:00",
+    recurrence: "weekdays", days: [], enabled: true,
+  };
+
+  it("a goal-linked challenge ignores recurring blocks in adherence — only the goal's habits count", () => {
+    const linked: ChallengeConfig = { ...CFG, goalId: "g1" };
+    const logs: HabitLog[] = [{ habitId: "h1", date: "2026-08-08" }];
+    const completions = { "t1:2026-08-10": true as const };
+    const r = computeAdherence(linked, habits, logs, [weekdayBlock], completions, new Date(2026, 7, 8));
+    // Only h1 (the goal's daily habit) applies on Aug 8 — the recurring block is excluded entirely.
+    expect(r.applicable).toBe(1);
+    expect(r.completed).toBe(1);
   });
 });

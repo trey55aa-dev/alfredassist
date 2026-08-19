@@ -69,6 +69,7 @@ import {
   templateDurationMinutes,
 } from "@/lib/recurring";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
+import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { useAuth } from "@/hooks/useAuth";
 import { useRecurringSync } from "@/hooks/useRecurringSync";
 import { GOALS_KEY, type Goal } from "@/lib/goals";
@@ -91,6 +92,7 @@ export default function Agenda() {
   const { user } = useAuth();
   const { pushCompletionOp } = useRecurringSync(user?.id);
   const { habits, habitLogs, setHabitLogs } = useCloudHabits();
+  const { goals } = useCloudGoals();
   const recoveries = useMemo(
     () => habitsAtRisk(habits, habitLogs, now),
     [habits, habitLogs, now],
@@ -361,7 +363,7 @@ export default function Agenda() {
         }
       />
 
-      <ChallengeHeader habits={habits} habitLogs={habitLogs} />
+      <ChallengeHeader habits={habits} habitLogs={habitLogs} goals={goals} />
 
       {/* Hero — current / next */}
       {(ongoing || upcoming) && (

@@ -2,6 +2,7 @@
 // Alfred has no generic multi-challenge system; this is deliberately one
 // small, editable record so the header never shows a permanently-wrong date.
 
+import { useSyncExternalStore } from "react";
 import { todayKey } from "./alfred";
 import type { Habit, HabitLog } from "./habits";
 import { isApplicableToDate, type RecurringTemplate } from "./recurring";
@@ -10,9 +11,13 @@ export interface ChallengeConfig {
   title: string;
   startDate: string; // YYYY-MM-DD, local
   totalDays: number;
+  /** Optional 2026 goal this challenge tracks. When set, adherence is scoped
+   *  to that goal's daily habits instead of the whole daily routine. */
+  goalId?: string;
 }
 
 const KEY = "alfred.challenge";
+export const CHALLENGE_CHANGED = "alfred.challenge:changed";
 
 export const DEFAULT_CHALLENGE: ChallengeConfig = {
   title: "30-Day Hard",
@@ -40,6 +45,41 @@ export function setChallenge(cfg: ChallengeConfig): void {
   } catch {
     /* quota */
   }
+  window.dispatchEvent(new Event(CHALLENGE_CHANGED));
+}
+
+function subscribe(cb: () => void): () => void {
+  window.addEventListener(CHALLENGE_CHANGED, cb);
+  window.addEventListener("storage", cb);
+  // Cloud sync adopting a value fires this key-specific event.
+  window.addEventListener(`alfred.ls:${KEY}`, cb);
+  return () => {
+    window.removeEventListener(CHALLENGE_CHANGED, cb);
+    window.removeEventListener("storage", cb);
+    window.removeEventListener(`alfred.ls:${KEY}`, cb);
+  };
+}
+
+/* useSyncExternalStore compares snapshots by reference, so getChallenge()'s
+   fresh object every call would loop forever. Cache it against the raw
+   string and only re-parse when that actually changes. */
+let cachedRaw: string | null = null;
+let cachedCfg: ChallengeConfig = DEFAULT_CHALLENGE;
+
+function getChallengeSnapshot(): ChallengeConfig {
+  const raw = typeof window === "undefined" ? null : localStorage.getItem(KEY);
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    cachedCfg = getChallenge();
+  }
+  return cachedCfg;
+}
+
+/** Reactive challenge config — stays in sync across every component that
+ *  reads it (edit it in one place, e.g. the Checklist's challenge badges
+ *  update immediately) without a full page reload. */
+export function useChallenge(): ChallengeConfig {
+  return useSyncExternalStore(subscribe, getChallengeSnapshot, () => DEFAULT_CHALLENGE);
 }
 
 export type ChallengeState = "upcoming" | "active" | "complete";
@@ -100,12 +140,27 @@ export interface AdherenceResult {
 }
 
 /**
- * "The routine" = every non-archived daily habit (always applicable) plus
- * every enabled recurring block on the days it's scheduled — the same set
- * that already drives the Dashboard's Daily Protocol ring. Walks from the
- * challenge's start date through today (or the challenge's last day,
- * whichever is sooner), so a still-in-progress today counts partially
- * rather than waiting for midnight.
+ * The daily habits this challenge tracks. With no goal linked, that's every
+ * non-archived daily habit (the whole routine). Linked to a 2026 goal, it
+ * narrows to just that goal's daily habits — the concrete, repeatable actions
+ * that actually move it — so the challenge measures something specific
+ * instead of "everything you do."
+ */
+export function challengeHabits(cfg: ChallengeConfig, habits: Habit[]): Habit[] {
+  return habits.filter(
+    (h) => !h.archived && h.cadence === "daily" && (!cfg.goalId || h.goalId === cfg.goalId),
+  );
+}
+
+/**
+ * "The routine" = every daily habit this challenge tracks (see
+ * `challengeHabits`) plus, when no goal is linked, every enabled recurring
+ * block on the days it's scheduled — the same set that already drives the
+ * Dashboard's Daily Protocol ring. A goal-linked challenge sticks to that
+ * goal's habits only, since a recurring calendar block isn't attributable to
+ * any one goal. Walks from the challenge's start date through today (or the
+ * challenge's last day, whichever is sooner), so a still-in-progress today
+ * counts partially rather than waiting for midnight.
  */
 export function computeAdherence(
   cfg: ChallengeConfig,
@@ -123,8 +178,8 @@ export function computeAdherence(
   lastPossible.setDate(lastPossible.getDate() + cfg.totalDays - 1);
   const end = today < lastPossible ? today : lastPossible;
 
-  const dailyHabits = habits.filter((h) => !h.archived && h.cadence === "daily");
-  const enabledTemplates = templates.filter((t) => t.enabled);
+  const dailyHabits = challengeHabits(cfg, habits);
+  const enabledTemplates = cfg.goalId ? [] : templates.filter((t) => t.enabled);
 
   let completed = 0;
   let applicable = 0;

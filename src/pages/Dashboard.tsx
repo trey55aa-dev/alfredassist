@@ -352,7 +352,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <ChallengeHeader habits={habits} habitLogs={habitLogs} />
+      <ChallengeHeader habits={habits} habitLogs={habitLogs} goals={goals} />
 
       {/* Right now / Up next */}
       <section>

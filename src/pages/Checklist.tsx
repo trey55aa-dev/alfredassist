@@ -47,10 +47,12 @@ import {
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { useUiMode } from "@/lib/uiMode";
+import { useChallenge, challengeHabits } from "@/lib/challenge";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
 import { GoalEmoji } from "@/components/GoalEmoji";
+import { ChallengeHeader } from "@/components/ChallengeHeader";
 
 // Legacy export kept for any external importers.
 export const DAILY = SEED_HABITS.filter((h) => h.cadence === "daily").map((h) => h.title);
@@ -73,6 +75,16 @@ export default function Checklist() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const activeHabits = useMemo(() => habits.filter((h) => !h.archived), [habits]);
+  const challenge = useChallenge();
+  // Only badge habits when the challenge is scoped to a goal — an unlinked
+  // challenge covers every daily habit, so a badge on all of them is noise.
+  const challengeHabitIds = useMemo(
+    () =>
+      challenge.goalId
+        ? new Set(challengeHabits(challenge, activeHabits).map((h) => h.id))
+        : new Set<string>(),
+    [challenge, activeHabits],
+  );
   const selected = useMemo(
     () => (selectedId ? habits.find((h) => h.id === selectedId) ?? null : null),
     [selectedId, habits],
@@ -201,6 +213,8 @@ export default function Checklist() {
         }
       />
 
+      <ChallengeHeader habits={activeHabits} habitLogs={logs} goals={goals} />
+
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />
 
@@ -241,6 +255,7 @@ export default function Checklist() {
               habits={grouped[c]}
               logs={logs}
               goals={goals}
+              challengeHabitIds={challengeHabitIds}
               onToggle={handleToggle}
               onOpen={(h) => setSelectedId(h.id)}
             />
@@ -396,6 +411,7 @@ function CadenceSection({
   habits,
   logs,
   goals,
+  challengeHabitIds,
   onToggle,
   onOpen,
 }: {
@@ -403,6 +419,7 @@ function CadenceSection({
   habits: Habit[];
   logs: HabitLog[];
   goals: Goal[];
+  challengeHabitIds: Set<string>;
   onToggle: (h: Habit) => void;
   onOpen: (h: Habit) => void;
 }) {
@@ -435,6 +452,7 @@ function CadenceSection({
             habit={h}
             logs={logs}
             goals={goals}
+            inChallenge={challengeHabitIds.has(h.id)}
             onToggle={() => onToggle(h)}
             onOpen={() => onOpen(h)}
           />
@@ -450,12 +468,14 @@ function HabitRow({
   habit,
   logs,
   goals,
+  inChallenge,
   onToggle,
   onOpen,
 }: {
   habit: Habit;
   logs: HabitLog[];
   goals: Goal[];
+  inChallenge: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -488,6 +508,15 @@ function HabitRow({
               {habit.title}
             </span>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {inChallenge && (
+                <span
+                  title="Counts toward the active challenge"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-[0.15em] bg-coral/10 text-coral border-coral/30"
+                >
+                  <Flame className="h-2.5 w-2.5" />
+                  Challenge
+                </span>
+              )}
               {linkedGoal && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-[0.15em] bg-gold/10 text-gold border-gold/30">
                   <TargetIcon className="h-2.5 w-2.5" />

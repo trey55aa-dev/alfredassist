@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Pencil, Shuffle } from "lucide-react";
+import { Flame, Pencil, Shuffle, Target as TargetIcon } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -8,13 +8,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  getChallenge,
   setChallenge,
+  useChallenge,
   challengeStatus,
+  challengeHabits,
   computeAdherence,
   type ChallengeConfig,
 } from "@/lib/challenge";
 import type { Habit, HabitLog } from "@/lib/habits";
+import type { Goal } from "@/lib/goals";
 import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
 import { suggestRewards } from "@/lib/rewards";
 import { awardXp, getGamification, XP_VALUES } from "@/lib/gamification";
@@ -43,15 +45,20 @@ function addDays(iso: string, days: number): string {
 export function ChallengeHeader({
   habits,
   habitLogs,
+  goals,
 }: {
   habits: Habit[];
   habitLogs: HabitLog[];
+  goals: Goal[];
 }) {
-  const [cfg, setCfg] = useState<ChallengeConfig>(() => getChallenge());
+  const cfg = useChallenge();
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
   const status = challengeStatus(cfg);
   const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
+
+  const linkedGoal = goals.find((g) => g.id === cfg.goalId);
+  const trackedHabits = useMemo(() => challengeHabits(cfg, habits), [cfg, habits]);
 
   // One-time huge XP award on completion. Idempotent via the earned-badges
   // set, so a remount (or the challenge staying "complete" for weeks) never
@@ -79,7 +86,6 @@ export function ChallengeHeader({
 
   const save = () => {
     setChallenge(draft);
-    setCfg(draft);
     setOpen(false);
   };
 
@@ -173,6 +179,27 @@ export function ChallengeHeader({
                       className="bg-background/60 border-border text-sm"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
+                      Link to a 2026 goal (optional)
+                    </label>
+                    <select
+                      value={draft.goalId ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, goalId: e.target.value || undefined }))
+                      }
+                      className="w-full bg-background/60 border border-border rounded-md px-2 py-2 text-xs font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-gold/40"
+                    >
+                      <option value="">No goal — track full routine</option>
+                      {goals.map((g) => (
+                        <option key={g.id} value={g.id}>{g.title}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                      Linked, this challenge only tracks daily habits that feed that goal —
+                      not your whole routine.
+                    </p>
+                  </div>
                   <Button onClick={save} size="sm" className="w-full">
                     Save
                   </Button>
@@ -182,6 +209,26 @@ export function ChallengeHeader({
           </div>
           <p className="text-sm text-white/70 mt-1">
             {fmtDate(cfg.startDate)} – {fmtDate(addDays(cfg.startDate, cfg.totalDays - 1))} · {stateLine}
+          </p>
+          <p className="flex items-center gap-1.5 text-xs text-white/55 mt-1">
+            {linkedGoal ? (
+              trackedHabits.length > 0 ? (
+                <>
+                  <TargetIcon className="h-3 w-3 shrink-0" />
+                  Tracking {trackedHabits.length} habit{trackedHabits.length === 1 ? "" : "s"} for{" "}
+                  <span className="text-white/80">{linkedGoal.title}</span>
+                </>
+              ) : (
+                <>
+                  <TargetIcon className="h-3 w-3 shrink-0" />
+                  No daily habits feed{" "}
+                  <span className="text-white/80">{linkedGoal.title}</span> yet — add one below and
+                  link it to this goal.
+                </>
+              )
+            ) : (
+              <>Tracking your full daily routine — link a goal to narrow this down.</>
+            )}
           </p>
         </div>
 
@@ -206,8 +253,8 @@ export function ChallengeHeader({
             />
           </div>
           <p className="relative mt-2 font-mono text-[9px] tracking-[0.2em] uppercase text-white/60">
-            {Math.round(adherence.pct * 100)}% of your routine actually done so far ({adherence.completed}/
-            {adherence.applicable})
+            {Math.round(adherence.pct * 100)}% of {linkedGoal ? "these habits" : "your routine"} actually
+            done so far ({adherence.completed}/{adherence.applicable})
           </p>
         </>
       )}
