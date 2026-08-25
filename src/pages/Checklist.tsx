@@ -29,6 +29,7 @@ import {
   habitsAtRisk,
   isCompleteForPeriod,
   last7Periods,
+  normalizeCadence,
   toggleHabitForToday,
   recordHabitTime,
   removeHabitTime,
@@ -97,7 +98,7 @@ export default function Checklist() {
     const out: Record<Cadence, Habit[]> = {
       daily: [], weekly: [], monthly: [], quarterly: [], annual: [],
     };
-    for (const h of activeHabits) out[h.cadence].push(h);
+    for (const h of activeHabits) out[normalizeCadence(h.cadence)].push(h);
     return out;
   }, [activeHabits]);
 

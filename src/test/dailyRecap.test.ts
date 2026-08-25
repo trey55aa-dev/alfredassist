@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { buildRecapItems, formatRecapText } from "@/lib/dailyRecap";
+import {
+  buildRecapItems,
+  formatRecapText,
+  groupRecapItems,
+  type RecapItem,
+} from "@/lib/dailyRecap";
+import type { GoalDailyTarget } from "@/lib/goalTargets";
+import { todayKey } from "@/lib/alfred";
 import type { AgendaEvent } from "@/lib/agenda";
 import type { Habit, HabitLog } from "@/lib/habits";
 
@@ -92,5 +99,59 @@ describe("formatRecapText", () => {
   it("withNote style appends the feedback text", () => {
     const text = formatRecapText(items, "withNote", "Friday, Aug 7", "Felt great today");
     expect(text).toContain("Felt great today");
+  });
+});
+
+describe("sub-goals and grouping", () => {
+  const target = (p: Partial<GoalDailyTarget> = {}): GoalDailyTarget => ({
+    id: "t1",
+    goalId: "g1",
+    title: "Put $20 aside",
+    kind: "amount",
+    createdAt: 0,
+    ...p,
+  });
+
+  it("includes daily sub-goals in their own group", () => {
+    const items = buildRecapItems([], [], [], {}, DAY, [target()], {});
+    const sub = items.find((i) => i.kind === "target")!;
+    expect(sub.title).toBe("Put $20 aside");
+    expect(sub.group).toBe("subgoals");
+    expect(sub.done).toBe(false);
+  });
+
+  it("reads a sub-goal as done once today's entry is answered", () => {
+    const log = { [`t1|${todayKey(DAY)}`]: { done: true } };
+    const items = buildRecapItems([], [], [], {}, DAY, [target()], log);
+    expect(items.find((i) => i.kind === "target")!.done).toBe(true);
+  });
+
+  it("leaves archived sub-goals out", () => {
+    const items = buildRecapItems([], [], [], {}, DAY, [target({ archived: true })], {});
+    expect(items.some((i) => i.kind === "target")).toBe(false);
+  });
+
+  it("splits items into schedule / habits / sub-goals, dropping empty groups", () => {
+    const items = buildRecapItems(
+      [event({ id: "e1", title: "Standup" })],
+      [dailyHabit],
+      [],
+      {},
+      DAY,
+      [target()],
+      {},
+    );
+    expect(groupRecapItems(items).map((g) => g.group)).toEqual([
+      "schedule",
+      "habits",
+      "subgoals",
+    ]);
+  });
+
+  it("never drops an item that predates the group field", () => {
+    const legacy = { id: "x", title: "Old item", kind: "habit", done: false } as RecapItem;
+    const groups = groupRecapItems([legacy]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].group).toBe("habits");
   });
 });

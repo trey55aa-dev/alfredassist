@@ -14,6 +14,7 @@ import {
   HABITS_KEY,
   HABIT_LOGS_KEY,
   SEED_HABITS,
+  normalizeHabits,
   type Habit,
   type HabitLog,
 } from "@/lib/habits";
@@ -265,8 +266,9 @@ function readHabitsCache(): Habit[] {
   try {
     const raw = localStorage.getItem(HABITS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Habit[];
-    return Array.isArray(parsed) ? parsed : [];
+    // Normalise on the way in: a row missing its cadence used to crash every
+    // screen that groups habits, and the bad row survived the reload.
+    return normalizeHabits(JSON.parse(raw));
   } catch {
     return [];
   }
