@@ -54,6 +54,7 @@ import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { ChallengeHeader } from "@/components/ChallengeHeader";
+import { ChallengeMissedDays } from "@/components/ChallengeMissedDays";
 import { GoalDailyTargets } from "@/components/GoalDailyTargets";
 
 // Legacy export kept for any external importers.
@@ -182,6 +183,14 @@ export default function Checklist() {
         goals={goals}
         onToggleHabit={handleToggle}
       />
+
+      {!simple && (
+        <ChallengeMissedDays
+          habits={activeHabits}
+          habitLogs={logs}
+          setHabitLogs={setLogs}
+        />
+      )}
 
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />

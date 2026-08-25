@@ -201,3 +201,79 @@ export function computeAdherence(
 
   return { completed, applicable, pct: applicable > 0 ? completed / applicable : 0 };
 }
+
+/* ---------- Per-day breakdown: which days actually slipped ---------- */
+
+export type ChallengeDayStatus = "complete" | "partial" | "missed" | "today" | "future";
+
+export interface ChallengeDay {
+  /** YYYY-MM-DD, local. */
+  date: string;
+  /** 1-indexed day of the challenge. */
+  dayNumber: number;
+  /** Items the routine asked for that day. */
+  applicable: number;
+  /** Items actually ticked. */
+  completed: number;
+  status: ChallengeDayStatus;
+}
+
+/**
+ * Every day of the challenge with what it asked for and what got done.
+ *
+ * Today is never "missed" — it's still in progress — and neither is yesterday
+ * on the day after, per Alfred's grace-before-penalty rule: the caller decides
+ * how to treat a partial day, but a day only reads as missed once it's fully
+ * behind us.
+ */
+export function challengeDays(
+  cfg: ChallengeConfig,
+  habits: Habit[],
+  habitLogs: HabitLog[],
+  templates: RecurringTemplate[],
+  completions: Record<string, true>,
+  now = new Date(),
+): ChallengeDay[] {
+  const start = dateOnly(new Date(cfg.startDate + "T00:00:00"));
+  const today = dateOnly(now);
+  const todayStr = todayKey(today);
+
+  const dailyHabits = challengeHabits(cfg, habits);
+  const enabledTemplates = cfg.goalId ? [] : templates.filter((t) => t.enabled);
+
+  const out: ChallengeDay[] = [];
+  const cursor = new Date(start);
+
+  for (let i = 0; i < cfg.totalDays; i++) {
+    const dateStr = todayKey(cursor);
+    let applicable = 0;
+    let completed = 0;
+
+    for (const h of dailyHabits) {
+      applicable++;
+      if (habitLogs.some((l) => l.habitId === h.id && l.date === dateStr)) completed++;
+    }
+    for (const t of enabledTemplates) {
+      if (!isApplicableToDate(t, cursor)) continue;
+      applicable++;
+      if (completions[`${t.id}:${dateStr}`]) completed++;
+    }
+
+    let status: ChallengeDayStatus;
+    if (dateStr > todayStr) status = "future";
+    else if (dateStr === todayStr) status = "today";
+    else if (applicable === 0 || completed >= applicable) status = "complete";
+    else if (completed > 0) status = "partial";
+    else status = "missed";
+
+    out.push({ date: dateStr, dayNumber: i + 1, applicable, completed, status });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return out;
+}
+
+/** Days already behind us that weren't fully done — the ones worth reviewing. */
+export function challengeSlippedDays(days: ChallengeDay[]): ChallengeDay[] {
+  return days.filter((d) => d.status === "missed" || d.status === "partial");
+}
