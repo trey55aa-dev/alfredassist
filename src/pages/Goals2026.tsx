@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
   Plus,
@@ -94,7 +94,8 @@ import {
   paceStatus,
   progressPct,
 } from "@/lib/goals";
-import { computeStreakStats } from "@/lib/goalsAnalytics";
+import { computeStreakStats, payoffPace } from "@/lib/goalsAnalytics";
+import { BooksPanel } from "@/components/BooksPanel";
 import { buildSchedule, STATUS_META } from "@/lib/planSchedule";
 import type { BrainEntry } from "./BrainDump";
 import { cn } from "@/lib/utils";
@@ -889,6 +890,59 @@ function DollarInput({
   );
 }
 
+/**
+ * "$3,800 owed" is a number you can't act on. This turns it into the three
+ * cadences a person actually budgets in — per day, per week, per month — so the
+ * next payment is an obvious size rather than a guess.
+ */
+function PayoffPaceStrip({ goal, tone }: { goal: Goal; tone: "debt" | "savings" }) {
+  const pace = payoffPace(goal);
+  const accent = tone === "debt" ? "text-red-300" : "text-emerald-300";
+  const border = tone === "debt" ? "border-red-500/20" : "border-emerald-500/20";
+
+  if (!goal.deadline) {
+    return (
+      <div className={`rounded-xl border ${border} bg-background/40 px-3 py-2.5 text-center`}>
+        <div className="font-mono text-[10px] text-muted-foreground">
+          Set a deadline below to see what this costs per day, week and month.
+        </div>
+      </div>
+    );
+  }
+  if (!pace) return null;
+
+  const verb = tone === "debt" ? "To clear this by" : "To reach this by";
+  const rows: { label: string; value: number }[] = [
+    { label: "per day", value: pace.perDay },
+    { label: "per week", value: pace.perWeek },
+    { label: "per month", value: pace.perMonth },
+  ];
+
+  return (
+    <div className={`rounded-xl border ${border} bg-background/40 px-3 py-2.5 space-y-2`}>
+      <div className="font-mono text-[10px] tracking-[0.15em] uppercase text-muted-foreground text-center">
+        {verb} {format(new Date(goal.deadline), "MMM d")} · {pace.daysLeft} days left
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {rows.map((r) => (
+          <div key={r.label} className="text-center">
+            <div className={`font-display text-xl font-bold ${accent}`}>
+              {formatCurrency(Math.ceil(r.value))}
+            </div>
+            <div className="font-mono text-[9px] tracking-[0.1em] uppercase text-muted-foreground">
+              {r.label}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="font-mono text-[9px] text-muted-foreground/60 text-center">
+        {formatCurrency(pace.remaining)} to go over about {pace.monthsLeft} month
+        {pace.monthsLeft === 1 ? "" : "s"}
+      </div>
+    </div>
+  );
+}
+
 function FinancialGoalPanel({
   goal,
   onChange,
@@ -928,6 +982,18 @@ function FinancialGoalPanel({
     const next = Math.max(0, Math.min(target || Infinity, current + delta));
     onChange({ current: next, lastCheckIn: new Date().toISOString().slice(0, 10), localUpdatedAt: Date.now() } as Partial<Goal>);
   };
+
+  // The setup inputs seed from the goal once. After a payment the goal moves on
+  // without them, so re-seed — otherwise "Current Balance" still shows the
+  // pre-payment figure and a later "Save Balance" silently undoes the payment.
+  useEffect(() => {
+    setTotalDebtDraft(target > 0 ? String(target) : "");
+    setBalanceDraft(target > 0 ? String(remaining) : "");
+    setCurrentDraft(current > 0 ? String(current) : "");
+    setTargetDraft(target > 0 ? String(target) : "");
+  }, [target, current, remaining]);
+
+  const pace = payoffPace(goal);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -973,6 +1039,8 @@ function FinancialGoalPanel({
             </div>
           </div>
         )}
+
+        {target > 0 && <PayoffPaceStrip goal={goal} tone="debt" />}
 
         {/* Setup: total debt + current balance */}
         <div className="grid grid-cols-2 gap-3">
@@ -1083,6 +1151,8 @@ function FinancialGoalPanel({
             </div>
           </div>
         )}
+
+        {target > 0 && <PayoffPaceStrip goal={goal} tone="savings" />}
 
         <div className="grid grid-cols-2 gap-3">
           <DollarInput label="Savings Goal" value={targetDraft} onChange={setTargetDraft} placeholder="e.g. 15000" hint="Total target amount" />
@@ -1204,6 +1274,12 @@ function FinancialGoalPanel({
       </div>
     </div>
   );
+}
+
+/** A goal counted in books — "Read 12 books", "books" as the unit, and so on. */
+function isReadingGoal(goal: Goal): boolean {
+  if (goal.unit?.toLowerCase().trim() === "books") return true;
+  return /\bbooks?\b/i.test(goal.title) && /\bread\b/i.test(goal.title);
 }
 
 /* ---------- Goal row ---------- */
@@ -1361,6 +1437,10 @@ function GoalRow({
                   />
                 </PopoverContent>
               </Popover>
+              {/* A "read N books" goal gets an actual shelf — the count alone
+                  never tells you which book to open today. */}
+              {isReadingGoal(goal) && <BooksPanel key={goal.id} goal={goal} onChange={onChange} />}
+
               {/* Financial goals get the rich money editor; others get the plain number input */}
               {goal.category === "Money" ? (
                 <FinancialGoalPanel key={goal.id} goal={goal} onChange={onChange} />

@@ -5,24 +5,42 @@ import { quarterFromDate } from "./goals";
 
 /* ---------- Deadline / quarter helpers ---------- */
 
+/**
+ * Deadlines reach us in two shapes: a plain "2026-12-31" (seeds, imports) and a
+ * full ISO timestamp (the in-app date picker calls toISOString()). Normalise
+ * both to local midnight on the intended calendar day.
+ *
+ * Both halves matter. Appending a time to a full ISO string yields an Invalid
+ * Date, and reading a date-only string as UTC lands on the previous day for
+ * anyone west of Greenwich.
+ */
+export function parseDeadline(deadline: string | undefined): Date | null {
+  if (!deadline) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(deadline)
+    ? new Date(`${deadline}T00:00:00`)
+    : new Date(deadline);
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 /** "2026-12-31" → "Q4 2026" */
 export function deadlineQuarterLabel(deadline: string | undefined): string | null {
-  if (!deadline) return null;
-  const d = new Date(deadline + "T00:00:00");
-  if (isNaN(d.getTime())) return null;
+  const d = parseDeadline(deadline);
+  if (!d) return null;
   return `${quarterFromDate(d)} ${d.getFullYear()}`;
 }
 
-/** Days remaining until a deadline ISO string, or null. */
-export function daysToDeadline(deadline: string | undefined): number | null {
-  if (!deadline) return null;
-  const ms = new Date(deadline + "T23:59:59").getTime() - Date.now();
-  return Math.ceil(ms / 86_400_000);
+/** Days remaining until a deadline, counting the deadline day itself as available. */
+export function daysToDeadline(deadline: string | undefined, now = new Date()): number | null {
+  const d = parseDeadline(deadline);
+  if (!d) return null;
+  const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  return Math.ceil((endOfDay.getTime() - now.getTime()) / 86_400_000);
 }
 
 /** Weeks remaining until deadline. */
-export function weeksToDeadline(deadline: string | undefined): number | null {
-  const d = daysToDeadline(deadline);
+export function weeksToDeadline(deadline: string | undefined, now = new Date()): number | null {
+  const d = daysToDeadline(deadline, now);
   return d === null ? null : Math.max(0, Math.ceil(d / 7));
 }
 
@@ -30,13 +48,176 @@ export function weeksToDeadline(deadline: string | undefined): number | null {
  * For metric goals: how much per week is needed to hit target by deadline.
  * Returns null when inputs are insufficient.
  */
-export function requiredWeeklyRate(goal: Goal): number | null {
+export function requiredWeeklyRate(goal: Goal, now = new Date()): number | null {
   if (!goal.target || !goal.deadline) return null;
-  const weeks = weeksToDeadline(goal.deadline);
-  if (weeks === null || weeks <= 0) return null;
+  const days = daysToDeadline(goal.deadline, now);
+  if (days === null || days <= 0) return null;
   const remaining = goal.target - (goal.current ?? 0);
   if (remaining <= 0) return 0;
-  return remaining / weeks;
+  // Divide by exact days/7, not whole weeks — rounding weeks up here made this
+  // disagree with the daily rate shown elsewhere on the same goal.
+  return remaining / (days / 7);
+}
+
+/* ---------- Payoff / contribution pace ---------- */
+
+const DAYS_PER_MONTH = 365.25 / 12;
+
+export interface PayoffPace {
+  /** Still to pay off (debt) or still to put away (savings). */
+  remaining: number;
+  daysLeft: number;
+  /** What clearing `remaining` by the deadline costs at each cadence. */
+  perDay: number;
+  perWeek: number;
+  perMonth: number;
+  /** Rounded whole months left — for "over the next N months" copy. */
+  monthsLeft: number;
+}
+
+/**
+ * What it takes, per day / week / month, to close the gap on a money goal by
+ * its deadline. A balance is a number you can't act on; "$208 a week" is.
+ *
+ * Returns null when there's nothing left to pay, no deadline to pace against,
+ * or the deadline has already passed — the UI asks for a deadline instead of
+ * inventing one.
+ */
+export function payoffPace(goal: Goal, now = new Date()): PayoffPace | null {
+  const target = goal.target ?? 0;
+  if (target <= 0) return null;
+  const remaining = target - (goal.current ?? 0);
+  if (remaining <= 0) return null;
+
+  const daysLeft = daysToDeadline(goal.deadline, now);
+  if (daysLeft === null || daysLeft <= 0) return null;
+
+  return {
+    remaining,
+    daysLeft,
+    perDay: remaining / daysLeft,
+    perWeek: remaining / (daysLeft / 7),
+    perMonth: remaining / (daysLeft / DAYS_PER_MONTH),
+    monthsLeft: Math.max(1, Math.round(daysLeft / DAYS_PER_MONTH)),
+  };
+}
+
+/* ---------- Streak pace ---------- */
+
+export type StreakPaceStatus =
+  | "reached"
+  | "no_deadline"
+  | "comfortable"
+  | "tight"
+  | "must_start_today"
+  | "not_enough_time";
+
+export interface StreakPace {
+  /** Consecutive days still needed on top of the current streak. */
+  needed: number;
+  /** Calendar days until the deadline (null when there's no deadline). */
+  daysLeft: number | null;
+  /** Spare days: how many more times you could reset and still make it. */
+  slack: number | null;
+  /** The last date you could start a clean run and still finish in time. */
+  latestStart: string | null;
+  status: StreakPaceStatus;
+  label: string;
+  detail: string;
+  tone: string;
+}
+
+/**
+ * Pace for a streak goal, measured the only way a streak can be: consecutive
+ * days still needed versus calendar days still available.
+ *
+ * A streak is not a cumulative rate — you can't be "1000 days behind" on a
+ * 90-day streak with 128 days left. What actually matters is whether there's
+ * still room to run the streak out, and how much slack you have if you slip.
+ */
+export function streakPace(goal: Goal, now = new Date()): StreakPace {
+  const target = goal.target ?? 90;
+  const currentStreak = computeStreakStats(goal).currentStreak;
+  const needed = Math.max(0, target - currentStreak);
+  const daysLeft = daysToDeadline(goal.deadline, now);
+
+  const base = { needed, daysLeft, slack: null as number | null, latestStart: null as string | null };
+
+  if (needed <= 0) {
+    return {
+      ...base,
+      status: "reached",
+      label: `${target} days reached`,
+      detail: "Streak complete. Lock it in as a habit if you want it to stick.",
+      tone: "text-gold",
+    };
+  }
+  if (daysLeft === null) {
+    return {
+      ...base,
+      status: "no_deadline",
+      label: `${needed} days to go`,
+      detail: `You're on day ${currentStreak} of ${target}. Set a deadline and Alfred can pace it for you.`,
+      tone: "text-muted-foreground",
+    };
+  }
+
+  const slack = daysLeft - needed;
+  // The last day you could begin a fresh run of `needed` days and still land on
+  // or before the deadline. This is the number that makes the time concrete.
+  const latest = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  latest.setDate(latest.getDate() + Math.max(0, slack));
+  const latestStart = todayKeyLocal(latest);
+  const full = { ...base, slack, latestStart };
+
+  if (slack < 0) {
+    return {
+      ...full,
+      status: "not_enough_time",
+      label: `${needed} days needed, ${daysLeft} left`,
+      detail: `A clean ${target}-day run no longer fits before ${friendlyDate(goal.deadline!)}. Push the deadline out by ${Math.abs(slack)} day${Math.abs(slack) === 1 ? "" : "s"}, or aim at ${daysLeft} days instead — either is a fair adjustment, not a failure.`,
+      tone: "text-destructive",
+    };
+  }
+  if (slack === 0) {
+    return {
+      ...full,
+      status: "must_start_today",
+      label: `${needed} days needed, ${daysLeft} left`,
+      detail: "It still fits — but only if every remaining day counts from today.",
+      tone: "text-orange-400",
+    };
+  }
+  if (slack <= Math.max(3, Math.round(needed * 0.1))) {
+    return {
+      ...full,
+      status: "tight",
+      label: `${needed} to go · ${slack} spare day${slack === 1 ? "" : "s"}`,
+      detail: `Day ${currentStreak} of ${target}. Starting fresh any later than ${friendlyDate(latestStart)} wouldn't fit.`,
+      tone: "text-orange-400",
+    };
+  }
+  return {
+    ...full,
+    status: "comfortable",
+    label: `${needed} to go · ${slack} spare day${slack === 1 ? "" : "s"}`,
+    detail: `Day ${currentStreak} of ${target}, ${daysLeft} days left. Even starting over as late as ${friendlyDate(latestStart)} still gets you there.`,
+    tone: "text-teal",
+  };
+}
+
+/** Local YYYY-MM-DD — toISOString() would shift the date in western timezones. */
+function todayKeyLocal(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** "2026-10-06" → "Oct 6" — a date a person can picture. */
+function friendlyDate(iso: string): string {
+  const d = parseDeadline(iso);
+  if (!d) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /* ---------- Streak helpers ---------- */

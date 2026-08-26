@@ -15,6 +15,7 @@ import {
   logRelapse,
   logStreakDay,
   requiredWeeklyRate,
+  streakPace,
   weeksToDeadline,
 } from "@/lib/goalsAnalytics";
 
@@ -30,6 +31,10 @@ function QuarterPaceStrip({ goal }: { goal: Goal }) {
   const weeks = weeksToDeadline(goal.deadline);
   const rate = requiredWeeklyRate(goal);
   const days = daysToDeadline(goal.deadline);
+  // Money goals already get the fuller per-day/week/month breakdown in the
+  // financial panel; repeating a weekly figure here just gives the user two
+  // numbers to reconcile.
+  const showRate = goal.category !== "Money";
 
   if (!qLabel) return null;
 
@@ -45,7 +50,7 @@ function QuarterPaceStrip({ goal }: { goal: Goal }) {
             : `${days} days left`}
         </span>
       )}
-      {rate !== null && rate > 0 && (
+      {showRate && rate !== null && rate > 0 && (
         <span className="font-mono text-[10px] text-muted-foreground">
           Need{" "}
           <span className="text-foreground font-medium">
@@ -146,6 +151,7 @@ function StreakPanel({ goal, onChange }: Props) {
   const [showRelapseHistory, setShowRelapseHistory] = useState(false);
 
   const stats: StreakStats = computeStreakStats(goal);
+  const pace = streakPace(goal);
   const grid = getCompletionGrid(goal, 35);
   const qLabel = deadlineQuarterLabel(goal.deadline);
   const days = daysToDeadline(goal.deadline);
@@ -196,12 +202,23 @@ function StreakPanel({ goal, onChange }: Props) {
                 {days < 0 ? "Deadline passed" : `${days}d to deadline`}
               </div>
             )}
-            {!stats.isAchievable && days !== null && days > 0 && (
+            {pace.status === "not_enough_time" && (
               <div className="font-mono text-[9px] text-destructive flex items-center gap-1 mt-0.5">
                 <AlertTriangle className="h-2.5 w-2.5" />
-                Not achievable by deadline
+                Needs more time than is left
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Pace: consecutive days needed vs calendar days left — never a
+            cumulative "days behind" figure, which a streak can't have. */}
+        <div className="mt-3 rounded-md border border-border/40 bg-background/40 px-3 py-2">
+          <div className={`font-mono text-[10px] tracking-[0.15em] uppercase ${pace.tone}`}>
+            {pace.label}
+          </div>
+          <div className="text-[11px] leading-snug text-muted-foreground mt-1">
+            {pace.detail}
           </div>
         </div>
 

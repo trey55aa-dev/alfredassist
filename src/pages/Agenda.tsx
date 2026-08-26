@@ -16,7 +16,7 @@ import { QuickAddEvent } from "@/components/QuickAddEvent";
 import { SuggestedSchedule } from "@/components/SuggestedSchedule";
 import { PushToggle } from "@/components/PushToggle";
 import { EditEventForm } from "@/components/EditEventForm";
-import { DayTimeline } from "@/components/DayTimeline";
+import { DayTimeline, type AnytimeItem } from "@/components/DayTimeline";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -71,13 +71,22 @@ import {
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { applyHabitToggle } from "@/lib/habitToggle";
+import { HABIT_STEPS_CHANGED, loadStepTicks, stepLabel } from "@/lib/habitSteps";
 import { useAuth } from "@/hooks/useAuth";
 import { useRecurringSync } from "@/hooks/useRecurringSync";
 import { GOALS_KEY, type Goal } from "@/lib/goals";
 import { logProgress } from "@/lib/goalsHistory";
 import { progressXp } from "@/lib/gamification";
 import { upsertGoal } from "@/lib/goalsRepo";
-import { formatLongDate } from "@/lib/alfred";
+import { formatLongDate, todayKey } from "@/lib/alfred";
+import {
+  getEntry,
+  isAnsweredToday,
+  loadTargetLog,
+  loadTargets,
+  setEntry,
+  GOAL_TARGETS_CHANGED,
+} from "@/lib/goalTargets";
 
 type ViewMode = "timeline" | "list";
 
@@ -86,6 +95,10 @@ export default function Agenda() {
   const [events, setEvents] = useState<AgendaEvent[] | null>(null);
   const [now, setNow] = useState(new Date());
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Bumped after ticking a sub-goal so the untimed rail re-reads its store.
+  const [targetTick, setTargetTick] = useState(0);
+  // Same for routine steps — a step ticked in the recap changes the rail's count.
+  const [stepTick, setStepTick] = useState(0);
   const [view, setView] = useLocalStorage<ViewMode>(
     "alfred.agenda.view",
     "timeline",
@@ -182,6 +195,21 @@ export default function Agenda() {
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setStepTick((n) => n + 1);
+    window.addEventListener(HABIT_STEPS_CHANGED, onChange);
+    return () => window.removeEventListener(HABIT_STEPS_CHANGED, onChange);
+  }, []);
+
+  // A sub-goal ticked anywhere — the recap list, the timeline rail, another
+  // screen — writes through the same store and fires this. Without it the two
+  // surfaces on this page disagree about what's crossed off.
+  useEffect(() => {
+    const onChange = () => setTargetTick((n) => n + 1);
+    window.addEventListener(GOAL_TARGETS_CHANGED, onChange);
+    return () => window.removeEventListener(GOAL_TARGETS_CHANGED, onChange);
   }, []);
 
   const today = useMemo(
@@ -334,6 +362,62 @@ export default function Agenda() {
     toast({ title: "Event removed", description: ev.title });
   };
 
+  /** One path for crossing a habit off, wherever it's ticked from. */
+  const handleToggleHabitById = (habitId: string) => {
+    const habit = habits.find((h) => h.id === habitId);
+    if (!habit) return;
+    const next = applyHabitToggle(habit, habitLogs, goals);
+    setHabitLogs(next.logs);
+    if (next.goals !== goals) setGoals(next.goals);
+  };
+
+  /** Habits + daily sub-goals, as untimed chips for the timeline's rail. */
+  const anytimeItems: AnytimeItem[] = useMemo(() => {
+    const dateStr = todayKey(now);
+    const stepTicks = loadStepTicks();
+    const loggedToday = new Set(
+      habitLogs.filter((l) => l.date === dateStr).map((l) => l.habitId),
+    );
+    const habitChips: AnytimeItem[] = habits
+      .filter((h) => !h.archived && (h.cadence === "daily" || loggedToday.has(h.id)))
+      .map((h) => ({
+        id: h.id,
+        title: h.title,
+        kind: "habit" as const,
+        done: loggedToday.has(h.id),
+        stepLabel: stepLabel(h, stepTicks, dateStr),
+      }));
+
+    const log = loadTargetLog();
+    const targetChips: AnytimeItem[] = loadTargets()
+      .filter((t) => !t.archived)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        kind: "target",
+        done: isAnsweredToday(t, log, dateStr),
+      }));
+
+    return [...habitChips, ...targetChips];
+    // targetTick re-reads the sub-goal store after a tick here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [habits, habitLogs, now, targetTick, stepTick]);
+
+  const handleToggleAnytime = (item: AnytimeItem) => {
+    if (item.kind === "habit") {
+      handleToggleHabitById(item.id);
+      return;
+    }
+    const dateStr = todayKey(now);
+    const log = loadTargetLog();
+    const target = loadTargets().find((t) => t.id === item.id);
+    // "log" sub-goals are answered with a number, not a tick.
+    if (!target || target.kind === "log") return;
+    const existing = getEntry(log, target.id, dateStr);
+    setEntry(target.id, existing?.done ? null : { ...existing, done: true }, dateStr);
+    setTargetTick((n) => n + 1);
+  };
+
   const handleHabitMarkDone = (habitId: string) => {
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return;
@@ -478,7 +562,7 @@ export default function Agenda() {
               <div key={i} className="h-16 rounded-md bg-muted/30 animate-pulse" />
             ))}
           </div>
-        ) : today.length === 0 ? (
+        ) : today.length === 0 && anytimeItems.length === 0 ? (
           <EmptyState />
         ) : view === "timeline" ? (
           <DayTimeline
@@ -487,6 +571,8 @@ export default function Agenda() {
             onToggleComplete={handleToggle}
             onEdit={(id) => setEditingId(id)}
             onRemove={handleRemove}
+            anytime={anytimeItems}
+            onToggleAnytime={handleToggleAnytime}
           />
         ) : (
           <ol className="relative border-l border-border/60 pl-5 space-y-4">
@@ -628,7 +714,14 @@ export default function Agenda() {
       </Card>
 
       {/* Crossed-off recap of the day + copy-out for Notes/Reminders/Calendar */}
-      <DailyRecap events={today} habits={habits} habitLogs={habitLogs} now={now} />
+      <DailyRecap
+        events={today}
+        habits={habits}
+        habitLogs={habitLogs}
+        now={now}
+        onToggleEvent={handleToggle}
+        onToggleHabit={handleToggleHabitById}
+      />
     </div>
   );
 }

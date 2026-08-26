@@ -40,6 +40,24 @@ interface Props {
   onToggleComplete?: (id: string) => void;
   onEdit?: (id: string) => void;
   onRemove?: (id: string) => void;
+
+  /**
+   * Things today asks for that aren't tied to a clock — habits and daily
+   * sub-goals. They sit in the same rail as all-day events so the timeline
+   * shows the whole day, not just the parts with a start time, and they cross
+   * off in place.
+   */
+  anytime?: AnytimeItem[];
+  onToggleAnytime?: (item: AnytimeItem) => void;
+}
+
+export interface AnytimeItem {
+  id: string;
+  title: string;
+  kind: "habit" | "target";
+  done: boolean;
+  /** "2/4" for a routine habit — how far through its steps today is. */
+  stepLabel?: string | null;
 }
 
 interface PlacedEvent {
@@ -137,6 +155,8 @@ export function DayTimeline({
   onToggleComplete,
   onEdit,
   onRemove,
+  anytime = [],
+  onToggleAnytime,
 }: Props) {
   const { toast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -207,6 +227,37 @@ export function DayTimeline({
               <span className="font-display">{e.title}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {anytime.length > 0 && (
+        <div>
+          <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground/70 mb-1.5">
+            Anytime today · {anytime.filter((a) => a.done).length}/{anytime.length}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {anytime.map((a) => (
+              <button
+                key={`${a.kind}:${a.id}`}
+                type="button"
+                onClick={() => onToggleAnytime?.(a)}
+                aria-pressed={a.done}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-all ${
+                  a.done
+                    ? "border-teal/30 bg-background/30 text-muted-foreground line-through"
+                    : "border-border bg-background/50 text-foreground hover:border-teal/60"
+                }`}
+              >
+                <span aria-hidden>{a.kind === "habit" ? "🔁" : "🎯"}</span>
+                <span className="font-display">{a.title}</span>
+                {a.stepLabel && (
+                  <span className="font-mono text-[9px] text-muted-foreground/70">
+                    {a.stepLabel}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

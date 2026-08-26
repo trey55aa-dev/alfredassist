@@ -11,6 +11,7 @@
 // the UI can render "Need $288/wk · 26 weeks left" style rate headlines.
 
 import type { Goal } from "./goals";
+import { parseDeadline } from "./goalsAnalytics";
 import { todayKey } from "./alfred";
 
 /* ---------- logging ---------- */
@@ -175,7 +176,11 @@ export type ProjectionStatus =
   | "on_pace"
   | "behind"
   | "behind_critical"
-  | "missing";
+  | "missing"
+  /** Streak goals are paced by consecutive days, not by a cumulative rate.
+   *  See streakPace() in goalsAnalytics — this status just keeps metric
+   *  projections from reporting nonsense for them. */
+  | "streak";
 
 export interface ProjectionResult {
   status: ProjectionStatus;
@@ -185,8 +190,17 @@ export interface ProjectionResult {
   detail?: string;
   /** Tailwind color class for the label. */
   tone: string;
-  /** Days the goal is projected to miss by (positive = late). null if no deadline. */
+  /**
+   * Days the goal is projected to miss by at the current pace (positive = late).
+   * null when there's no deadline, or when the projection runs so far past the
+   * goal's own window that a day count stops meaning anything — a barely-started
+   * goal extrapolates to thousands of days late, which is noise, not information.
+   */
   daysLate: number | null;
+  /** Where the goal should stand today to be on pace (linear start → deadline). */
+  paceTarget: number | null;
+  /** Units short of paceTarget. 0 when at or ahead of pace. */
+  behindBy: number | null;
   /** Required units/day going forward to still hit the target. */
   requiredDailyRate: number | null;
   /** Observed units/day so far. */
@@ -220,8 +234,16 @@ function effectiveStart(goal: Goal): Date {
   return new Date();
 }
 
+/** End of the deadline's calendar day — the deadline day itself still counts. */
+function deadlineEnd(deadline: string | undefined): Date | null {
+  const d = parseDeadline(deadline);
+  if (!d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
 function effectiveDeadline(goal: Goal, now: Date): Date {
-  if (goal.deadline) return new Date(goal.deadline);
+  const explicit = deadlineEnd(goal.deadline);
+  if (explicit) return explicit;
   const q = endOfQuarter(goal.quarter, now.getFullYear());
   if (q && q.getTime() > now.getTime()) return q;
   // Fall back to end of the current year
@@ -235,53 +257,75 @@ function effectiveDeadline(goal: Goal, now: Date): Date {
  */
 export function paceTargetByDate(goal: Goal, date: Date): number | null {
   if (typeof goal.target !== "number" || goal.target <= 0) return null;
-  if (!goal.deadline) return null;
+  const deadline = deadlineEnd(goal.deadline);
+  if (!deadline) return null;
   const start = effectiveStart(goal).getTime();
-  const end = new Date(goal.deadline).getTime();
-  if (!isFinite(end)) return null;
+  const end = deadline.getTime();
   if (end <= start) return goal.target;
   const frac = Math.min(1, Math.max(0, (date.getTime() - start) / (end - start)));
   return Math.round(goal.target * frac);
 }
 
+/**
+ * Express a rate in whatever period reads naturally: per-day once it's at
+ * least 1 a day, per-week below that. "0.68 days/day" is technically correct
+ * and useless; "5 days/week" is the same number a person can act on.
+ */
+function formatRate(rate: number, unit?: string): string {
+  if (unit === "$") {
+    if (rate >= 1) return `$${Math.round(rate).toLocaleString()}/day`;
+    return `$${Math.max(1, Math.round(rate * 7)).toLocaleString()}/week`;
+  }
+  if (rate >= 1) {
+    const v = rate >= 10 ? Math.round(rate) : Math.round(rate * 10) / 10;
+    return `${fmtUnits(v, unit)}/day`;
+  }
+  return `${fmtUnits(Math.max(1, Math.round(rate * 7)), unit)}/week`;
+}
+
+export function fmtUnits(value: number, unit?: string): string {
+  const v = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  if (unit === "$") return `$${v.toLocaleString()}`;
+  if (!unit) return `${v}`;
+  // "1 books" reads as a typo; drop the plural s when there's exactly one.
+  const u = v === 1 && unit.endsWith("s") ? unit.slice(0, -1) : unit;
+  return `${v} ${u}`;
+}
+
+const EMPTY_PROJECTION: Omit<ProjectionResult, "status" | "label" | "tone"> = {
+  daysLate: null,
+  requiredDailyRate: null,
+  actualDailyRate: null,
+  daysLeft: null,
+  weeksLeft: null,
+  paceTarget: null,
+  behindBy: null,
+};
+
 /** Compute pace + projection. Only meaningful for measurable goals (target set). */
 export function computeProjection(goal: Goal, now = new Date()): ProjectionResult {
   if (goal.done) {
-    return {
-      status: "complete",
-      label: "Complete",
-      tone: "text-gold",
-      daysLate: null,
-      requiredDailyRate: null,
-      actualDailyRate: null,
-      daysLeft: null,
-      weeksLeft: null,
-    };
+    return { ...EMPTY_PROJECTION, status: "complete", label: "Complete", tone: "text-gold" };
+  }
+  // A streak goal's `current` is the length of the *current* streak, not a
+  // running total. Dividing it by elapsed calendar days produces a meaningless
+  // rate (and, extrapolated, absurd "thousands of days behind" figures).
+  // streakPace() in goalsAnalytics handles these properly.
+  if (goal.goalType === "streak") {
+    return { ...EMPTY_PROJECTION, status: "streak", label: "", tone: "text-muted-foreground" };
   }
   if (typeof goal.target !== "number" || goal.target <= 0) {
-    return {
-      status: "no_data",
-      label: "",
-      tone: "text-muted-foreground",
-      daysLate: null,
-      requiredDailyRate: null,
-      actualDailyRate: null,
-      daysLeft: null,
-      weeksLeft: null,
-    };
+    return { ...EMPTY_PROJECTION, status: "no_data", label: "", tone: "text-muted-foreground" };
   }
 
   const current = goal.current ?? 0;
   if (current >= goal.target) {
     return {
+      ...EMPTY_PROJECTION,
       status: "complete",
       label: "Target reached",
       tone: "text-gold",
-      daysLate: null,
       requiredDailyRate: 0,
-      actualDailyRate: null,
-      daysLeft: null,
-      weeksLeft: null,
     };
   }
 
@@ -301,22 +345,26 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
   const shortfall = goal.target - projectedAtDeadline;
 
   // How many days past deadline at current pace would we actually finish?
-  const daysLate =
-    actualDailyRate > 0 && shortfall > 0
-      ? Math.ceil(shortfall / actualDailyRate)
-      : 0;
+  // Only meaningful while it stays inside the goal's own window — a goal that's
+  // barely started extrapolates to a five-digit day count, which tells the user
+  // nothing except that they're failing. Past that, report the gap instead.
+  const rawDaysLate =
+    actualDailyRate > 0 && shortfall > 0 ? Math.ceil(shortfall / actualDailyRate) : 0;
+  const daysLate = rawDaysLate > 0 && rawDaysLate <= Math.ceil(daysTotal) ? rawDaysLate : null;
+
+  // Where the goal should stand today, and how far short of that it is. This is
+  // the honest, bounded version of "how far behind am I" — it can never exceed
+  // the target itself.
+  const paceTarget = Math.round(goal.target * Math.min(1, daysElapsed / daysTotal));
+  const behindBy = Math.max(0, paceTarget - current);
 
   const ratio = requiredDailyRate > 0 ? actualDailyRate / requiredDailyRate : 1;
-  const unit = goal.unit ? ` ${goal.unit}` : "";
-  const daysLeftCeil = Math.max(0, Math.ceil(daysLeft));
-  // How we phrase the time left when behind. We show days *remaining* to catch
-  // up — an actionable, non-intimidating number — rather than `daysLate`, the
-  // projected overshoot, which at a slow early pace balloons into thousands of
-  // days and reads as broken (e.g. "2000 days off pace" with 120 days left).
-  const timeLeftPhrase =
-    daysLeftCeil <= 0
-      ? "deadline's here"
-      : `${daysLeftCeil} day${daysLeftCeil === 1 ? "" : "s"} left`;
+  const unit = goal.unit;
+  const daysLeftCeil = Math.ceil(daysLeft);
+  const reqLabel = formatRate(requiredDailyRate, unit);
+  // On the deadline itself "in 0 days" reads like a glitch. Name the day instead.
+  const windowLabel =
+    daysLeftCeil <= 0 ? "before today's deadline" : `in ${daysLeftCeil} days`;
 
   let status: ProjectionStatus;
   let label: string;
@@ -326,27 +374,27 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
   if (ratio >= 1.1) {
     status = "ahead";
     label = "Ahead of pace";
-    detail = `${(actualDailyRate / Math.max(1e-6, requiredDailyRate) * 100).toFixed(0)}% of required rate. You could ease off and still hit ${goal.target}${unit}.`;
+    detail = `${fmtUnits(current, unit)} done, ${fmtUnits(paceTarget, unit)} was today's mark. ${reqLabel} keeps you there.`;
     tone = "text-gold";
   } else if (ratio >= 0.9) {
     status = "on_pace";
     label = "On pace";
-    detail = `Doing ${actualDailyRate.toFixed(2)}${unit}/day, need ${requiredDailyRate.toFixed(2)}${unit}/day. Keep it steady.`;
+    detail = `${fmtUnits(current, unit)} done, right around today's ${fmtUnits(paceTarget, unit)} mark. ${reqLabel} for the remaining ${daysLeftCeil} days.`;
     tone = "text-teal";
   } else if (ratio >= 0.6) {
     status = "behind";
-    label = `Behind — ${timeLeftPhrase} to catch up`;
-    detail = `You need ${requiredDailyRate.toFixed(2)}${unit}/day to catch up; current pace is ${actualDailyRate.toFixed(2)}${unit}/day.`;
+    label = `Behind by ${fmtUnits(behindBy, unit)}`;
+    detail = `Today's mark was ${fmtUnits(paceTarget, unit)}; you're at ${fmtUnits(current, unit)}. ${reqLabel} over the remaining ${daysLeftCeil} days closes it.`;
     tone = "text-orange-400";
   } else if (ratio > 0) {
     status = "behind_critical";
-    label = `Well behind — ${timeLeftPhrase} to turn it around`;
-    detail = `Needs ${requiredDailyRate.toFixed(2)}${unit}/day the rest of the way; current pace is ${actualDailyRate.toFixed(2)}${unit}/day. Adjusting the target or deadline is fair game.`;
+    label = `Behind by ${fmtUnits(behindBy, unit)}`;
+    detail = `${fmtUnits(needed, unit)} to go ${windowLabel} — that's ${reqLabel}. If that's not realistic, moving the deadline or the target is a fair call.`;
     tone = "text-destructive";
   } else {
     status = "missing";
     label = "No progress yet";
-    detail = `${needed}${unit} to go in ${daysLeftCeil} days. Log your first check-in to set the pace.`;
+    detail = `${fmtUnits(needed, unit)} to go ${windowLabel} — ${reqLabel} from here. Log your first check-in to set the pace.`;
     tone = "text-destructive";
   }
 
@@ -355,10 +403,12 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
     label,
     detail,
     tone,
-    daysLate: daysLate || null,
+    daysLate,
     requiredDailyRate,
     actualDailyRate,
-    daysLeft: Math.ceil(daysLeft),
+    daysLeft: daysLeftCeil,
     weeksLeft: Math.ceil(daysLeft / 7),
+    paceTarget,
+    behindBy,
   };
 }

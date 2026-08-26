@@ -29,6 +29,7 @@ import {
   habitsAtRisk,
   isCompleteForPeriod,
   last7Periods,
+  normalizeCadence,
   toggleHabitForToday,
   recordHabitTime,
   removeHabitTime,
@@ -52,8 +53,10 @@ import { applyHabitToggle } from "@/lib/habitToggle";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
+import { HabitStepList } from "@/components/HabitStepList";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { ChallengeHeader } from "@/components/ChallengeHeader";
+import { ChallengeMissedDays } from "@/components/ChallengeMissedDays";
 import { GoalDailyTargets } from "@/components/GoalDailyTargets";
 
 // Legacy export kept for any external importers.
@@ -96,7 +99,7 @@ export default function Checklist() {
     const out: Record<Cadence, Habit[]> = {
       daily: [], weekly: [], monthly: [], quarterly: [], annual: [],
     };
-    for (const h of activeHabits) out[h.cadence].push(h);
+    for (const h of activeHabits) out[normalizeCadence(h.cadence)].push(h);
     return out;
   }, [activeHabits]);
 
@@ -182,6 +185,14 @@ export default function Checklist() {
         goals={goals}
         onToggleHabit={handleToggle}
       />
+
+      {!simple && (
+        <ChallengeMissedDays
+          habits={activeHabits}
+          habitLogs={logs}
+          setHabitLogs={setLogs}
+        />
+      )}
 
       {/* Recovery */}
       <RecoveryPanel recoveries={recoveries} onMarkDone={handleRecover} />
@@ -519,6 +530,12 @@ function HabitRow({
             ))}
           </div>
         </button>
+      </div>
+
+      {/* Routine steps live outside the open-detail button — they have their own
+          taps and must not nest inside another button. */}
+      <div className="px-3 pb-2.5 -mt-1">
+        <HabitStepList habit={habit} habitDone={done} onHabitShouldToggle={onToggle} />
       </div>
     </li>
   );

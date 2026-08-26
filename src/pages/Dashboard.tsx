@@ -33,6 +33,7 @@ import {
   toggleHabitForToday,
 } from "@/lib/habits";
 import { applyHabitToggle } from "@/lib/habitToggle";
+import { HabitStepList } from "@/components/HabitStepList";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
@@ -188,6 +189,13 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goals.length > 0]);
 
+  /** One toggle path for every habit tap on this page. */
+  const handleToggleHabit = (habit: Habit) => {
+    const next = applyHabitToggle(habit, habitLogs, goals);
+    setHabitLogs(next.logs);
+    if (next.goals !== goals) setGoals(next.goals);
+  };
+
   const handleQuickLog = (goalId: string, delta: number) => {
     const today = todayKey();
     const ts = Date.now();
@@ -297,11 +305,7 @@ export default function Dashboard() {
         habits={habits}
         habitLogs={habitLogs}
         goals={goals}
-        onToggleHabit={(habit) => {
-          const next = applyHabitToggle(habit, habitLogs, goals);
-          setHabitLogs(next.logs);
-          if (next.goals !== goals) setGoals(next.goals);
-        }}
+        onToggleHabit={handleToggleHabit}
       />
 
       {/* Right now / Up next */}
@@ -366,21 +370,35 @@ export default function Dashboard() {
                 // not read off the habit record (which never held one).
                 const streak = currentStreakFor(h, habitLogs);
                 return (
-                  <div key={h.id} className="flex items-center gap-3 py-1.5">
-                    <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${done ? "bg-teal border-teal" : "border-border/50"}`}>
-                      {done && <span className="text-primary-foreground text-[10px] font-bold">✓</span>}
-                    </div>
-                    <span className={`text-sm transition-colors ${done ? "line-through text-muted-foreground/40" : "text-foreground/80"}`}>
-                      {h.title}
-                    </span>
-                    {streak > 0 && (
-                      <span
-                        title={`${streak}-day streak`}
-                        className="ml-auto font-mono text-[9px] text-gold/70 shrink-0"
-                      >
-                        🔥 {streak}
+                  <div key={h.id} className="py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleHabit(h)}
+                      aria-pressed={done}
+                      className="flex w-full items-center gap-3 rounded-md text-left hover:bg-background/30 transition-colors"
+                    >
+                      <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${done ? "bg-teal border-teal" : "border-border/50"}`}>
+                        {done && <span className="text-primary-foreground text-[10px] font-bold">✓</span>}
+                      </div>
+                      <span className={`text-sm transition-colors ${done ? "line-through text-muted-foreground/40" : "text-foreground/80"}`}>
+                        {h.title}
                       </span>
-                    )}
+                      {streak > 0 && (
+                        <span
+                          title={`${streak}-day streak`}
+                          className="ml-auto font-mono text-[9px] text-gold/70 shrink-0"
+                        >
+                          🔥 {streak}
+                        </span>
+                      )}
+                    </button>
+                    <div className="pl-8">
+                      <HabitStepList
+                        habit={h}
+                        habitDone={done}
+                        onHabitShouldToggle={() => handleToggleHabit(h)}
+                      />
+                    </div>
                   </div>
                 );
               })}

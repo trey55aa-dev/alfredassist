@@ -30,6 +30,7 @@ import {
   setHabitNote,
   loadHabitTimes,
 } from "@/lib/habits";
+import { stepsFromText, stepsOf, stepsToText } from "@/lib/habitSteps";
 import type { Goal } from "@/lib/goals";
 import {
   monthCells,
@@ -611,6 +612,27 @@ function SettingsTab({
           <TargetIcon className="h-3 w-3" /> Feeds: {linkedGoal.title}
         </div>
       )}
+
+      <div>
+        <label className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+          Routine steps (one per line)
+        </label>
+        <textarea
+          value={stepsToText(stepsOf(habit))}
+          onChange={(e) =>
+            onUpdate(habit.id, {
+              steps: stepsFromText(e.target.value, stepsOf(habit)),
+            })
+          }
+          rows={4}
+          placeholder={"brush teeth\nwater\nfloss\nscrape tongue"}
+          className="mt-1.5 w-full rounded-xl bg-background/40 border border-border/60 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-gold/40 focus:ring-1 focus:ring-gold/20 outline-none resize-none transition-colors"
+        />
+        <p className="mt-1 text-[10px] text-muted-foreground/60">
+          Turns this into a routine. Tick the last step and the habit completes
+          itself — or tick the habit to fill the whole list in.
+        </p>
+      </div>
 
       <div>
         <label className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
