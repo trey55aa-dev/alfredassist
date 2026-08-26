@@ -83,4 +83,27 @@ describe("computeProjection", () => {
     expect(proj.detail?.toLowerCase()).not.toContain("slips further");
     expect(proj.detail?.toLowerCase()).not.toContain("cut the target");
   });
+
+  it("shows days REMAINING, not a runaway projected overshoot, when far behind", () => {
+    // Very slow pace: at this rate the linear projection would finish thousands
+    // of days out, but the deadline is ~30 days away. The label must surface the
+    // ~30 days left, never the huge overshoot (the "2000 days off pace" bug).
+    const start = new Date(2026, 0, 1, 12, 0, 0);
+    const now = new Date(2026, 2, 2, 12, 0, 0); // 60 days elapsed
+    const goal = mkGoal({
+      target: 90,
+      current: 3,
+      unit: "days",
+      createdAt: start.getTime(),
+      deadline: new Date(2026, 3, 1, 12, 0, 0).toISOString(), // ~30 days left
+    });
+    const proj = computeProjection(goal, now);
+    expect(proj.status).toBe("behind_critical");
+    // daysLate (the overshoot) is enormous here…
+    expect(proj.daysLate!).toBeGreaterThan(1000);
+    // …but the label reflects days LEFT, and never that runaway number.
+    expect(proj.label).toContain(`${proj.daysLeft}`);
+    expect(proj.label).not.toMatch(/\d{4,}/); // no 4+ digit day count
+    expect(proj.label.toLowerCase()).toContain("left");
+  });
 });

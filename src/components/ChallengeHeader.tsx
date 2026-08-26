@@ -13,6 +13,9 @@ import {
   challengeStatus,
   challengeHabits,
   computeAdherence,
+  challengeTheme,
+  CHALLENGE_THEMES,
+  CHALLENGE_COLORS,
   type ChallengeConfig,
 } from "@/lib/challenge";
 import { currentStreakFor, isCompleteForPeriod, type Habit, type HabitLog } from "@/lib/habits";
@@ -57,6 +60,7 @@ export function ChallengeHeader({
   onToggleHabit?: (habit: Habit) => void;
 }) {
   const cfg = useChallenge();
+  const theme = challengeTheme(cfg);
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -120,17 +124,13 @@ export function ChallengeHeader({
     <div
       className="relative overflow-hidden rounded-3xl border p-6 sm:p-7"
       style={{
-        borderColor: "hsl(15 70% 45% / 0.35)",
-        background:
-          "linear-gradient(135deg, hsl(355 65% 22%) 0%, hsl(15 75% 28%) 45%, hsl(35 85% 32%) 100%)",
+        borderColor: theme.border,
+        background: theme.background,
       }}
     >
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            "radial-gradient(circle at 85% -10%, hsl(35 90% 55% / 0.5), transparent 60%)",
-        }}
+        style={{ background: theme.glow }}
         aria-hidden
       />
       <div className="relative flex items-start justify-between gap-4 flex-wrap">
@@ -220,6 +220,36 @@ export function ChallengeHeader({
                       not your whole routine.
                     </p>
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
+                      Color
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {CHALLENGE_COLORS.map((c) => {
+                        const selected = (draft.color ?? "ember") === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            title={CHALLENGE_THEMES[c].label}
+                            aria-label={CHALLENGE_THEMES[c].label}
+                            aria-pressed={selected}
+                            onClick={() => setDraft((d) => ({ ...d, color: c }))}
+                            className={`h-7 w-7 rounded-full border transition-all ${
+                              selected
+                                ? "ring-2 ring-offset-2 ring-offset-popover ring-foreground/70 border-transparent"
+                                : "border-border/60 hover:scale-105"
+                            }`}
+                            style={{ background: CHALLENGE_THEMES[c].swatch }}
+                          >
+                            {selected && (
+                              <Check className="h-3.5 w-3.5 text-white mx-auto drop-shadow" strokeWidth={3} />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <Button onClick={save} size="sm" className="w-full">
                     Save
                   </Button>
@@ -307,10 +337,10 @@ export function ChallengeHeader({
                     >
                       <span
                         className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                          done ? "bg-amber-300 border-amber-300" : "border-white/40"
+                          done ? "bg-white border-white" : "border-white/40"
                         }`}
                       >
-                        {done && <Check className="h-3 w-3 text-amber-950" strokeWidth={3} />}
+                        {done && <Check className="h-3 w-3 text-black/80" strokeWidth={3} />}
                       </span>
                       <span
                         className={`flex-1 min-w-0 text-sm truncate ${
@@ -361,7 +391,7 @@ export function ChallengeHeader({
               className="h-full rounded-full transition-all"
               style={{
                 width: `${Math.round(adherence.pct * 100)}%`,
-                background: "linear-gradient(90deg, hsl(35 90% 55%), hsl(15 85% 55%))",
+                background: theme.bar,
               }}
             />
           </div>

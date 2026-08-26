@@ -308,6 +308,15 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
 
   const ratio = requiredDailyRate > 0 ? actualDailyRate / requiredDailyRate : 1;
   const unit = goal.unit ? ` ${goal.unit}` : "";
+  const daysLeftCeil = Math.max(0, Math.ceil(daysLeft));
+  // How we phrase the time left when behind. We show days *remaining* to catch
+  // up — an actionable, non-intimidating number — rather than `daysLate`, the
+  // projected overshoot, which at a slow early pace balloons into thousands of
+  // days and reads as broken (e.g. "2000 days off pace" with 120 days left).
+  const timeLeftPhrase =
+    daysLeftCeil <= 0
+      ? "deadline's here"
+      : `${daysLeftCeil} day${daysLeftCeil === 1 ? "" : "s"} left`;
 
   let status: ProjectionStatus;
   let label: string;
@@ -326,18 +335,18 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
     tone = "text-teal";
   } else if (ratio >= 0.6) {
     status = "behind";
-    label = `Behind — will miss by ${daysLate} day${daysLate === 1 ? "" : "s"}`;
+    label = `Behind — ${timeLeftPhrase} to catch up`;
     detail = `You need ${requiredDailyRate.toFixed(2)}${unit}/day to catch up; current pace is ${actualDailyRate.toFixed(2)}${unit}/day.`;
     tone = "text-orange-400";
   } else if (ratio > 0) {
     status = "behind_critical";
-    label = `Well behind — ${daysLate} day${daysLate === 1 ? "" : "s"} off pace`;
-    detail = `Needs ${requiredDailyRate.toFixed(2)}${unit}/day to catch up; current pace is ${actualDailyRate.toFixed(2)}${unit}/day. Worth adjusting the target or deadline.`;
+    label = `Well behind — ${timeLeftPhrase} to turn it around`;
+    detail = `Needs ${requiredDailyRate.toFixed(2)}${unit}/day the rest of the way; current pace is ${actualDailyRate.toFixed(2)}${unit}/day. Adjusting the target or deadline is fair game.`;
     tone = "text-destructive";
   } else {
     status = "missing";
     label = "No progress yet";
-    detail = `${needed}${unit} to go in ${Math.ceil(daysLeft)} days. Log your first check-in to set the pace.`;
+    detail = `${needed}${unit} to go in ${daysLeftCeil} days. Log your first check-in to set the pace.`;
     tone = "text-destructive";
   }
 

@@ -7,6 +7,82 @@ import { todayKey } from "./alfred";
 import type { Habit, HabitLog } from "./habits";
 import { isApplicableToDate, type RecurringTemplate } from "./recurring";
 
+/** Color themes for the challenge banner. Keyed so only the id is persisted;
+ *  the gradients live here so a saved challenge can never drift out of style. */
+export type ChallengeColor = "ember" | "ocean" | "violet" | "forest" | "rose" | "slate";
+
+export interface ChallengeTheme {
+  label: string;
+  /** Card border color. */
+  border: string;
+  /** Main background gradient. */
+  background: string;
+  /** Corner glow overlay. */
+  glow: string;
+  /** Progress-bar gradient. */
+  bar: string;
+  /** Solid preview fill for the picker swatch. */
+  swatch: string;
+}
+
+export const CHALLENGE_THEMES: Record<ChallengeColor, ChallengeTheme> = {
+  ember: {
+    label: "Ember",
+    border: "hsl(15 70% 45% / 0.35)",
+    background: "linear-gradient(135deg, hsl(355 65% 22%) 0%, hsl(15 75% 28%) 45%, hsl(35 85% 32%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(35 90% 55% / 0.5), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(35 90% 55%), hsl(15 85% 55%))",
+    swatch: "linear-gradient(135deg, hsl(15 75% 45%), hsl(35 85% 50%))",
+  },
+  ocean: {
+    label: "Ocean",
+    border: "hsl(205 70% 45% / 0.35)",
+    background: "linear-gradient(135deg, hsl(220 60% 20%) 0%, hsl(200 70% 26%) 45%, hsl(185 70% 30%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(190 90% 55% / 0.5), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(190 85% 55%), hsl(210 85% 55%))",
+    swatch: "linear-gradient(135deg, hsl(210 75% 45%), hsl(185 80% 45%))",
+  },
+  violet: {
+    label: "Violet",
+    border: "hsl(270 60% 55% / 0.35)",
+    background: "linear-gradient(135deg, hsl(265 55% 22%) 0%, hsl(280 55% 28%) 45%, hsl(310 55% 32%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(290 90% 65% / 0.5), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(290 80% 62%), hsl(255 80% 62%))",
+    swatch: "linear-gradient(135deg, hsl(270 70% 52%), hsl(305 65% 52%))",
+  },
+  forest: {
+    label: "Forest",
+    border: "hsl(150 55% 40% / 0.35)",
+    background: "linear-gradient(135deg, hsl(160 50% 16%) 0%, hsl(150 55% 22%) 45%, hsl(95 50% 28%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(120 80% 55% / 0.45), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(120 70% 50%), hsl(160 70% 45%))",
+    swatch: "linear-gradient(135deg, hsl(150 65% 38%), hsl(110 55% 42%))",
+  },
+  rose: {
+    label: "Rose",
+    border: "hsl(340 65% 50% / 0.35)",
+    background: "linear-gradient(135deg, hsl(335 55% 22%) 0%, hsl(345 60% 30%) 45%, hsl(15 65% 34%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(350 90% 65% / 0.5), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(350 85% 62%), hsl(320 80% 60%))",
+    swatch: "linear-gradient(135deg, hsl(340 70% 52%), hsl(10 70% 52%))",
+  },
+  slate: {
+    label: "Slate",
+    border: "hsl(215 20% 55% / 0.35)",
+    background: "linear-gradient(135deg, hsl(220 18% 18%) 0%, hsl(215 16% 26%) 45%, hsl(210 14% 34%) 100%)",
+    glow: "radial-gradient(circle at 85% -10%, hsl(210 30% 70% / 0.4), transparent 60%)",
+    bar: "linear-gradient(90deg, hsl(210 25% 65%), hsl(220 20% 50%))",
+    swatch: "linear-gradient(135deg, hsl(215 18% 45%), hsl(210 16% 55%))",
+  },
+};
+
+export const CHALLENGE_COLORS = Object.keys(CHALLENGE_THEMES) as ChallengeColor[];
+
+/** The theme for a challenge, defaulting to Ember (the original look). */
+export function challengeTheme(cfg: ChallengeConfig): ChallengeTheme {
+  return CHALLENGE_THEMES[cfg.color ?? "ember"] ?? CHALLENGE_THEMES.ember;
+}
+
 export interface ChallengeConfig {
   title: string;
   startDate: string; // YYYY-MM-DD, local
@@ -14,6 +90,8 @@ export interface ChallengeConfig {
   /** Optional 2026 goal this challenge tracks. When set, adherence is scoped
    *  to that goal's daily habits instead of the whole daily routine. */
   goalId?: string;
+  /** Banner color theme. Defaults to "ember" (the original fiery look). */
+  color?: ChallengeColor;
 }
 
 const KEY = "alfred.challenge";
@@ -23,6 +101,7 @@ export const DEFAULT_CHALLENGE: ChallengeConfig = {
   title: "30-Day Hard",
   startDate: "2026-08-16",
   totalDays: 30,
+  color: "ember",
 };
 
 export function getChallenge(): ChallengeConfig {
