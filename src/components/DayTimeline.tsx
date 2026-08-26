@@ -56,6 +56,8 @@ export interface AnytimeItem {
   title: string;
   kind: "habit" | "target";
   done: boolean;
+  /** "2/4" for a routine habit — how far through its steps today is. */
+  stepLabel?: string | null;
 }
 
 interface PlacedEvent {
@@ -248,6 +250,11 @@ export function DayTimeline({
               >
                 <span aria-hidden>{a.kind === "habit" ? "🔁" : "🎯"}</span>
                 <span className="font-display">{a.title}</span>
+                {a.stepLabel && (
+                  <span className="font-mono text-[9px] text-muted-foreground/70">
+                    {a.stepLabel}
+                  </span>
+                )}
               </button>
             ))}
           </div>

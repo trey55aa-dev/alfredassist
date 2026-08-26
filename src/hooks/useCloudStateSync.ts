@@ -44,6 +44,7 @@ const SYNCED_KEYS = [
   "alfred.goalTargetLog",   // { targetId|date: entry } — each day's answer to them
   "alfred.habitBackfills",  // { habitId|date: ms } — which ticks were added after the fact
   "alfred.books",           // Book[] — reading list hanging off a "read N books" goal
+  "alfred.habitStepTicks",  // { habitId|date: stepId[] } — steps ticked inside a routine
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

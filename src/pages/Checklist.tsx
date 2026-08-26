@@ -53,6 +53,7 @@ import { applyHabitToggle } from "@/lib/habitToggle";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
+import { HabitStepList } from "@/components/HabitStepList";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { ChallengeHeader } from "@/components/ChallengeHeader";
 import { ChallengeMissedDays } from "@/components/ChallengeMissedDays";
@@ -529,6 +530,12 @@ function HabitRow({
             ))}
           </div>
         </button>
+      </div>
+
+      {/* Routine steps live outside the open-detail button — they have their own
+          taps and must not nest inside another button. */}
+      <div className="px-3 pb-2.5 -mt-1">
+        <HabitStepList habit={habit} habitDone={done} onHabitShouldToggle={onToggle} />
       </div>
     </li>
   );

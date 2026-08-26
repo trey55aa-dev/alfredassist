@@ -71,6 +71,7 @@ import {
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { applyHabitToggle } from "@/lib/habitToggle";
+import { HABIT_STEPS_CHANGED, loadStepTicks, stepLabel } from "@/lib/habitSteps";
 import { useAuth } from "@/hooks/useAuth";
 import { useRecurringSync } from "@/hooks/useRecurringSync";
 import { GOALS_KEY, type Goal } from "@/lib/goals";
@@ -96,6 +97,8 @@ export default function Agenda() {
   const [editingId, setEditingId] = useState<string | null>(null);
   // Bumped after ticking a sub-goal so the untimed rail re-reads its store.
   const [targetTick, setTargetTick] = useState(0);
+  // Same for routine steps — a step ticked in the recap changes the rail's count.
+  const [stepTick, setStepTick] = useState(0);
   const [view, setView] = useLocalStorage<ViewMode>(
     "alfred.agenda.view",
     "timeline",
@@ -192,6 +195,12 @@ export default function Agenda() {
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setStepTick((n) => n + 1);
+    window.addEventListener(HABIT_STEPS_CHANGED, onChange);
+    return () => window.removeEventListener(HABIT_STEPS_CHANGED, onChange);
   }, []);
 
   // A sub-goal ticked anywhere — the recap list, the timeline rail, another
@@ -365,12 +374,19 @@ export default function Agenda() {
   /** Habits + daily sub-goals, as untimed chips for the timeline's rail. */
   const anytimeItems: AnytimeItem[] = useMemo(() => {
     const dateStr = todayKey(now);
+    const stepTicks = loadStepTicks();
     const loggedToday = new Set(
       habitLogs.filter((l) => l.date === dateStr).map((l) => l.habitId),
     );
     const habitChips: AnytimeItem[] = habits
       .filter((h) => !h.archived && (h.cadence === "daily" || loggedToday.has(h.id)))
-      .map((h) => ({ id: h.id, title: h.title, kind: "habit", done: loggedToday.has(h.id) }));
+      .map((h) => ({
+        id: h.id,
+        title: h.title,
+        kind: "habit" as const,
+        done: loggedToday.has(h.id),
+        stepLabel: stepLabel(h, stepTicks, dateStr),
+      }));
 
     const log = loadTargetLog();
     const targetChips: AnytimeItem[] = loadTargets()
@@ -385,7 +401,7 @@ export default function Agenda() {
     return [...habitChips, ...targetChips];
     // targetTick re-reads the sub-goal store after a tick here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [habits, habitLogs, now, targetTick]);
+  }, [habits, habitLogs, now, targetTick, stepTick]);
 
   const handleToggleAnytime = (item: AnytimeItem) => {
     if (item.kind === "habit") {

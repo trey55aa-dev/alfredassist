@@ -1,4 +1,5 @@
 import { todayKey } from "./alfred";
+import { purgeStepTicks, type HabitStep } from "./habitSteps";
 
 export type Cadence = "daily" | "weekly" | "monthly" | "quarterly" | "annual";
 
@@ -50,6 +51,9 @@ export interface Habit {
   goalIncrement?: number;   // amount to add to goal.current per tick (default 1)
   target?: number;          // optional target count per period (e.g. 3 / month)
   recoverySteps?: string[]; // user-defined "what to do to get back on track"
+  /** Turns a habit into a routine — the small steps it's actually made of
+   *  ("morning routine" = brush teeth, water, floss). See lib/habitSteps. */
+  steps?: HabitStep[];
   createdAt: number;
   archived?: boolean;
 }
@@ -129,6 +133,9 @@ export function purgeHabitMeta(habitId: string): void {
     delete notes[habitId];
     writeJSON(HABIT_NOTES_KEY, notes);
   }
+
+  // A deleted routine leaves no step ticks behind to age in storage.
+  purgeStepTicks(habitId);
 }
 
 export function loadHabitNotes(): Record<string, string> {

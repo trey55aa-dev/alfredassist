@@ -17,6 +17,7 @@ import {
   toggleHabitForToday,
 } from "./habits";
 import type { Goal } from "./goals";
+import { hasSteps, setAllSteps } from "./habitSteps";
 import { awardXp, XP_VALUES } from "./gamification";
 
 export interface HabitToggleResult {
@@ -45,6 +46,13 @@ export function applyHabitToggle(
     awardXp(XP_VALUES.HABIT_COMPLETE, "habit", {
       streakDays: currentStreakFor(habit, nextLogs),
     });
+  }
+
+  // A routine's tick stands for its whole list, so ticking the habit fills the
+  // steps in and unticking clears them. Without this the two disagree about
+  // whether today happened.
+  if (hasSteps(habit) && nowComplete !== wasDone) {
+    setAllSteps(habit, nowComplete);
   }
 
   // A habit wired to a goal moves that goal both ways.

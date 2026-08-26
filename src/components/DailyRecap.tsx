@@ -28,6 +28,7 @@ import { getDailyFeedback, setDailyFeedback } from "@/lib/dailyFeedback";
 import { todayKey, formatLongDate } from "@/lib/alfred";
 import type { AgendaEvent } from "@/lib/agenda";
 import type { Habit, HabitLog } from "@/lib/habits";
+import { HabitStepList } from "@/components/HabitStepList";
 import { loadHabitTimes } from "@/lib/habits";
 
 const COPY_OPTIONS: { style: RecapStyle; label: string }[] = [
@@ -183,6 +184,7 @@ export function DailyRecap({
                     </span>
                   </>
                 );
+                const habit = i.kind === "habit" ? habits.find((h) => h.id === i.id) : undefined;
                 return (
                   <li key={`${i.kind}:${i.id}`} className="text-sm">
                     {interactive ? (
@@ -196,6 +198,15 @@ export function DailyRecap({
                       </button>
                     ) : (
                       <div className="flex items-center gap-2.5 px-1 py-0.5">{row}</div>
+                    )}
+                    {habit && onToggleHabit && (
+                      <div className="pl-6">
+                        <HabitStepList
+                          habit={habit}
+                          habitDone={i.done}
+                          onHabitShouldToggle={() => onToggleHabit(habit.id)}
+                        />
+                      </div>
                     )}
                   </li>
                 );
