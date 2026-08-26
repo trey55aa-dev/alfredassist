@@ -362,6 +362,9 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
   const unit = goal.unit;
   const daysLeftCeil = Math.ceil(daysLeft);
   const reqLabel = formatRate(requiredDailyRate, unit);
+  // On the deadline itself "in 0 days" reads like a glitch. Name the day instead.
+  const windowLabel =
+    daysLeftCeil <= 0 ? "before today's deadline" : `in ${daysLeftCeil} days`;
 
   let status: ProjectionStatus;
   let label: string;
@@ -386,12 +389,12 @@ export function computeProjection(goal: Goal, now = new Date()): ProjectionResul
   } else if (ratio > 0) {
     status = "behind_critical";
     label = `Behind by ${fmtUnits(behindBy, unit)}`;
-    detail = `${fmtUnits(needed, unit)} to go in ${daysLeftCeil} days — that's ${reqLabel}. If that's not realistic, moving the deadline or the target is a fair call.`;
+    detail = `${fmtUnits(needed, unit)} to go ${windowLabel} — that's ${reqLabel}. If that's not realistic, moving the deadline or the target is a fair call.`;
     tone = "text-destructive";
   } else {
     status = "missing";
     label = "No progress yet";
-    detail = `${fmtUnits(needed, unit)} to go in ${daysLeftCeil} days — ${reqLabel} from here. Log your first check-in to set the pace.`;
+    detail = `${fmtUnits(needed, unit)} to go ${windowLabel} — ${reqLabel} from here. Log your first check-in to set the pace.`;
     tone = "text-destructive";
   }
 
