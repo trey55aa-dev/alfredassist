@@ -4,7 +4,7 @@
 
 import { useSyncExternalStore } from "react";
 import { todayKey } from "./alfred";
-import type { Habit, HabitLog } from "./habits";
+import { completedPeriods, periodKey, type Habit, type HabitLog } from "./habits";
 import { isApplicableToDate, type RecurringTemplate } from "./recurring";
 
 /** Color themes for the challenge banner. Keyed so only the id is persisted;
@@ -87,9 +87,16 @@ export interface ChallengeConfig {
   title: string;
   startDate: string; // YYYY-MM-DD, local
   totalDays: number;
-  /** Optional 2026 goal this challenge tracks. When set, adherence is scoped
-   *  to that goal's daily habits instead of the whole daily routine. */
+  /** Optional existing goal this challenge tracks. With no explicit habits
+   *  set, adherence narrows to that goal's daily habits. */
   goalId?: string;
+  /** What this challenge is for, written in freehand. A challenge doesn't
+   *  need a goal row behind it — "get my mornings back" is a fine reason. */
+  customGoal?: string;
+  /** The habits this challenge holds, chosen explicitly. When set, this *is*
+   *  the challenge — several habits that needn't share a goal or a cadence
+   *  ("30-day reinvention" = wake early + two workouts + early bed + hobby). */
+  habitIds?: string[];
   /** Banner color theme. Defaults to "ember" (the original fiery look). */
   color?: ChallengeColor;
   /** ISO timestamp, set when the user closes the challenge out themselves.
@@ -253,16 +260,40 @@ export interface AdherenceResult {
 }
 
 /**
- * The daily habits this challenge tracks. With no goal linked, that's every
- * non-archived daily habit (the whole routine). Linked to a 2026 goal, it
- * narrows to just that goal's daily habits — the concrete, repeatable actions
- * that actually move it — so the challenge measures something specific
- * instead of "everything you do."
+ * The habits this challenge tracks, in order of how specific the answer is:
+ *
+ *  1. Hand-picked habits, when the user chose them. Any cadence, related or
+ *     not — the whole point is that one challenge can hold several habits
+ *     that share nothing but the month you're doing them in. Kept in the
+ *     order they were picked.
+ *  2. A linked goal's daily habits — the concrete repeatable actions that
+ *     move it, so the challenge measures something specific.
+ *  3. Otherwise every non-archived daily habit: the whole routine.
  */
 export function challengeHabits(cfg: ChallengeConfig, habits: Habit[]): Habit[] {
-  return habits.filter(
-    (h) => !h.archived && h.cadence === "daily" && (!cfg.goalId || h.goalId === cfg.goalId),
+  const live = habits.filter((h) => !h.archived);
+
+  if (cfg.habitIds && cfg.habitIds.length > 0) {
+    const byId = new Map(live.map((h) => [h.id, h]));
+    return cfg.habitIds
+      .map((id) => byId.get(id))
+      .filter((h): h is Habit => h !== undefined);
+  }
+
+  return live.filter(
+    (h) => h.cadence === "daily" && (!cfg.goalId || h.goalId === cfg.goalId),
   );
+}
+
+/** True when the challenge tracks a hand-picked set rather than a whole routine. */
+export function hasPickedHabits(cfg: ChallengeConfig): boolean {
+  return !!cfg.habitIds && cfg.habitIds.length > 0;
+}
+
+/** What this challenge is for, however the user expressed it. */
+export function challengeGoalLabel(cfg: ChallengeConfig, goals: { id: string; title: string }[]): string | null {
+  if (cfg.customGoal?.trim()) return cfg.customGoal.trim();
+  return goals.find((g) => g.id === cfg.goalId)?.title ?? null;
 }
 
 /**
@@ -291,20 +322,34 @@ export function computeAdherence(
   lastPossible.setDate(lastPossible.getDate() + cfg.totalDays - 1);
   const end = today < lastPossible ? today : lastPossible;
 
-  const dailyHabits = challengeHabits(cfg, habits);
-  const enabledTemplates = cfg.goalId ? [] : templates.filter((t) => t.enabled);
+  const tracked = challengeHabits(cfg, habits);
+  // Recurring blocks stand in for "the rest of the routine". Once a challenge
+  // names what it's about — a goal, or a hand-picked set — they aren't part of
+  // it, since a calendar block isn't attributable to either.
+  const enabledTemplates =
+    cfg.goalId || hasPickedHabits(cfg) ? [] : templates.filter((t) => t.enabled);
 
   let completed = 0;
   let applicable = 0;
 
+  // Habits count per period, not per day: a daily habit still means one
+  // chance each day, but a weekly one picked into a challenge is one chance a
+  // week, not seven misses. A period only partly inside the window still
+  // counts once — you had some of it.
+  for (const h of tracked) {
+    const done = completedPeriods(h, habitLogs);
+    const seen = new Set<string>();
+    for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      const key = periodKey(h.cadence, cursor);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      applicable++;
+      if (done.has(key)) completed++;
+    }
+  }
+
   for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const dateStr = todayKey(cursor);
-
-    for (const h of dailyHabits) {
-      applicable++;
-      if (habitLogs.some((l) => l.habitId === h.id && l.date === dateStr)) completed++;
-    }
-
     for (const t of enabledTemplates) {
       if (!isApplicableToDate(t, cursor)) continue;
       applicable++;

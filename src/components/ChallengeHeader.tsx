@@ -14,6 +14,8 @@ import {
   useChallenge,
   challengeStatus,
   challengeHabits,
+  challengeGoalLabel,
+  hasPickedHabits,
   computeAdherence,
   challengeTheme,
   CHALLENGE_THEMES,
@@ -85,8 +87,19 @@ export function ChallengeHeader({
   const status = challengeStatus(cfg);
   const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
 
-  const linkedGoal = goals.find((g) => g.id === cfg.goalId);
+  const purpose = challengeGoalLabel(cfg, goals);
+  const picked = hasPickedHabits(cfg);
   const trackedHabits = useMemo(() => challengeHabits(cfg, habits), [cfg, habits]);
+  const pickableHabits = useMemo(() => habits.filter((h) => !h.archived), [habits]);
+
+  const toggleDraftHabit = (habitId: string) =>
+    setDraft((d) => {
+      const current = d.habitIds ?? [];
+      const next = current.includes(habitId)
+        ? current.filter((id) => id !== habitId)
+        : [...current, habitId];
+      return { ...d, habitIds: next.length > 0 ? next : undefined };
+    });
   const doneToday = useMemo(
     () => trackedHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
     [trackedHabits, habitLogs],
@@ -172,7 +185,15 @@ export function ChallengeHeader({
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 bg-popover border-border" align="start">
+              {/* Picking habits made this taller than a phone screen. Radix
+                  reports the room actually left below the trigger, so the sheet
+                  fits that and scrolls inside rather than running Save off the
+                  bottom of the display where nothing can reach it. */}
+              <PopoverContent
+                className="w-72 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto bg-popover border-border"
+                align="start"
+                collisionPadding={12}
+              >
                 <div className="space-y-3">
                   <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
                     Edit challenge
@@ -215,7 +236,24 @@ export function ChallengeHeader({
                   </div>
                   <div className="space-y-1.5">
                     <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
-                      Link to a 2026 goal (optional)
+                      What's this for?
+                    </label>
+                    <Input
+                      value={draft.customGoal ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, customGoal: e.target.value || undefined }))
+                      }
+                      placeholder="e.g. Get my mornings back"
+                      className="bg-background/60 border-border text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                      Write anything. It doesn't have to be one of your goals.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
+                      Or pull in an existing goal
                     </label>
                     <select
                       value={draft.goalId ?? ""}
@@ -224,14 +262,72 @@ export function ChallengeHeader({
                       }
                       className="w-full bg-background/60 border border-border rounded-md px-2 py-2 text-xs font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-gold/40"
                     >
-                      <option value="">No goal — track full routine</option>
+                      <option value="">No goal</option>
                       {goals.map((g) => (
                         <option key={g.id} value={g.id}>{g.title}</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
+                        Habits in this challenge
+                      </label>
+                      {(draft.habitIds?.length ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setDraft((d) => ({ ...d, habitIds: undefined }))}
+                          className="font-mono text-[9px] uppercase tracking-wider text-gold/70 hover:text-gold"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {pickableHabits.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                        No habits yet — add some and they'll show up here.
+                      </p>
+                    ) : (
+                      <div className="max-h-44 overflow-y-auto rounded-md border border-border/60 bg-background/40 p-1.5 space-y-0.5">
+                        {pickableHabits.map((h) => {
+                          const picked = draft.habitIds?.includes(h.id) ?? false;
+                          return (
+                            <button
+                              key={h.id}
+                              type="button"
+                              onClick={() => toggleDraftHabit(h.id)}
+                              aria-pressed={picked}
+                              className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-white/5 transition-colors"
+                            >
+                              <span
+                                className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${
+                                  picked ? "bg-gold border-gold" : "border-border"
+                                }`}
+                              >
+                                {picked && (
+                                  <Check className="h-2.5 w-2.5 text-background" strokeWidth={4} />
+                                )}
+                              </span>
+                              <span className="flex-1 min-w-0 truncate text-xs text-foreground">
+                                {h.title}
+                              </span>
+                              {h.cadence !== "daily" && (
+                                <span className="shrink-0 font-mono text-[8px] uppercase tracking-wider text-muted-foreground/60">
+                                  {h.cadence}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <p className="text-[10px] text-muted-foreground/60 leading-snug">
-                      Linked, this challenge only tracks daily habits that feed that goal —
-                      not your whole routine.
+                      {(draft.habitIds?.length ?? 0) > 0
+                        ? `Tracking these ${draft.habitIds!.length} — they don't have to be related.`
+                        : draft.goalId
+                          ? "Nothing picked, so this tracks that goal's daily habits."
+                          : "Nothing picked, so this tracks your whole daily routine."}
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -275,23 +371,32 @@ export function ChallengeHeader({
             {fmtDate(cfg.startDate)} – {fmtDate(addDays(cfg.startDate, cfg.totalDays - 1))} · {stateLine}
           </p>
           <p className="flex items-center gap-1.5 text-xs text-white/55 mt-1">
-            {linkedGoal ? (
+            {picked ? (
+              <>
+                <TargetIcon className="h-3 w-3 shrink-0" />
+                Tracking {trackedHabits.length} habit{trackedHabits.length === 1 ? "" : "s"}
+                {purpose && (
+                  <>
+                    {" "}for <span className="text-white/80">{purpose}</span>
+                  </>
+                )}
+              </>
+            ) : purpose ? (
               trackedHabits.length > 0 ? (
                 <>
                   <TargetIcon className="h-3 w-3 shrink-0" />
                   Tracking {trackedHabits.length} habit{trackedHabits.length === 1 ? "" : "s"} for{" "}
-                  <span className="text-white/80">{linkedGoal.title}</span>
+                  <span className="text-white/80">{purpose}</span>
                 </>
               ) : (
                 <>
                   <TargetIcon className="h-3 w-3 shrink-0" />
-                  No daily habits feed{" "}
-                  <span className="text-white/80">{linkedGoal.title}</span> yet — add one below and
-                  link it to this goal.
+                  Nothing tracked for <span className="text-white/80">{purpose}</span> yet — pick
+                  the habits it's made of.
                 </>
               )
             ) : (
-              <>Tracking your full daily routine — link a goal to narrow this down.</>
+              <>Tracking your full daily routine — pick specific habits to narrow this down.</>
             )}
           </p>
         </div>
@@ -410,7 +515,7 @@ export function ChallengeHeader({
             />
           </div>
           <p className="relative mt-2 font-mono text-[9px] tracking-[0.2em] uppercase text-white/60">
-            {Math.round(adherence.pct * 100)}% of {linkedGoal ? "these habits" : "your routine"} actually
+            {Math.round(adherence.pct * 100)}% of {picked || purpose ? "these habits" : "your routine"} actually
             done so far ({adherence.completed}/{adherence.applicable})
           </p>
         </>

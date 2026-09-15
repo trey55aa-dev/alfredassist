@@ -234,7 +234,7 @@ export function previousPeriodDate(cadence: Cadence, date: Date): Date {
 /* ---------- Streak math ---------- */
 
 /** Build a Set of period-keys this habit was completed in. */
-function completedPeriods(habit: Habit, logs: HabitLog[]): Set<string> {
+export function completedPeriods(habit: Habit, logs: HabitLog[]): Set<string> {
   const set = new Set<string>();
   for (const l of logs) {
     if (l.habitId !== habit.id) continue;
