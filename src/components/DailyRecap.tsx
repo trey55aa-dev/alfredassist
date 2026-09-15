@@ -14,7 +14,7 @@ import { getDailyFeedback, setDailyFeedback } from "@/lib/dailyFeedback";
 import { todayKey, formatLongDate } from "@/lib/alfred";
 import type { AgendaEvent } from "@/lib/agenda";
 import type { Habit, HabitLog } from "@/lib/habits";
-import { loadHabitTimes } from "@/lib/habits";
+import { loadHabitTimes, CADENCE_LABEL } from "@/lib/habits";
 
 const COPY_OPTIONS: { style: RecapStyle; label: string }[] = [
   { style: "checklist", label: "Copy today's checklist" },
@@ -32,11 +32,17 @@ export function DailyRecap({
   habits,
   habitLogs,
   now,
+  onToggleHabit,
+  onToggleEvent,
 }: {
   events: AgendaEvent[];
   habits: Habit[];
   habitLogs: HabitLog[];
   now: Date;
+  /** Tick a habit straight from the recap. Omit to render that row read-only. */
+  onToggleHabit?: (habitId: string) => void;
+  /** Same for a scheduled block. */
+  onToggleEvent?: (eventId: string) => void;
 }) {
   const dateStr = todayKey(now);
   const [feedback, setFeedback] = useState(() => getDailyFeedback(dateStr));
@@ -91,27 +97,50 @@ export function DailyRecap({
       </div>
 
       <ul className="space-y-1.5">
-        {items.map((i) => (
-          <li key={i.id} className="flex items-center gap-2.5 text-sm">
-            {i.done ? (
-              <CheckCircle2 className="h-4 w-4 text-teal shrink-0" />
-            ) : (
-              <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-            )}
-            <span
-              className={
-                i.done
-                  ? "text-muted-foreground line-through"
-                  : "text-foreground"
-              }
-            >
-              {i.title}
-            </span>
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground/60 whitespace-nowrap">
-              {i.done ? fmtTime(i.actualMs) : i.scheduledMs ? fmtTime(i.scheduledMs) : ""}
-            </span>
-          </li>
-        ))}
+        {items.map((i) => {
+          const toggle = i.kind === "habit" ? onToggleHabit : onToggleEvent;
+          return (
+            <li key={`${i.kind}:${i.id}`}>
+              <button
+                type="button"
+                onClick={() => toggle?.(i.id)}
+                disabled={!toggle}
+                aria-pressed={i.done}
+                title={
+                  toggle
+                    ? i.done
+                      ? `Undo "${i.title}"`
+                      : `Mark "${i.title}" done`
+                    : undefined
+                }
+                className={`w-full flex items-center gap-2.5 rounded-lg px-2 py-2 -mx-2 text-left text-sm transition-colors touch-target ${
+                  toggle ? "hover:bg-white/5 active:bg-white/10" : "cursor-default"
+                }`}
+              >
+                {i.done ? (
+                  <CheckCircle2 className="h-4 w-4 text-teal shrink-0" />
+                ) : (
+                  <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                )}
+                <span
+                  className={`min-w-0 truncate ${
+                    i.done ? "text-muted-foreground line-through" : "text-foreground"
+                  }`}
+                >
+                  {i.title}
+                </span>
+                {i.cadence && i.cadence !== "daily" && (
+                  <span className="shrink-0 rounded-full bg-muted/40 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-muted-foreground/70">
+                    {CADENCE_LABEL[i.cadence]}
+                  </span>
+                )}
+                <span className="ml-auto font-mono text-[10px] text-muted-foreground/60 whitespace-nowrap">
+                  {i.done ? fmtTime(i.actualMs) : i.scheduledMs ? fmtTime(i.scheduledMs) : ""}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
 
       <div className="mt-4 pt-4 border-t border-border/40">

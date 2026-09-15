@@ -4,22 +4,30 @@
 
 import { todayKey } from "./alfred";
 import type { AgendaEvent } from "./agenda";
-import { timeKey, type Habit, type HabitLog } from "./habits";
+import { isCompleteForPeriod, timeKey, type Cadence, type Habit, type HabitLog } from "./habits";
 
 export interface RecapItem {
   id: string;
   title: string;
   kind: "event" | "habit";
   done: boolean;
+  /** Set for habits. Anything but "daily" is shown with its period labelled. */
+  cadence?: Cadence;
   /** ms since epoch — when it was scheduled for (events only). */
   scheduledMs?: number;
   /** ms since epoch — when it was actually ticked, if known. */
   actualMs?: number;
 }
 
-/** Build today's recap list. Habits: daily ones always show; other cadences
- *  only show once they've actually been logged today, so a weekly habit like
- *  "Church" doesn't clutter every day it isn't due. */
+/** Build today's recap list.
+ *
+ *  Habits: daily ones always show. Other cadences show while their current
+ *  period is still open — a weekly habit you haven't done this week is
+ *  something you're working on right now, and the recap is where you'd reach
+ *  to tick it. Once the period is satisfied it drops back out, so a done
+ *  weekly habit doesn't trail through the rest of the week; it still appears
+ *  on the day it was actually logged. Non-daily items carry `cadence` so the
+ *  UI can label them and they don't read as today-or-failed. */
 export function buildRecapItems(
   events: AgendaEvent[],
   habits: Habit[],
@@ -45,7 +53,12 @@ export function buildRecapItems(
   );
 
   const habitItems: RecapItem[] = habits
-    .filter((h) => !h.archived && (h.cadence === "daily" || loggedToday.has(h.id)))
+    .filter((h) => {
+      if (h.archived) return false;
+      if (h.cadence === "daily" || loggedToday.has(h.id)) return true;
+      // Still in play this week/month/quarter/year — you can act on it today.
+      return !isCompleteForPeriod(h, habitLogs, date);
+    })
     .map((h) => {
       const done = loggedToday.has(h.id);
       return {
@@ -53,6 +66,7 @@ export function buildRecapItems(
         title: h.title,
         kind: "habit" as const,
         done,
+        cadence: h.cadence,
         actualMs: done ? habitTimes[timeKey(h.id, dateStr)] : undefined,
       };
     });

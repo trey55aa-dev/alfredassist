@@ -34,13 +34,38 @@ describe("buildRecapItems", () => {
     expect(items[0].actualMs).toBe(new Date(2026, 7, 7, 7, 42).getTime());
   });
 
-  it("always includes a daily habit, but only includes a weekly habit if logged today", () => {
+  it("includes a daily habit, and a weekly one while its week is still open", () => {
+    // "Currently being worked on": an undone weekly habit is something you can
+    // act on today, so the recap is where you'd reach to tick it.
     const noLogs = buildRecapItems([], [dailyHabit, weeklyHabit], [], {}, DAY);
-    expect(noLogs.map((i) => i.title)).toEqual(["Drink water"]);
+    expect(noLogs.map((i) => i.title).sort()).toEqual(["Church", "Drink water"]);
+  });
 
+  it("labels a non-daily habit with its cadence, and leaves daily ones unlabelled", () => {
+    const items = buildRecapItems([], [dailyHabit, weeklyHabit], [], {}, DAY);
+    expect(items.find((i) => i.title === "Church")?.cadence).toBe("weekly");
+    expect(items.find((i) => i.title === "Drink water")?.cadence).toBe("daily");
+  });
+
+  it("shows a weekly habit as done on the day it was logged", () => {
     const withChurchLogged: HabitLog[] = [{ habitId: "h2", date: DATE_STR }];
     const withLog = buildRecapItems([], [dailyHabit, weeklyHabit], withChurchLogged, {}, DAY);
     expect(withLog.map((i) => i.title).sort()).toEqual(["Church", "Drink water"]);
+    expect(withLog.find((i) => i.title === "Church")?.done).toBe(true);
+  });
+
+  it("drops a weekly habit satisfied earlier in the same week", () => {
+    // Done on the 5th; on the 7th the week is settled, so it stops trailing
+    // through the rest of the week rather than sitting there looking undone.
+    const loggedEarlier: HabitLog[] = [{ habitId: "h2", date: "2026-08-05" }];
+    const items = buildRecapItems([], [dailyHabit, weeklyHabit], loggedEarlier, {}, DAY);
+    expect(items.map((i) => i.title)).toEqual(["Drink water"]);
+  });
+
+  it("leaves an archived habit out entirely", () => {
+    const archived: Habit = { ...weeklyHabit, id: "h3", title: "Old", archived: true };
+    const items = buildRecapItems([], [dailyHabit, archived], [], {}, DAY);
+    expect(items.map((i) => i.title)).toEqual(["Drink water"]);
   });
 
   it("sorts by actual time when done, scheduled time when pending", () => {

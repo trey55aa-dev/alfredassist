@@ -334,15 +334,17 @@ export default function Agenda() {
     toast({ title: "Event removed", description: ev.title });
   };
 
+  // Routed through applyHabitToggle so a tick from here does exactly what a
+  // tick from the Checklist does — completion time, XP, linked-goal movement.
+  // It used to call toggleHabitForToday directly and silently skip all three.
   const handleHabitMarkDone = (habitId: string) => {
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return;
-    const result = toggleHabitForToday(habit, habitLogs, now);
+    const result = applyHabitToggle(habit, habitLogs, goals);
     setHabitLogs(result.logs);
+    if (result.goals !== goals) setGoals(result.goals);
     if (result.nowComplete) {
       toast({ title: "Back on track", description: habit.title });
-      const streakDays = currentStreakFor(habit, result.logs);
-      awardXp(XP_VALUES.HABIT_COMPLETE, "habit", { streakDays });
     }
   };
 
@@ -628,7 +630,14 @@ export default function Agenda() {
       </Card>
 
       {/* Crossed-off recap of the day + copy-out for Notes/Reminders/Calendar */}
-      <DailyRecap events={today} habits={habits} habitLogs={habitLogs} now={now} />
+      <DailyRecap
+        events={today}
+        habits={habits}
+        habitLogs={habitLogs}
+        now={now}
+        onToggleHabit={handleHabitMarkDone}
+        onToggleEvent={handleToggle}
+      />
     </div>
   );
 }
