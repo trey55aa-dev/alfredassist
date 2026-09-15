@@ -19,6 +19,7 @@ import {
   X,
   Target as TargetIcon,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { todayKey } from "@/lib/alfred";
 import {
   type Habit,
@@ -29,6 +30,10 @@ import {
   getHabitNote,
   setHabitNote,
   loadHabitTimes,
+  derivedStreakFor,
+  getStreakOverride,
+  setStreakOverride,
+  clearStreakOverride,
 } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
 import {
@@ -336,11 +341,107 @@ function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => v
   );
 }
 
+/* ─── Where the streak number comes from ───────────────── */
+
+function StreakSource({
+  habit,
+  derived,
+  noun,
+  onChange,
+}: {
+  habit: Habit;
+  derived: number;
+  noun: string;
+  onChange: () => void;
+}) {
+  const override = getStreakOverride(habit.id);
+  const manual = override !== null;
+  const [draft, setDraft] = useState(String(override ?? derived));
+
+  const apply = () => {
+    const n = Number(draft);
+    if (!Number.isFinite(n) || n < 0) {
+      setDraft(String(override ?? derived));
+      return;
+    }
+    setStreakOverride(habit.id, n);
+    onChange();
+  };
+
+  const backToAuto = () => {
+    clearStreakOverride(habit.id);
+    setDraft(String(derived));
+    onChange();
+  };
+
+  return (
+    <div className="rounded-xl border border-border/50 bg-white/3 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+          Streak count
+        </p>
+        <span
+          className={`font-mono text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 ${
+            manual ? "bg-gold/15 text-gold" : "bg-muted/40 text-muted-foreground"
+          }`}
+        >
+          {manual ? "Yours" : "Counted for you"}
+        </span>
+      </div>
+
+      {manual ? (
+        <>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={apply}
+              onKeyDown={(e) => e.key === "Enter" && apply()}
+              className="h-9 w-24 bg-background/60 text-sm"
+            />
+            <span className="text-xs text-muted-foreground">{noun}s</span>
+          </div>
+          <p className="text-[11px] leading-snug text-muted-foreground/70">
+            Alfred counts {derived} {noun}
+            {derived === 1 ? "" : "s"} from your ticks.{" "}
+            <button
+              type="button"
+              onClick={backToAuto}
+              className="text-gold/80 underline underline-offset-2 hover:text-gold"
+            >
+              Go back to counting it for me
+            </button>
+          </p>
+        </>
+      ) : (
+        <p className="text-[11px] leading-snug text-muted-foreground/70">
+          Counted from your ticks — nothing to enter.{" "}
+          <button
+            type="button"
+            onClick={apply}
+            className="text-gold/80 underline underline-offset-2 hover:text-gold"
+          >
+            Set it myself
+          </button>{" "}
+          if you had a run going before Alfred, or a day you did but never ticked.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ─── Stats tab ────────────────────────────────────────── */
 
 function StatsTab({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
   const times = useMemo(() => loadHabitTimes(), [habit.id]);
-  const s = useMemo(() => computeHabitStats(habit, logs, times), [habit, logs, times]);
+  const [overrideTick, setOverrideTick] = useState(0);
+  const s = useMemo(
+    () => computeHabitStats(habit, logs, times),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [habit, logs, times, overrideTick],
+  );
   const daily = habit.cadence === "daily";
   const noun = CADENCE_NOUN[habit.cadence];
 
@@ -351,6 +452,13 @@ function StatsTab({ habit, logs }: { habit: Habit; logs: HabitLog[] }) {
         <BigStat icon={Flame} color="text-gold" label="Current streak" value={s.current} suffix={noun + (s.current === 1 ? "" : "s")} />
         <BigStat icon={Trophy} color="text-teal" label="Best streak" value={s.longest} suffix={noun + (s.longest === 1 ? "" : "s")} />
       </div>
+
+      <StreakSource
+        habit={habit}
+        derived={derivedStreakFor(habit, logs)}
+        noun={noun}
+        onChange={() => setOverrideTick((n) => n + 1)}
+      />
 
       {/* Rolling windows */}
       <div className="grid grid-cols-2 gap-3">

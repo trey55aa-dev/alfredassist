@@ -50,6 +50,8 @@ export const HABIT_LOGS_KEY = "alfred.habitLogs";
 export const HABIT_TIMES_KEY = "alfred.habitLogTimes";
 /** Per-habit free-text comments — grounds Alfred's coaching. Device-local. */
 export const HABIT_NOTES_KEY = "alfred.habitNotes";
+/** Per-habit manual streak overrides — `{ habitId: count }`. */
+export const HABIT_STREAKS_KEY = "alfred.habitStreaks";
 
 function readJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -90,7 +92,7 @@ export function removeHabitTime(habitId: string, date: string): void {
   writeJSON(HABIT_TIMES_KEY, all);
 }
 
-/** Drop every recorded time + note for a habit (called on delete). */
+/** Drop every recorded time, note + streak override for a habit (on delete). */
 export function purgeHabitMeta(habitId: string): void {
   const times = loadHabitTimes();
   let changed = false;
@@ -107,6 +109,8 @@ export function purgeHabitMeta(habitId: string): void {
     delete notes[habitId];
     writeJSON(HABIT_NOTES_KEY, notes);
   }
+
+  if (getStreakOverride(habitId) !== null) clearStreakOverride(habitId);
 }
 
 export function loadHabitNotes(): Record<string, string> {
@@ -123,6 +127,38 @@ export function setHabitNote(habitId: string, text: string): void {
   if (trimmed) all[habitId] = trimmed;
   else delete all[habitId];
   writeJSON(HABIT_NOTES_KEY, all);
+}
+
+/* ---------- Manual streak overrides ----------
+   Streaks count themselves from the logs; this is the escape hatch for when
+   that number is wrong — a run built up before Alfred existed, or a day you
+   genuinely did but never ticked. An entry here means "this habit's streak is
+   the number I say"; no entry means it counts itself. Kept beside the habit
+   rather than on it (like habit notes) so it syncs through user_state without
+   waiting on a habits-table migration. */
+
+export function loadStreakOverrides(): Record<string, number> {
+  return readJSON<Record<string, number>>(HABIT_STREAKS_KEY, {});
+}
+
+/** The user's own number for this habit, or null when it counts itself. */
+export function getStreakOverride(habitId: string): number | null {
+  const raw = loadStreakOverrides()[habitId];
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : null;
+}
+
+/** Switch this habit to a manual streak of `count`. */
+export function setStreakOverride(habitId: string, count: number): void {
+  const all = loadStreakOverrides();
+  all[habitId] = Math.max(0, Math.floor(count));
+  writeJSON(HABIT_STREAKS_KEY, all);
+}
+
+/** Hand the streak back to automatic counting. */
+export function clearStreakOverride(habitId: string): void {
+  const all = loadStreakOverrides();
+  delete all[habitId];
+  writeJSON(HABIT_STREAKS_KEY, all);
 }
 
 /* ---------- Period keys ---------- */
@@ -220,8 +256,11 @@ export function isCompleteForPeriod(
   );
 }
 
-/** Consecutive completed periods ending at the current period (or the previous one if current isn't done yet). */
-export function currentStreakFor(habit: Habit, logs: HabitLog[], today = new Date()): number {
+/** Consecutive completed periods ending at the current period (or the previous
+ *  one if current isn't done yet), straight from the logs. This is what
+ *  actually happened — use it for anything reasoning about real activity
+ *  (recovery, at-risk), never for the number on screen. */
+export function derivedStreakFor(habit: Habit, logs: HabitLog[], today = new Date()): number {
   const set = completedPeriods(habit, logs);
   let cursor = new Date(today);
   // anchor: include current period if done; otherwise start from previous
@@ -234,6 +273,14 @@ export function currentStreakFor(habit: Habit, logs: HabitLog[], today = new Dat
     cursor = previousPeriodDate(habit.cadence, cursor);
   }
   return count;
+}
+
+/** The streak to show. Counts itself from the logs unless the user has set
+ *  their own number, in which case that number stands. */
+export function currentStreakFor(habit: Habit, logs: HabitLog[], today = new Date()): number {
+  const override = getStreakOverride(habit.id);
+  if (override !== null) return override;
+  return derivedStreakFor(habit, logs, today);
 }
 
 export function longestStreakFor(habit: Habit, logs: HabitLog[]): number {
@@ -355,8 +402,10 @@ export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()
   // A habit with a live streak has already restarted — whatever it missed
   // before, the comeback happened. Nagging it to "start fresh today" when
   // today is already ticked reads as Alfred not noticing, so recovery only
-  // applies while the streak is actually at zero.
-  if (currentStreakFor(habit, logs, today) > 0) return null;
+  // applies while the streak is actually at zero. Reads the derived streak on
+  // purpose: a manual number is the user's claim about the past, and must not
+  // silence a habit that has genuinely gone quiet.
+  if (derivedStreakFor(habit, logs, today) > 0) return null;
 
   // Grace before penalty: the current period is still open and is never a miss.
   // Anchor on the last fully-elapsed period (yesterday, for daily habits) instead.
