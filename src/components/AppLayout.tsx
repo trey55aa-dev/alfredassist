@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -122,10 +122,16 @@ export default function AppLayout() {
             <div className="flex items-center gap-2 px-3">
               <SyncStatus />
               <FocusModeStarter />
-              <div className="hidden md:flex items-center gap-1.5 border border-gold/20 rounded-full px-2.5 py-1">
+              {/* Simple mode's six tabs have no room for the Dashboard, so the
+                  wordmark is how you get home from anywhere. */}
+              <Link
+                to="/"
+                title="Dashboard"
+                className="hidden md:flex items-center gap-1.5 border border-gold/20 rounded-full px-2.5 py-1 transition-colors hover:border-gold/50"
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
                 <span className="font-display italic text-xs text-gold/70">Alfred</span>
-              </div>
+              </Link>
             </div>
           </header>
 

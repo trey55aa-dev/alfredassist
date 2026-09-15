@@ -20,6 +20,7 @@ import {
   LineChart,
   Smile,
   Link2,
+  MessageCircle,
 } from "lucide-react";
 
 export interface NavItem {
@@ -42,7 +43,10 @@ export const NAV_CATEGORIES: NavCategory[] = [
     id: "home",
     label: "Home",
     icon: LayoutDashboard,
-    items: [{ title: "Dashboard", url: "/", icon: LayoutDashboard }],
+    items: [
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Ask Alfred", url: "/chat", icon: MessageCircle },
+    ],
   },
   {
     id: "today",
@@ -88,21 +92,35 @@ export const NAV_CATEGORIES: NavCategory[] = [
 ];
 
 /**
- * Simple mode — the whole app in five plain words. Each category is a single
- * destination so both navs become one-tap: no sub-menus, no jargon.
+ * Simple mode — the whole app in six plain words, one destination each, so
+ * both navs stay one-tap with no sub-menus and no jargon.
+ *
+ * Shaped after Tiimo's four (To Do, Calendar, Focus, Daily Reflection) plus
+ * Habits and Alfred himself. "Reflect" rather than "Daily Reflection" only
+ * because a tab label has to fit a phone; the page keeps its full name.
+ *
+ * The Dashboard is deliberately not a tab here — six is already the ceiling
+ * for a bottom nav at phone width. It stays one tap away via the Alfred
+ * wordmark in the header.
  */
 export const SIMPLE_NAV_CATEGORIES: NavCategory[] = [
   {
-    id: "home",
-    label: "Home",
-    icon: LayoutDashboard,
-    items: [{ title: "Home", url: "/", icon: LayoutDashboard }],
+    id: "todo",
+    label: "To Do",
+    icon: ListChecks,
+    items: [{ title: "To Do", url: "/planner", icon: ListChecks }],
   },
   {
-    id: "today",
-    label: "Today",
+    id: "calendar",
+    label: "Calendar",
     icon: CalendarDays,
-    items: [{ title: "Today", url: "/agenda", icon: CalendarDays }],
+    items: [{ title: "Calendar", url: "/agenda", icon: CalendarDays }],
+  },
+  {
+    id: "focus",
+    label: "Focus",
+    icon: Timer,
+    items: [{ title: "Focus", url: "/focus", icon: Timer }],
   },
   {
     id: "habits",
@@ -111,16 +129,16 @@ export const SIMPLE_NAV_CATEGORIES: NavCategory[] = [
     items: [{ title: "Habits", url: "/checklist", icon: CheckSquare }],
   },
   {
-    id: "goals",
-    label: "Goals",
-    icon: Target,
-    items: [{ title: "Goals", url: "/goals-2026", icon: Target }],
+    id: "reflect",
+    label: "Reflect",
+    icon: Mic,
+    items: [{ title: "Reflect", url: "/journal", icon: Mic }],
   },
   {
-    id: "guide",
-    label: "Help",
-    icon: BookOpen,
-    items: [{ title: "Help", url: "/guide", icon: BookOpen }],
+    id: "chat",
+    label: "Alfred",
+    icon: MessageCircle,
+    items: [{ title: "Alfred", url: "/chat", icon: MessageCircle }],
   },
 ];
 

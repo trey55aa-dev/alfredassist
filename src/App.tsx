@@ -27,6 +27,7 @@ const Achievements = lazy(() => import("./pages/Achievements"));
 const Schedule = lazy(() => import("./pages/Schedule"));
 const Review = lazy(() => import("./pages/Review"));
 const Mood = lazy(() => import("./pages/Mood"));
+const Chat = lazy(() => import("./pages/Chat"));
 const Notion = lazy(() => import("./pages/Notion"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
@@ -112,6 +113,7 @@ const App = () => {
                 <Route path="/schedule" element={<Schedule />} />
                 <Route path="/review" element={<Review />} />
                 <Route path="/mood" element={<Mood />} />
+                <Route path="/chat" element={<Chat />} />
                 <Route path="/notion" element={<Notion />} />
               </Route>
               <Route path="*" element={<NotFound />} />
