@@ -49,6 +49,7 @@ import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { useUiMode } from "@/lib/uiMode";
 import { useChallenge, challengeHabits } from "@/lib/challenge";
 import { applyHabitToggle } from "@/lib/habitToggle";
+import { clearCompletion, recordCompletion } from "@/lib/completionLog";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { HabitDetailSheet } from "@/components/HabitDetailSheet";
 import { HabitRings } from "@/components/HabitRings";
@@ -142,8 +143,12 @@ export default function Checklist() {
     if (has) {
       setLogs(logs.filter((l) => !(l.habitId === habit.id && l.date === dateYmd)));
       removeHabitTime(habit.id, dateYmd);
+      clearCompletion("habit", habit.id, dateYmd);
     } else {
       setLogs([...logs, { habitId: habit.id, date: dateYmd }]);
+      // Made-up days are stamped now, but counted against the day they belong
+      // to — the hour is real, the date is the one being made up.
+      recordCompletion("habit", habit.id, new Date(), dateYmd);
       const refund = makeUpMissedDay(dateYmd);
       if (refund) {
         toast.success(`Day made up — ${refund.delta} XP restored.`);

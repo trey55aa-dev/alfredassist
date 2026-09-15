@@ -45,6 +45,7 @@ const SYNCED_KEYS = [
   "alfred.goalTargetLog",   // { targetId|date: entry } — each day's answer to them
   "alfred.loginStreak",     // string[] of day keys — union-merges, so opening on any device counts
   "alfred.habitStreaks",    // { habitId: count } — manual streak overrides
+  "alfred.completionLog",   // CompletionRecord[] — timestamped, union-merges across devices
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

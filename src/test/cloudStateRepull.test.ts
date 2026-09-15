@@ -5,13 +5,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 
-const pullUserState = vi.fn();
-const upsertUserState = vi.fn(async () => {});
-
-vi.mock("@/lib/userStateRepo", () => ({
-  pullUserState: (...args: unknown[]) => pullUserState(...args),
-  upsertUserState: (...args: unknown[]) => upsertUserState(...args),
+const { pullUserState, upsertUserState } = vi.hoisted(() => ({
+  pullUserState: vi.fn(),
+  upsertUserState: vi.fn(async () => {}),
 }));
+
+vi.mock("@/lib/userStateRepo", () => ({ pullUserState, upsertUserState }));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: { id: "user-1" }, loading: false }),

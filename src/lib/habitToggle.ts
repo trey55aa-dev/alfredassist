@@ -18,6 +18,7 @@ import {
 } from "./habits";
 import type { Goal } from "./goals";
 import { awardXp, XP_VALUES } from "./gamification";
+import { clearCompletion, recordCompletion } from "./completionLog";
 
 export interface HabitToggleResult {
   logs: HabitLog[];
@@ -37,9 +38,16 @@ export function applyHabitToggle(
   const wasDone = isCompleteForPeriod(habit, logs);
   const { logs: nextLogs, nowComplete } = toggleHabitForToday(habit, logs);
 
-  // Completion time powers the hour-of-day stats; clear it on untick.
-  if (nowComplete && !wasDone) recordHabitTime(habit.id, todayKey());
-  else if (!nowComplete && wasDone) removeHabitTime(habit.id, todayKey());
+  // Completion time powers the hour-of-day stats; clear it on untick. The
+  // unified log gets the same event — it's what a smart notification schedule
+  // will read to learn when this actually happens.
+  if (nowComplete && !wasDone) {
+    recordHabitTime(habit.id, todayKey());
+    recordCompletion("habit", habit.id);
+  } else if (!nowComplete && wasDone) {
+    removeHabitTime(habit.id, todayKey());
+    clearCompletion("habit", habit.id);
+  }
 
   if (nowComplete && !wasDone) {
     awardXp(XP_VALUES.HABIT_COMPLETE, "habit", {

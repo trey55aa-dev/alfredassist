@@ -28,6 +28,9 @@ import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
 import { reconcileXpDecay } from "@/lib/gamification";
 import { recordLogin } from "@/lib/loginStreak";
+import { backfillCompletionLog } from "@/lib/completionLog";
+import { loadHabitTimes } from "@/lib/habits";
+import { loadCompletionTimes } from "@/lib/recurring";
 import { useUiMode } from "@/lib/uiMode";
 import { NAV_CATEGORIES } from "@/lib/navConfig";
 
@@ -63,6 +66,9 @@ export default function AppLayout() {
     reconcileXpDecay();
     // Showing up is the streak that counts here — note the day, once per open.
     recordLogin();
+    // Fold any completion history that predates the unified log — or that
+    // arrived from another device — into it. Idempotent, so every start is fine.
+    backfillCompletionLog(loadHabitTimes(), loadCompletionTimes());
   }, []);
 
   useEffect(() => {

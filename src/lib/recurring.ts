@@ -4,6 +4,7 @@
 
 import { todayKey } from "./alfred";
 import type { AgendaEvent } from "./agenda";
+import { clearCompletion, recordCompletion } from "./completionLog";
 
 export type RecurrenceType = "daily" | "weekdays" | "weekends" | "custom";
 
@@ -180,6 +181,11 @@ export function setRecurringCompletedAt(
   if (ts !== null) times[k] = ts;
   else delete times[k];
   localStorage.setItem(COMPLETION_TIMES_KEY, JSON.stringify(times));
+
+  // Mirror into the unified completion log, which is what learns when in the
+  // day things actually happen.
+  if (ts !== null) recordCompletion("recurring", templateId, new Date(ts), dateStr);
+  else clearCompletion("recurring", templateId, dateStr);
 }
 
 export function isRecurringSkipped(templateId: string, dateStr: string): boolean {
