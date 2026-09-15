@@ -16,6 +16,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { pullUserState, upsertUserState } from "@/lib/userStateRepo";
+import { bindRemoteChanges, onRemoteChange } from "@/lib/syncSignal";
 import type { Json } from "@/integrations/supabase/types";
 
 // Only keys with NO existing dedicated sync. (goals/habits/customLists/recurring/
@@ -43,6 +44,7 @@ const SYNCED_KEYS = [
   "alfred.goalTargets",     // GoalDailyTarget[] — daily sub-goals hanging off a 2026 goal
   "alfred.goalTargetLog",   // { targetId|date: entry } — each day's answer to them
   "alfred.loginStreak",     // string[] of day keys — union-merges, so opening on any device counts
+  "alfred.habitStreaks",    // { habitId: count } — manual streak overrides
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's
@@ -110,15 +112,27 @@ export function useCloudStateSync(): void {
   const { user } = useAuth();
   const lastSeen = useRef<Map<string, string | null>>(new Map());
   const readyRef = useRef(false);
+  const reconcileRef = useRef<(() => void) | null>(null);
 
-  // ── Reconcile on login ──
+  // ── Reconcile: on login, and again whenever another device may have written ──
   useEffect(() => {
     if (!user) return;
     let alive = true;
     readyRef.current = false;
     const userId = user.id;
+    let running = false;
 
-    (async () => {
+    const reconcile = async () => {
+      if (!alive || running) return;
+      running = true;
+      try {
+        await pullAndMerge();
+      } finally {
+        running = false;
+      }
+    };
+
+    async function pullAndMerge() {
       const cloudRows = await pullUserState(userId);
       if (!alive) return;
       const cloudByKey = new Map(cloudRows.map((r) => [r.key, r]));
@@ -160,9 +174,28 @@ export function useCloudStateSync(): void {
         lastSeen.current.set(key, readRaw(key));
       }
       readyRef.current = true;
-    })();
+    }
 
-    return () => { alive = false; };
+    reconcileRef.current = () => { void reconcile(); };
+    void reconcile();
+
+    // Re-pull when another device writes, or when this one comes back to life.
+    // The merge above is written to be safe to repeat: arrays union, scalars
+    // resolve by timestamp, and lastSeen is refreshed so the push loop doesn't
+    // bounce an adopted value straight back up.
+    bindRemoteChanges(userId);
+    const stop = onRemoteChange(() => { void reconcile(); });
+
+    return () => {
+      alive = false;
+      reconcileRef.current = null;
+      stop();
+    };
+  }, [user]);
+
+  // Signing out drops the realtime channel with it.
+  useEffect(() => {
+    if (!user) bindRemoteChanges(null);
   }, [user]);
 
   // ── Push local changes ──

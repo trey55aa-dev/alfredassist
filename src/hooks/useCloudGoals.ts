@@ -9,6 +9,7 @@ import {
 } from "@/lib/goalsRepo";
 import { GOALS_KEY, type Goal, SEED_GOALS } from "@/lib/goals";
 import { reportSync } from "@/lib/syncStatus";
+import { bindRemoteChanges, onRemoteChange } from "@/lib/syncSignal";
 
 /* ---------- cross-device reconcile (pure, exported for testing) ---------- */
 
@@ -20,6 +21,15 @@ function stableGoalJson(g: Goal): string {
 
 export function goalContentChanged(a: Goal, b: Goal): boolean {
   return stableGoalJson(a) !== stableGoalJson(b);
+}
+
+/* Order-independent, and blind to the local-only stamp: the DB doesn't promise
+   row order, and a reshuffle must not read as a remote change. */
+function goalsFingerprint(gs: Goal[]): string {
+  return [...gs]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(stableGoalJson)
+    .join("|");
 }
 
 /**
@@ -113,6 +123,8 @@ export function useCloudGoals(): {
   const cloudRef = useRef<Goal[]>([]);
   const debounceRef = useRef<number | null>(null);
   const pendingRef = useRef<Goal[] | null>(null);
+  // Mirrors `syncing` for the refetch guard, which runs outside React's state.
+  const syncingRef = useRef(false);
   // Last goals we handed out — baseline for detecting which goals changed so we
   // can stamp localUpdatedAt on them (drives cross-device last-write-wins).
   const lastGoalsRef = useRef<Goal[]>(goals);
@@ -227,6 +239,7 @@ export function useCloudGoals(): {
 
     console.log(`[Goals] Syncing ${toUpsert.length} upserts, ${toDelete.length} deletes to cloud…`);
     setSyncing(true);
+    syncingRef.current = true;
     setError(null);
     reportSync({ syncing: true });
     try {
@@ -248,6 +261,7 @@ export function useCloudGoals(): {
       console.error("[Goals] ❌ Cloud sync FAILED:", err);
     } finally {
       setSyncing(false);
+      syncingRef.current = false;
     }
   }, [user]);
 
@@ -304,6 +318,38 @@ export function useCloudGoals(): {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [flush]);
+
+  /* ---------- pull again when another device writes ---------- */
+
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+
+    const refetch = async () => {
+      // A queued local edit outranks the pull — see the note in useCloudHabits.
+      if (pendingRef.current || debounceRef.current !== null || syncingRef.current) return;
+
+      try {
+        const loaded = await loadGoalsWithMeta(userId);
+        const cloud = loaded.map((l) => l.goal);
+        if (pendingRef.current || debounceRef.current !== null || syncingRef.current) return;
+
+        // An empty cloud never erases a populated device; that's the
+        // un-migrated case the initial fetch owns, not a remote delete.
+        if (cloud.length === 0 && cloudRef.current.length > 0) return;
+        if (goalsFingerprint(cloud) === goalsFingerprint(cloudRef.current)) return;
+
+        cloudRef.current = cloud;
+        setGoalsState(cloud);
+        writeCache(cloud);
+      } catch {
+        /* offline or transient — the next focus or realtime event retries */
+      }
+    };
+
+    bindRemoteChanges(userId);
+    return onRemoteChange(() => { void refetch(); });
+  }, [user]);
 
   return { goals, setGoals, loadStarterTemplate, loading, syncing, error, signedIn: !!user };
 }

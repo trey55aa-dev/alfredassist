@@ -18,6 +18,14 @@ import {
   type HabitLog,
 } from "@/lib/habits";
 import { reportSync } from "@/lib/syncStatus";
+import { bindRemoteChanges, onRemoteChange } from "@/lib/syncSignal";
+
+/* Order-independent fingerprints: the DB doesn't promise row order, and a
+   reshuffled-but-identical result must not look like a change. */
+const habitsFingerprint = (hs: Habit[]): string =>
+  JSON.stringify([...hs].sort((a, b) => a.id.localeCompare(b.id)));
+const logsFingerprint = (ls: HabitLog[]): string =>
+  [...ls].map((l) => `${l.habitId}|${l.date}`).sort().join(",");
 
 /**
  * Cloud-backed habits + habit-logs hook with ownership-aware localStorage cache.
@@ -59,6 +67,8 @@ export function useCloudHabits(): {
   const debounceRef = useRef<number | null>(null);
   const pendingHabitsRef = useRef<Habit[] | null>(null);
   const pendingLogsRef = useRef<HabitLog[] | null>(null);
+  // Mirrors `syncing` for the refetch guard, which runs outside React's state.
+  const syncingRef = useRef(false);
 
   /* ---------- initial fetch + first-sign-in migration ---------- */
 
@@ -149,6 +159,7 @@ export function useCloudHabits(): {
     pendingLogsRef.current = null;
 
     setSyncing(true);
+    syncingRef.current = true;
     setError(null);
     reportSync({ syncing: true });
     try {
@@ -189,6 +200,7 @@ export function useCloudHabits(): {
       reportSync({ syncing: false, error: `Habits — ${msg}` });
     } finally {
       setSyncing(false);
+      syncingRef.current = false;
     }
   }, [user]);
 
@@ -244,6 +256,59 @@ export function useCloudHabits(): {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [flush]);
+
+  /* ---------- pull again when another device writes ---------- */
+
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+
+    const refetch = async () => {
+      // Anything queued locally outranks the pull. Adopting mid-edit would
+      // overwrite a tick the user just made and hasn't pushed yet; the pending
+      // flush will level the cloud shortly, and that write signals us back.
+      if (pendingHabitsRef.current || pendingLogsRef.current) return;
+      if (debounceRef.current !== null || syncingRef.current) return;
+
+      try {
+        const [cloudHabits, cloudLogs] = await Promise.all([
+          loadHabits(userId),
+          loadHabitLogs(userId),
+        ]);
+        // Re-check: an edit may have landed while the request was in flight.
+        if (pendingHabitsRef.current || pendingLogsRef.current) return;
+        if (debounceRef.current !== null || syncingRef.current) return;
+
+        // An empty cloud is never allowed to erase a populated device — that's
+        // the un-migrated case the initial fetch handles, not a remote delete.
+        if (cloudHabits.length === 0 && cloudLogs.length === 0) {
+          if (cloudHabitsRef.current.length > 0 || cloudLogsRef.current.length > 0) return;
+        }
+
+        const habitsChanged =
+          habitsFingerprint(cloudHabits) !== habitsFingerprint(cloudHabitsRef.current);
+        const logsChanged =
+          logsFingerprint(cloudLogs) !== logsFingerprint(cloudLogsRef.current);
+        if (!habitsChanged && !logsChanged) return; // nothing new — don't re-render
+
+        cloudHabitsRef.current = cloudHabits;
+        cloudLogsRef.current = cloudLogs;
+        if (habitsChanged) {
+          setHabitsState(cloudHabits);
+          writeHabitsCache(cloudHabits);
+        }
+        if (logsChanged) {
+          setHabitLogsState(cloudLogs);
+          writeLogsCache(cloudLogs);
+        }
+      } catch {
+        /* offline or transient — the next focus or realtime event retries */
+      }
+    };
+
+    bindRemoteChanges(userId);
+    return onRemoteChange(() => { void refetch(); });
+  }, [user]);
 
   return {
     habits,
