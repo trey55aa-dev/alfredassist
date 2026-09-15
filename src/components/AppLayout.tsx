@@ -27,6 +27,7 @@ import { useCloudStateSync } from "@/hooks/useCloudStateSync";
 import { useReminders } from "@/hooks/useReminders";
 import { initAppIcon } from "@/lib/appIcon";
 import { reconcileXpDecay } from "@/lib/gamification";
+import { recordLogin } from "@/lib/loginStreak";
 import { useUiMode } from "@/lib/uiMode";
 import { NAV_CATEGORIES } from "@/lib/navConfig";
 
@@ -60,6 +61,8 @@ export default function AppLayout() {
     initAppIcon();
     // Life happened while the app was closed — settle the XP bar with reality.
     reconcileXpDecay();
+    // Showing up is the streak that counts here — note the day, once per open.
+    recordLogin();
   }, []);
 
   useEffect(() => {

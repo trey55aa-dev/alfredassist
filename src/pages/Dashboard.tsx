@@ -8,6 +8,7 @@ import {
   TrendingDown,
   CheckCircle2,
   Circle,
+  Sunrise,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -40,6 +41,7 @@ import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { TodayNowNext } from "@/components/TodayNowNext";
 import { useAuth } from "@/hooks/useAuth";
 import { computeProjection } from "@/lib/goalsHistory";
+import { useLoginStreak } from "@/lib/loginStreak";
 import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
@@ -222,6 +224,7 @@ export default function Dashboard() {
   const tasksTotal = dailyHabits.length;
   const dailyPct = tasksTotal ? Math.round((tasksDone / tasksTotal) * 100) : 0;
 
+  const loginStreak = useLoginStreak();
   const [streak, setStreak] = useLocalStorage<StreakState>(STREAK_KEY, emptyStreak);
   useEffect(() => {
     const isComplete = tasksTotal > 0 && tasksDone === tasksTotal;
@@ -287,6 +290,21 @@ export default function Dashboard() {
         <p className="text-muted-foreground/70 text-sm max-w-xl mt-2">
           Your daily protocol awaits. The agenda is set, the timer primed, the journal open.
         </p>
+        {/* Showing up, counted on its own terms — deliberately quieter than the
+            Perfect-days card, which asks for a whole routine rather than a visit. */}
+        {loginStreak.current > 1 && (
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/10 px-3 py-1.5">
+            <Sunrise className="h-3.5 w-3.5 text-gold shrink-0" />
+            <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-gold/90">
+              {loginStreak.current} days here in a row
+            </span>
+            {loginStreak.best > loginStreak.current && (
+              <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-muted-foreground/60">
+                best {loginStreak.best}
+              </span>
+            )}
+          </div>
+        )}
         <div className="divider-gold mt-5" />
         <div className="mt-4">
           <BackupRestore />
