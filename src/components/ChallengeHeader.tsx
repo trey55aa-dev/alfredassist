@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   setChallenge,
+  completeChallenge,
+  reopenChallenge,
   useChallenge,
   challengeStatus,
   challengeHabits,
@@ -17,6 +19,7 @@ import {
   CHALLENGE_THEMES,
   CHALLENGE_COLORS,
   type ChallengeConfig,
+  type ChallengeStatus,
 } from "@/lib/challenge";
 import { currentStreakFor, isCompleteForPeriod, type Habit, type HabitLog } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
@@ -37,6 +40,21 @@ function addDays(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+function stateLineFor(status: ChallengeStatus): string {
+  switch (status.state) {
+    case "upcoming":
+      return `Starts in ${status.daysUntilStart} day${status.daysUntilStart === 1 ? "" : "s"}`;
+    case "ended":
+      return `All ${status.totalDays} days done`;
+    case "complete":
+      return "Challenge complete";
+    default: {
+      const left = status.totalDays - status.dayNumber;
+      return `${left} day${left === 1 ? "" : "s"} to go`;
+    }
+  }
 }
 
 /**
@@ -84,14 +102,15 @@ export function ChallengeHeader({
     setDailyFeedback(dateStr, text);
   };
 
-  // One-time huge XP award on completion. Idempotent via the earned-badges
-  // set, so a remount (or the challenge staying "complete" for weeks) never
-  // re-fires — only the transition into "complete" the first time does.
-  useEffect(() => {
-    if (status.state !== "complete") return;
-    if (getGamification().earnedBadges.includes("challenge_complete")) return;
-    awardXp(XP_VALUES.CHALLENGE_COMPLETE, "challenge", { challengeComplete: true });
-  }, [status.state]);
+  // The one-time XP award rides on the user closing the challenge out, not on
+  // a date passing. The earned-badges check keeps it one award per user, so
+  // reopening and re-closing can't farm it.
+  const confirmComplete = () => {
+    completeChallenge();
+    if (!getGamification().earnedBadges.includes("challenge_complete")) {
+      awardXp(XP_VALUES.CHALLENGE_COMPLETE, "challenge", { challengeComplete: true });
+    }
+  };
 
   // Recurring templates/completions live in plain localStorage, not a hook —
   // re-read on the same change event the rest of the app already listens for.
@@ -113,12 +132,7 @@ export function ChallengeHeader({
     setOpen(false);
   };
 
-  const stateLine =
-    status.state === "upcoming"
-      ? `Starts in ${status.daysUntilStart} day${status.daysUntilStart === 1 ? "" : "s"}`
-      : status.state === "complete"
-        ? "Challenge complete"
-        : `${status.totalDays - status.dayNumber} day${status.totalDays - status.dayNumber === 1 ? "" : "s"} to go`;
+  const stateLine = stateLineFor(status);
 
   return (
     <div
@@ -402,18 +416,44 @@ export function ChallengeHeader({
         </>
       )}
 
-      {status.state === "complete" && rewardIdea && (
-        <div className="relative mt-5 flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5">
+      {status.state === "ended" && (
+        <div className="relative mt-5 flex items-center justify-between gap-3 flex-wrap rounded-xl border border-white/20 bg-white/10 px-3.5 py-3">
           <p className="text-sm text-white/85 min-w-0">
-            You made it. Maybe: <span className="font-medium">{rewardIdea}</span>
+            That's all {status.totalDays} days. Close it out whenever you're ready.
           </p>
+          <Button
+            onClick={confirmComplete}
+            size="sm"
+            className="shrink-0 bg-white text-black hover:bg-white/90"
+          >
+            <Check className="h-3.5 w-3.5 mr-1.5" strokeWidth={3} /> Mark complete
+          </Button>
+        </div>
+      )}
+
+      {status.state === "complete" && (
+        <div className="relative mt-5 space-y-2 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5">
+          {rewardIdea && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-white/85 min-w-0">
+                You made it. Maybe: <span className="font-medium">{rewardIdea}</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setRewardIdea(suggestRewards(undefined, 1)[0] ?? "")}
+                title="Show a different idea"
+                className="shrink-0 inline-flex items-center gap-1 text-[9px] font-mono uppercase text-white/60 hover:text-white transition-colors"
+              >
+                <Shuffle className="h-3 w-3" /> Shuffle
+              </button>
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => setRewardIdea(suggestRewards(undefined, 1)[0] ?? "")}
-            title="Show a different idea"
-            className="shrink-0 inline-flex items-center gap-1 text-[9px] font-mono uppercase text-white/60 hover:text-white transition-colors"
+            onClick={reopenChallenge}
+            className="font-mono text-[9px] uppercase tracking-wider text-white/45 hover:text-white/75 transition-colors"
           >
-            <Shuffle className="h-3 w-3" /> Shuffle
+            Closed this by mistake? Reopen it
           </button>
         </div>
       )}

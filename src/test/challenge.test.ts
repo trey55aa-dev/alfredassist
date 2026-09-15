@@ -1,5 +1,14 @@
-import { describe, it, expect } from "vitest";
-import { challengeStatus, computeAdherence, challengeHabits, type ChallengeConfig } from "@/lib/challenge";
+import { describe, it, expect, beforeEach } from "vitest";
+import {
+  challengeStatus,
+  computeAdherence,
+  challengeHabits,
+  completeChallenge,
+  reopenChallenge,
+  getChallenge,
+  setChallenge,
+  type ChallengeConfig,
+} from "@/lib/challenge";
 import type { Habit, HabitLog } from "@/lib/habits";
 import type { RecurringTemplate } from "@/lib/recurring";
 
@@ -35,18 +44,65 @@ describe("challengeStatus", () => {
     expect(s.pctElapsed).toBe(1);
   });
 
-  it("flips to complete starting the day after the final day, clamped at totalDays", () => {
+  it("only reaches ended — never complete — when the days run out on their own", () => {
     const dayAfter = new Date(2026, 7, 8);
     dayAfter.setDate(dayAfter.getDate() + 35);
     const s1 = challengeStatus(CFG, dayAfter);
-    expect(s1.state).toBe("complete");
+    expect(s1.state).toBe("ended");
     expect(s1.dayNumber).toBe(35);
 
     const wayAfter = new Date(2026, 9, 1); // Oct 1 — long past the end
     const s2 = challengeStatus(CFG, wayAfter);
-    expect(s2.state).toBe("complete");
+    expect(s2.state).toBe("ended");
     expect(s2.dayNumber).toBe(35);
     expect(s2.pctElapsed).toBe(1);
+  });
+
+  it("is complete only once the user has closed it out", () => {
+    const done: ChallengeConfig = { ...CFG, completedAt: "2026-09-12T10:00:00.000Z" };
+    const wayAfter = new Date(2026, 9, 1);
+    expect(challengeStatus(done, wayAfter).state).toBe("complete");
+    expect(challengeStatus(done, wayAfter).dayNumber).toBe(35);
+  });
+
+  it("honours a completion recorded before the final day, keeping the day it stopped on", () => {
+    const early: ChallengeConfig = { ...CFG, completedAt: "2026-08-15T10:00:00.000Z" };
+    const s = challengeStatus(early, new Date(2026, 7, 15)); // Aug 15 = day 8
+    expect(s.state).toBe("complete");
+    expect(s.dayNumber).toBe(8);
+  });
+
+  it("stays complete even if the clock is still inside the window on day 1", () => {
+    const early: ChallengeConfig = { ...CFG, completedAt: "2026-08-08T10:00:00.000Z" };
+    const s = challengeStatus(early, new Date(2026, 7, 8));
+    expect(s.state).toBe("complete");
+    expect(s.dayNumber).toBe(1);
+  });
+});
+
+describe("completeChallenge / reopenChallenge", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("completes only on the explicit call, and undoes cleanly", () => {
+    setChallenge(CFG);
+    expect(challengeStatus(getChallenge(), new Date(2026, 9, 1)).state).toBe("ended");
+
+    completeChallenge(new Date("2026-09-12T10:00:00.000Z"));
+    const closed = getChallenge();
+    expect(closed.completedAt).toBe("2026-09-12T10:00:00.000Z");
+    expect(challengeStatus(closed, new Date(2026, 9, 1)).state).toBe("complete");
+
+    reopenChallenge();
+    const reopened = getChallenge();
+    expect(reopened.completedAt).toBeUndefined();
+    expect(challengeStatus(reopened, new Date(2026, 9, 1)).state).toBe("ended");
+  });
+
+  it("keeps the first completion timestamp if called twice", () => {
+    setChallenge(CFG);
+    completeChallenge(new Date("2026-09-12T10:00:00.000Z"));
+    completeChallenge(new Date("2026-09-20T10:00:00.000Z"));
+    expect(getChallenge().completedAt).toBe("2026-09-12T10:00:00.000Z");
   });
 });
 

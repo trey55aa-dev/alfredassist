@@ -92,6 +92,9 @@ export interface ChallengeConfig {
   goalId?: string;
   /** Banner color theme. Defaults to "ember" (the original fiery look). */
   color?: ChallengeColor;
+  /** ISO timestamp, set when the user closes the challenge out themselves.
+   *  Absent means not complete: a passed end date only ever reaches "ended". */
+  completedAt?: string;
 }
 
 const KEY = "alfred.challenge";
@@ -125,6 +128,22 @@ export function setChallenge(cfg: ChallengeConfig): void {
     /* quota */
   }
   window.dispatchEvent(new Event(CHALLENGE_CHANGED));
+}
+
+/** Close the challenge out. Deliberate act, never a side effect of the date
+ *  rolling over — the banner asks, the user answers. */
+export function completeChallenge(at = new Date()): void {
+  const cfg = getChallenge();
+  if (cfg.completedAt) return;
+  setChallenge({ ...cfg, completedAt: at.toISOString() });
+}
+
+/** Undo a completion — a mistaken tap is never a one-way door. */
+export function reopenChallenge(): void {
+  const cfg = getChallenge();
+  if (!cfg.completedAt) return;
+  const { completedAt: _dropped, ...rest } = cfg;
+  setChallenge(rest);
 }
 
 function subscribe(cb: () => void): () => void {
@@ -161,7 +180,9 @@ export function useChallenge(): ChallengeConfig {
   return useSyncExternalStore(subscribe, getChallengeSnapshot, () => DEFAULT_CHALLENGE);
 }
 
-export type ChallengeState = "upcoming" | "active" | "complete";
+/** "ended" = every day is behind you, but you haven't closed it out yet.
+ *  Only the user moves a challenge from "ended" to "complete". */
+export type ChallengeState = "upcoming" | "active" | "ended" | "complete";
 
 export interface ChallengeStatus {
   state: ChallengeState;
@@ -182,6 +203,19 @@ export function challengeStatus(cfg: ChallengeConfig, now = new Date()): Challen
   const today = dateOnly(now);
   const elapsedDays = Math.round((today.getTime() - start.getTime()) / 86_400_000);
 
+  // The user's own confirmation is the only thing that completes a challenge,
+  // so it outranks the calendar in both directions — including a challenge
+  // closed out early, which keeps the day it was closed on.
+  if (cfg.completedAt) {
+    return {
+      state: "complete",
+      dayNumber: Math.min(cfg.totalDays, Math.max(1, elapsedDays + 1)),
+      totalDays: cfg.totalDays,
+      daysUntilStart: 0,
+      pctElapsed: 1,
+    };
+  }
+
   if (elapsedDays < 0) {
     return {
       state: "upcoming",
@@ -193,7 +227,7 @@ export function challengeStatus(cfg: ChallengeConfig, now = new Date()): Challen
   }
   if (elapsedDays >= cfg.totalDays) {
     return {
-      state: "complete",
+      state: "ended",
       dayNumber: cfg.totalDays,
       totalDays: cfg.totalDays,
       daysUntilStart: 0,
