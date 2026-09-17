@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { challengeStatus, computeAdherence, challengeHabits, type ChallengeConfig } from "@/lib/challenge";
+import { challengeStatus, computeAdherence, challengeHabits, migrateChallenge, type ChallengeConfig } from "@/lib/challenge";
 import type { Habit, HabitLog } from "@/lib/habits";
 import type { RecurringTemplate } from "@/lib/recurring";
 
@@ -136,9 +136,15 @@ describe("challengeHabits — goal-linked challenges", () => {
   });
 
   it("linked to a goal, narrows to that goal's daily habits only", () => {
-    const linked: ChallengeConfig = { ...CFG, goalId: "g1" };
+    const linked: ChallengeConfig = { ...CFG, goalIds: ["g1"] };
     // h1 matches the goal; h2/h3 don't; h4 matches but isn't daily; h5 matches but is archived.
     expect(challengeHabits(linked, habits).map((h) => h.id)).toEqual(["h1"]);
+  });
+
+  it("linked to more than one goal, tracks daily habits feeding any of them", () => {
+    const linked: ChallengeConfig = { ...CFG, goalIds: ["g1", "g2"] };
+    // h1 feeds g1, h3 feeds g2 — both count; h2 (no goal) and h4/h5 (weekly/archived) don't.
+    expect(challengeHabits(linked, habits).map((h) => h.id).sort()).toEqual(["h1", "h3"]);
   });
 
   const weekdayBlock: RecurringTemplate = {
@@ -146,13 +152,40 @@ describe("challengeHabits — goal-linked challenges", () => {
     recurrence: "weekdays", days: [], enabled: true,
   };
 
-  it("a goal-linked challenge ignores recurring blocks in adherence — only the goal's habits count", () => {
-    const linked: ChallengeConfig = { ...CFG, goalId: "g1" };
+  it("a goal-linked challenge ignores recurring blocks in adherence — only the goals' habits count", () => {
+    const linked: ChallengeConfig = { ...CFG, goalIds: ["g1"] };
     const logs: HabitLog[] = [{ habitId: "h1", date: "2026-08-08" }];
     const completions = { "t1:2026-08-10": true as const };
     const r = computeAdherence(linked, habits, logs, [weekdayBlock], completions, new Date(2026, 7, 8));
     // Only h1 (the goal's daily habit) applies on Aug 8 — the recurring block is excluded entirely.
     expect(r.applicable).toBe(1);
     expect(r.completed).toBe(1);
+  });
+
+  it("adherence pools together the daily habits of every linked goal", () => {
+    const linked: ChallengeConfig = { ...CFG, goalIds: ["g1", "g2"] };
+    const logs: HabitLog[] = [{ habitId: "h1", date: "2026-08-08" }];
+    // h1 (g1) and h3 (g2) both apply on Aug 8; only h1 was logged.
+    const r = computeAdherence(linked, habits, logs, [], {}, new Date(2026, 7, 8));
+    expect(r.applicable).toBe(2);
+    expect(r.completed).toBe(1);
+  });
+});
+
+describe("migrateChallenge — folding the old single goalId into goalIds", () => {
+  it("leaves a plain challenge with no goal link untouched", () => {
+    expect(migrateChallenge(CFG).goalIds).toBeUndefined();
+  });
+
+  it("wraps a legacy goalId into a one-item goalIds array", () => {
+    const legacy = { ...CFG, goalId: "g1" };
+    const migrated = migrateChallenge(legacy);
+    expect(migrated.goalIds).toEqual(["g1"]);
+    expect(migrated).not.toHaveProperty("goalId");
+  });
+
+  it("prefers an already-present goalIds over a stale legacy goalId", () => {
+    const mixed = { ...CFG, goalId: "g1", goalIds: ["g2", "g3"] };
+    expect(migrateChallenge(mixed).goalIds).toEqual(["g2", "g3"]);
   });
 });

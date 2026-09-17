@@ -82,7 +82,7 @@ export default function Checklist() {
   // challenge covers every daily habit, so a badge on all of them is noise.
   const challengeHabitIds = useMemo(
     () =>
-      challenge.goalId
+      challenge.goalIds?.length
         ? new Set(challengeHabits(challenge, activeHabits).map((h) => h.id))
         : new Set<string>(),
     [challenge, activeHabits],

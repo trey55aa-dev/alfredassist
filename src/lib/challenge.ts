@@ -87,8 +87,11 @@ export interface ChallengeConfig {
   title: string;
   startDate: string; // YYYY-MM-DD, local
   totalDays: number;
-  /** Optional 2026 goal this challenge tracks. When set, adherence is scoped
-   *  to that goal's daily habits instead of the whole daily routine. */
+  /** Optional 2026 goals this challenge tracks. When set, adherence is scoped
+   *  to those goals' daily habits instead of the whole daily routine, and the
+   *  card surfaces pace feedback for each one throughout the challenge. */
+  goalIds?: string[];
+  /** @deprecated Superseded by `goalIds`. Only read for migrating old saves. */
   goalId?: string;
   /** Banner color theme. Defaults to "ember" (the original fiery look). */
   color?: ChallengeColor;
@@ -104,6 +107,14 @@ export const DEFAULT_CHALLENGE: ChallengeConfig = {
   color: "ember",
 };
 
+/** Pure so it's testable without localStorage: folds the old single-goal
+ *  `goalId` field into `goalIds` for a save written before multi-goal support. */
+export function migrateChallenge(parsed: Partial<ChallengeConfig>): ChallengeConfig {
+  const { goalId, ...rest } = parsed;
+  const goalIds = rest.goalIds ?? (goalId ? [goalId] : undefined);
+  return { ...rest, goalIds } as ChallengeConfig;
+}
+
 export function getChallenge(): ChallengeConfig {
   if (typeof window === "undefined") return DEFAULT_CHALLENGE;
   try {
@@ -111,7 +122,7 @@ export function getChallenge(): ChallengeConfig {
     if (!raw) return DEFAULT_CHALLENGE;
     const parsed = JSON.parse(raw) as Partial<ChallengeConfig>;
     if (!parsed.title || !parsed.startDate || !parsed.totalDays) return DEFAULT_CHALLENGE;
-    return parsed as ChallengeConfig;
+    return migrateChallenge(parsed);
   } catch {
     return DEFAULT_CHALLENGE;
   }
@@ -226,8 +237,9 @@ export interface AdherenceResult {
  * instead of "everything you do."
  */
 export function challengeHabits(cfg: ChallengeConfig, habits: Habit[]): Habit[] {
+  const goalIds = cfg.goalIds ?? [];
   return habits.filter(
-    (h) => !h.archived && h.cadence === "daily" && (!cfg.goalId || h.goalId === cfg.goalId),
+    (h) => !h.archived && h.cadence === "daily" && (goalIds.length === 0 || (!!h.goalId && goalIds.includes(h.goalId))),
   );
 }
 
@@ -235,8 +247,8 @@ export function challengeHabits(cfg: ChallengeConfig, habits: Habit[]): Habit[] 
  * "The routine" = every daily habit this challenge tracks (see
  * `challengeHabits`) plus, when no goal is linked, every enabled recurring
  * block on the days it's scheduled — the same set that already drives the
- * Dashboard's Daily Protocol ring. A goal-linked challenge sticks to that
- * goal's habits only, since a recurring calendar block isn't attributable to
+ * Dashboard's Daily Protocol ring. A goal-linked challenge sticks to those
+ * goals' habits only, since a recurring calendar block isn't attributable to
  * any one goal. Walks from the challenge's start date through today (or the
  * challenge's last day, whichever is sooner), so a still-in-progress today
  * counts partially rather than waiting for midnight.
@@ -258,7 +270,7 @@ export function computeAdherence(
   const end = today < lastPossible ? today : lastPossible;
 
   const dailyHabits = challengeHabits(cfg, habits);
-  const enabledTemplates = cfg.goalId ? [] : templates.filter((t) => t.enabled);
+  const enabledTemplates = (cfg.goalIds?.length ?? 0) > 0 ? [] : templates.filter((t) => t.enabled);
 
   let completed = 0;
   let applicable = 0;

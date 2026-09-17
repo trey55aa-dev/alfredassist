@@ -20,6 +20,7 @@ import {
 } from "@/lib/challenge";
 import { currentStreakFor, isCompleteForPeriod, type Habit, type HabitLog } from "@/lib/habits";
 import type { Goal } from "@/lib/goals";
+import { computeProjection, type ProjectionStatus } from "@/lib/goalsHistory";
 import { getDailyFeedback, setDailyFeedback } from "@/lib/dailyFeedback";
 import { todayKey } from "@/lib/alfred";
 import { loadTemplates, loadCompletions, RECURRING_CHANGED } from "@/lib/recurring";
@@ -67,7 +68,10 @@ export function ChallengeHeader({
   const status = challengeStatus(cfg);
   const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
 
-  const linkedGoal = goals.find((g) => g.id === cfg.goalId);
+  const linkedGoals = useMemo(
+    () => goals.filter((g) => (cfg.goalIds ?? []).includes(g.id)),
+    [goals, cfg.goalIds],
+  );
   const trackedHabits = useMemo(() => challengeHabits(cfg, habits), [cfg, habits]);
   const doneToday = useMemo(
     () => trackedHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
@@ -201,23 +205,44 @@ export function ChallengeHeader({
                   </div>
                   <div className="space-y-1.5">
                     <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
-                      Link to a 2026 goal (optional)
+                      Link to 2026 goals (optional)
                     </label>
-                    <select
-                      value={draft.goalId ?? ""}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, goalId: e.target.value || undefined }))
-                      }
-                      className="w-full bg-background/60 border border-border rounded-md px-2 py-2 text-xs font-mono uppercase tracking-wider text-foreground focus:outline-none focus:ring-2 focus:ring-gold/40"
-                    >
-                      <option value="">No goal — track full routine</option>
-                      {goals.map((g) => (
-                        <option key={g.id} value={g.id}>{g.title}</option>
-                      ))}
-                    </select>
+                    {goals.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
+                        {goals.map((g) => {
+                          const selected = (draft.goalIds ?? []).includes(g.id);
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() =>
+                                setDraft((d) => {
+                                  const cur = d.goalIds ?? [];
+                                  const next = selected
+                                    ? cur.filter((id) => id !== g.id)
+                                    : [...cur, g.id];
+                                  return { ...d, goalIds: next.length > 0 ? next : undefined };
+                                })
+                              }
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border transition-all ${
+                                selected
+                                  ? "bg-gold text-primary-foreground border-gold"
+                                  : "bg-background/40 border-border text-muted-foreground hover:border-gold/40 hover:text-foreground"
+                              }`}
+                            >
+                              {g.title}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/70">No 2026 goals yet.</p>
+                    )}
                     <p className="text-[10px] text-muted-foreground/60 leading-snug">
-                      Linked, this challenge only tracks daily habits that feed that goal —
-                      not your whole routine.
+                      Linked, this challenge only tracks daily habits that feed these goals — not
+                      your whole routine — and shows pace feedback for each one below. Leave empty
+                      to track everything.
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -261,19 +286,24 @@ export function ChallengeHeader({
             {fmtDate(cfg.startDate)} – {fmtDate(addDays(cfg.startDate, cfg.totalDays - 1))} · {stateLine}
           </p>
           <p className="flex items-center gap-1.5 text-xs text-white/55 mt-1">
-            {linkedGoal ? (
+            {linkedGoals.length > 0 ? (
               trackedHabits.length > 0 ? (
                 <>
                   <TargetIcon className="h-3 w-3 shrink-0" />
                   Tracking {trackedHabits.length} habit{trackedHabits.length === 1 ? "" : "s"} for{" "}
-                  <span className="text-white/80">{linkedGoal.title}</span>
+                  <span className="text-white/80">
+                    {linkedGoals.map((g) => g.title).join(", ")}
+                  </span>
                 </>
               ) : (
                 <>
                   <TargetIcon className="h-3 w-3 shrink-0" />
                   No daily habits feed{" "}
-                  <span className="text-white/80">{linkedGoal.title}</span> yet — add one below and
-                  link it to this goal.
+                  <span className="text-white/80">
+                    {linkedGoals.map((g) => g.title).join(", ")}
+                  </span>{" "}
+                  yet — add one below and link it to{" "}
+                  {linkedGoals.length === 1 ? "this goal" : "one of these goals"}.
                 </>
               )
             ) : (
@@ -384,7 +414,7 @@ export function ChallengeHeader({
         </div>
       )}
 
-      {status.state !== "upcoming" && adherence.applicable > 0 && (
+      {status.state === "active" && adherence.applicable > 0 && (
         <>
           <div className="relative mt-5 h-1.5 rounded-full bg-white/15 overflow-hidden">
             <div
@@ -396,10 +426,21 @@ export function ChallengeHeader({
             />
           </div>
           <p className="relative mt-2 font-mono text-[9px] tracking-[0.2em] uppercase text-white/60">
-            {Math.round(adherence.pct * 100)}% of {linkedGoal ? "these habits" : "your routine"} actually
+            {Math.round(adherence.pct * 100)}% of {linkedGoals.length > 0 ? "these habits" : "your routine"} actually
             done so far ({adherence.completed}/{adherence.applicable})
           </p>
         </>
+      )}
+
+      {status.state !== "upcoming" && linkedGoals.length > 0 && (
+        <div className="relative mt-5 space-y-2">
+          <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-white/55">
+            Goal feedback
+          </p>
+          {linkedGoals.map((g) => (
+            <GoalFeedbackRow key={g.id} goal={g} habits={habits} habitLogs={habitLogs} />
+          ))}
+        </div>
       )}
 
       {status.state === "complete" && rewardIdea && (
@@ -417,6 +458,103 @@ export function ChallengeHeader({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Readable-on-the-gradient colors for each pace status — a softer palette
+ *  than the app's normal dark-background tones (text-destructive etc.),
+ *  which wash out against the challenge card's own colored background. */
+function feedbackTone(status: ProjectionStatus): string {
+  switch (status) {
+    case "complete":
+    case "ahead":
+      return "text-emerald-300";
+    case "on_pace":
+      return "text-teal-200";
+    case "behind":
+      return "text-amber-300";
+    case "behind_critical":
+    case "missing":
+      return "text-rose-300";
+    default:
+      return "text-white/60";
+  }
+}
+
+/**
+ * One line of pace feedback per linked goal, shown for as long as the
+ * challenge is running (and after, so the final read stands). Measurable
+ * goals (a numeric target) get the same on-pace/behind projection used on
+ * the Goals page. A streak-type or unmeasured goal falls back to today's
+ * completion count across its own habits, since there's no rate to project.
+ */
+function GoalFeedbackRow({
+  goal,
+  habits,
+  habitLogs,
+}: {
+  goal: Goal;
+  habits: Habit[];
+  habitLogs: HabitLog[];
+}) {
+  const hasTarget = typeof goal.target === "number" && goal.target > 0 && !goal.done;
+  const goalHabits = useMemo(
+    () => habits.filter((h) => !h.archived && h.cadence === "daily" && h.goalId === goal.id),
+    [habits, goal.id],
+  );
+
+  if (hasTarget) {
+    const projection = computeProjection(goal);
+    return (
+      <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+        <span className="text-base leading-none shrink-0 mt-0.5">{goal.emoji ?? "🎯"}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-white/90 font-medium truncate">{goal.title}</span>
+            <span className={`font-mono text-[9px] tracking-wider uppercase ${feedbackTone(projection.status)}`}>
+              {projection.label}
+            </span>
+          </div>
+          {projection.detail && (
+            <p className="text-xs text-white/55 mt-0.5 leading-snug">{projection.detail}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (goal.done) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+        <span className="text-base leading-none shrink-0">{goal.emoji ?? "🎯"}</span>
+        <span className="text-sm text-white/90 font-medium truncate flex-1">{goal.title}</span>
+        <span className="font-mono text-[9px] tracking-wider uppercase text-emerald-300">Complete</span>
+      </div>
+    );
+  }
+
+  const doneToday = goalHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length;
+  const streaks = goalHabits.map((h) => currentStreakFor(h, habitLogs));
+  const minStreak = streaks.length > 0 ? Math.min(...streaks) : 0;
+
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+      <span className="text-base leading-none shrink-0 mt-0.5">{goal.emoji ?? "🎯"}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-white/90 font-medium truncate">{goal.title}</span>
+          {goalHabits.length > 0 && (
+            <span className="font-mono text-[9px] tracking-wider uppercase text-white/60">
+              {doneToday}/{goalHabits.length} today
+              {minStreak > 0 ? ` · 🔥 ${minStreak}` : ""}
+            </span>
+          )}
+        </div>
+        {goalHabits.length === 0 && (
+          <p className="text-xs text-white/55 mt-0.5">No daily habits feed this goal yet.</p>
+        )}
+      </div>
     </div>
   );
 }
