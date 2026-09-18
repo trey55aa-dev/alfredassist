@@ -6,6 +6,7 @@ import {
   type HabitLog,
   currentStreakFor,
   longestStreakFor,
+  isPeriodDone,
 } from "./habits";
 import { todayKey } from "./alfred";
 
@@ -32,11 +33,17 @@ function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/** Set of YYYY-MM-DD strings this habit was logged on. */
+/** Set of YYYY-MM-DD strings this habit was logged on (checkin mode only — see `isDayDone`). */
 export function completedDates(habit: Habit, logs: HabitLog[]): Set<string> {
   const set = new Set<string>();
-  for (const l of logs) if (l.habitId === habit.id) set.add(l.date);
+  for (const l of logs) if (l.habitId === habit.id && !l.missed) set.add(l.date);
   return set;
+}
+
+/** Whether a single calendar day (YYYY-MM-DD) counts as done — mode-aware
+ *  wrapper around `isPeriodDone` for the daily-centric calendar/stats views. */
+function isDayDone(habit: Habit, logs: HabitLog[], dateYmd: string): boolean {
+  return isPeriodDone(habit, logs, parseYmd(dateYmd));
 }
 
 /** Effective tracking start: createdAt, else earliest log, else today. */
@@ -69,12 +76,13 @@ export function monthCells(
   month: number,
   today = new Date(),
 ): DayCell[] {
-  const set = completedDates(habit, logs);
   const start = habitStart(habit, logs);
   const startYmd = ymd(start);
   const todayY = todayKey(today);
+  const auto = habit.habitMode === "auto";
   // Yesterday gets a one-day grace: still uncounted, but not yet a "miss" — you
   // may just have forgotten to tick it. It firms up to "missed" the day after.
+  // (Not needed in "auto" mode — absence already defaults to done there.)
   const yesterdayY = ymd(addDays(startOfDay(today), -1));
   const daily = habit.cadence === "daily";
 
@@ -86,12 +94,16 @@ export function monthCells(
     const date = addDays(gridStart, i);
     const key = ymd(date);
     const inMonth = date.getMonth() === month;
-    const done = set.has(key);
+    const done = isDayDone(habit, logs, key);
     const ts = times[`${habit.id}|${key}`];
 
     let state: DayState;
-    if (done) state = "done";
-    else if (key > todayY) state = "future";
+    if (key > todayY) state = "future";
+    else if (auto) {
+      if (key < startYmd) state = "none";
+      else state = done ? "done" : "missed";
+    }
+    else if (done) state = "done";
     else if (key === todayY) state = "today";
     else if (daily && key >= startYmd) state = key >= yesterdayY ? "pending" : "missed";
     else state = "none"; // non-daily empty day, or before tracking began
@@ -135,19 +147,19 @@ export function computeHabitStats(
   times: Record<string, number>,
   today = new Date(),
 ): HabitStats {
-  const set = completedDates(habit, logs);
   const daily = habit.cadence === "daily";
   const todayMid = startOfDay(today);
   const todayY = todayKey(today);
+  const auto = habit.habitMode === "auto";
 
   // ── streaks (cadence-aware, reuse existing math) ──
   const current = currentStreakFor(habit, logs, today);
-  const longest = Math.max(longestStreakFor(habit, logs), current);
+  const longest = Math.max(longestStreakFor(habit, logs, today), current);
 
   // ── rolling windows (by calendar day) ──
   const countLastDays = (n: number) => {
     let c = 0;
-    for (let i = 0; i < n; i++) if (set.has(ymd(addDays(todayMid, -i)))) c++;
+    for (let i = 0; i < n; i++) if (isDayDone(habit, logs, ymd(addDays(todayMid, -i)))) c++;
     return c;
   };
   const last7Done = countLastDays(7);
@@ -167,20 +179,29 @@ export function computeHabitStats(
     // year window: yearStart .. today inclusive
     for (let d = new Date(yearStart), i = 0; d <= todayMid && i < MAX_DAYS; d = addDays(d, 1), i++) {
       yearElapsed++;
-      if (set.has(ymd(d))) yearDone++;
+      if (isDayDone(habit, logs, ymd(d))) yearDone++;
     }
     // total misses: start .. two days ago. Today is still pending and yesterday
     // sits in its one-day grace window, so neither counts as a miss yet.
     const graceCutoff = addDays(todayMid, -2);
     for (let d = new Date(start), i = 0; d <= graceCutoff && i < MAX_DAYS; d = addDays(d, 1), i++) {
-      if (!set.has(ymd(d))) {
+      if (!isDayDone(habit, logs, ymd(d))) {
         totalMisses++;
         missesByWeekday[d.getDay()]++;
       }
     }
   }
 
-  const totalCompleted = [...set].filter((k) => k <= todayY).length;
+  // "auto" mode habits are presumed done by default, so completions aren't a
+  // finite logged set — derive the count from elapsed days minus explicit misses.
+  const totalCompleted = auto
+    ? (() => {
+        let elapsed = 0;
+        for (let d = new Date(start), i = 0; d <= todayMid && i < MAX_DAYS; d = addDays(d, 1), i++) elapsed++;
+        const missedCount = logs.filter((l) => l.habitId === habit.id && l.missed && l.date <= todayY).length;
+        return Math.max(0, elapsed - missedCount);
+      })()
+    : [...completedDates(habit, logs)].filter((k) => k <= todayY).length;
   const yearPct = yearElapsed > 0 ? Math.round((yearDone / yearElapsed) * 100) : 0;
 
   let worstWeekday: number | null = null;
@@ -197,7 +218,7 @@ export function computeHabitStats(
   for (const k of Object.keys(times)) {
     if (!k.startsWith(`${habit.id}|`)) continue;
     const date = k.slice(habit.id.length + 1);
-    if (!set.has(date)) continue; // only count hours for days that are actually completed
+    if (!isDayDone(habit, logs, date)) continue; // only count hours for days that are actually completed
     const h = new Date(times[k]).getHours();
     hourHist[h]++;
     timedCount++;
@@ -256,7 +277,6 @@ export function yearHeatmap(
   today = new Date(),
   days = 365,
 ): YearHeatmap {
-  const set = completedDates(habit, logs);
   const todayMid = startOfDay(today);
   const start = habitStart(habit, logs);
   const rangeStart = addDays(todayMid, -(days - 1));
@@ -266,7 +286,7 @@ export function yearHeatmap(
   let totalDone = 0;
   for (let d = new Date(alignedStart); d <= todayMid; d = addDays(d, 1)) {
     const key = ymd(d);
-    const done = set.has(key);
+    const done = isDayDone(habit, logs, key);
     const inRange = d >= start;
     if (done && d >= rangeStart) totalDone++;
     cells.push({ date: new Date(d), ymd: key, done, inRange });

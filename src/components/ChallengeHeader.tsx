@@ -13,6 +13,7 @@ import {
   challengeStatus,
   challengeHabits,
   computeAdherence,
+  challengeReset,
   challengeTheme,
   CHALLENGE_THEMES,
   CHALLENGE_COLORS,
@@ -53,24 +54,34 @@ export function ChallengeHeader({
   habitLogs,
   goals,
   onToggleHabit,
+  onLogMilestone,
 }: {
   habits: Habit[];
   habitLogs: HabitLog[];
   goals: Goal[];
   /** Tick a habit straight from the challenge card. Omit to render read-only. */
   onToggleHabit?: (habit: Habit) => void;
+  /** Log a discrete milestone (e.g. "finished a book") for a goal-linked habit. */
+  onLogMilestone?: (habit: Habit) => void;
 }) {
   const cfg = useChallenge();
   const theme = challengeTheme(cfg);
   const [draft, setDraft] = useState(cfg);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const status = challengeStatus(cfg);
   const [rewardIdea, setRewardIdea] = useState(() => suggestRewards(undefined, 1)[0] ?? "");
 
+  // Which 2026 goals this challenge feeds is derived automatically from the
+  // habits themselves (any daily habit linked to a goal) — no separate
+  // "attach this challenge to a goal" step. The goal is the source of truth;
+  // the challenge just shows what's actually feeding it.
+  const goalLinkedHabits = useMemo(
+    () => habits.filter((h) => !h.archived && h.cadence === "daily" && h.goalId),
+    [habits],
+  );
   const linkedGoals = useMemo(
-    () => goals.filter((g) => (cfg.goalIds ?? []).includes(g.id)),
-    [goals, cfg.goalIds],
+    () => goals.filter((g) => goalLinkedHabits.some((h) => h.goalId === g.id)),
+    [goals, goalLinkedHabits],
   );
   const trackedHabits = useMemo(() => challengeHabits(cfg, habits), [cfg, habits]);
   const doneToday = useMemo(
@@ -88,15 +99,6 @@ export function ChallengeHeader({
     setDailyFeedback(dateStr, text);
   };
 
-  // One-time huge XP award on completion. Idempotent via the earned-badges
-  // set, so a remount (or the challenge staying "complete" for weeks) never
-  // re-fires — only the transition into "complete" the first time does.
-  useEffect(() => {
-    if (status.state !== "complete") return;
-    if (getGamification().earnedBadges.includes("challenge_complete")) return;
-    awardXp(XP_VALUES.CHALLENGE_COMPLETE, "challenge", { challengeComplete: true });
-  }, [status.state]);
-
   // Recurring templates/completions live in plain localStorage, not a hook —
   // re-read on the same change event the rest of the app already listens for.
   const [recurringTick, setRecurringTick] = useState(0);
@@ -106,10 +108,31 @@ export function ChallengeHeader({
     return () => window.removeEventListener(RECURRING_CHANGED, onChange);
   }, []);
 
-  const adherence = useMemo(
-    () => computeAdherence(cfg, habits, habitLogs, loadTemplates(), loadCompletions()),
+  // A miss-streak reset (see `resetAfterMisses`) restarts the day count —
+  // computed here, never mutated back into the saved config, so it's always
+  // a live, reversible read of the actual history.
+  const reset = useMemo(
+    () => challengeReset(cfg, habits, habitLogs, loadTemplates(), loadCompletions()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cfg, habits, habitLogs, recurringTick],
+  );
+  const effectiveCfg: ChallengeConfig =
+    reset.effectiveStart !== cfg.startDate ? { ...cfg, startDate: reset.effectiveStart } : cfg;
+  const status = challengeStatus(effectiveCfg);
+
+  // One-time huge XP award on completion. Idempotent via the earned-badges
+  // set, so a remount (or the challenge staying "complete" for weeks) never
+  // re-fires — only the transition into "complete" the first time does.
+  useEffect(() => {
+    if (status.state !== "complete") return;
+    if (getGamification().earnedBadges.includes("challenge_complete")) return;
+    awardXp(XP_VALUES.CHALLENGE_COMPLETE, "challenge", { challengeComplete: true });
+  }, [status.state]);
+
+  const adherence = useMemo(
+    () => computeAdherence(effectiveCfg, habits, habitLogs, loadTemplates(), loadCompletions()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [effectiveCfg, habits, habitLogs, recurringTick],
   );
 
   const save = () => {
@@ -205,44 +228,58 @@ export function ChallengeHeader({
                   </div>
                   <div className="space-y-1.5">
                     <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
-                      Link to 2026 goals (optional)
+                      Feeding 2026 goals
                     </label>
-                    {goals.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-                        {goals.map((g) => {
-                          const selected = (draft.goalIds ?? []).includes(g.id);
-                          return (
-                            <button
-                              key={g.id}
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() =>
-                                setDraft((d) => {
-                                  const cur = d.goalIds ?? [];
-                                  const next = selected
-                                    ? cur.filter((id) => id !== g.id)
-                                    : [...cur, g.id];
-                                  return { ...d, goalIds: next.length > 0 ? next : undefined };
-                                })
-                              }
-                              className={`rounded-full px-2.5 py-1 text-[10px] font-mono border transition-all ${
-                                selected
-                                  ? "bg-gold text-primary-foreground border-gold"
-                                  : "bg-background/40 border-border text-muted-foreground hover:border-gold/40 hover:text-foreground"
-                              }`}
-                            >
-                              {g.title}
-                            </button>
-                          );
-                        })}
+                    {linkedGoals.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linkedGoals.map((g) => (
+                          <span
+                            key={g.id}
+                            className="rounded-full px-2.5 py-1 text-[10px] font-mono border bg-background/40 border-border text-muted-foreground"
+                          >
+                            {g.title}
+                          </span>
+                        ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground/70">No 2026 goals yet.</p>
+                      <p className="text-xs text-muted-foreground/70">
+                        None yet — link a daily habit to a 2026 goal (in the habit's own settings) and
+                        it shows up here automatically.
+                      </p>
                     )}
                     <p className="text-[10px] text-muted-foreground/60 leading-snug">
-                      Linked, this challenge only tracks daily habits that feed these goals — not
-                      your whole routine — and shows pace feedback for each one below. Leave empty
-                      to track everything.
+                      This is automatic — whichever goal a daily habit is linked to, that goal shows up
+                      here with its own progress. Nothing to pick.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground/70">
+                      Restart the count after missing this many days in a row
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {[undefined, 1, 2, 3, 4, 5, 6, 7].map((n) => {
+                        const selected = (draft.resetAfterMisses ?? undefined) === n;
+                        return (
+                          <button
+                            key={n ?? "never"}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setDraft((d) => ({ ...d, resetAfterMisses: n }))}
+                            className={`h-7 min-w-7 px-1.5 rounded-lg text-[10px] font-mono border transition-all ${
+                              selected
+                                ? "bg-gold text-primary-foreground border-gold"
+                                : "bg-background/40 border-border text-muted-foreground hover:border-gold/40 hover:text-foreground"
+                            }`}
+                          >
+                            {n ?? "Off"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60 leading-snug">
+                      A fully blank day (nothing on the routine done at all — a partial day never
+                      counts) that many times in a row restarts Day 1. Today is never judged until
+                      it's over. "Off" (default) never restarts on its own.
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -283,33 +320,35 @@ export function ChallengeHeader({
             </Popover>
           </div>
           <p className="text-sm text-white/70 mt-1">
-            {fmtDate(cfg.startDate)} – {fmtDate(addDays(cfg.startDate, cfg.totalDays - 1))} · {stateLine}
+            {fmtDate(effectiveCfg.startDate)} – {fmtDate(addDays(effectiveCfg.startDate, effectiveCfg.totalDays - 1))} ·{" "}
+            {stateLine}
           </p>
           <p className="flex items-center gap-1.5 text-xs text-white/55 mt-1">
+            <TargetIcon className="h-3 w-3 shrink-0" />
             {linkedGoals.length > 0 ? (
-              trackedHabits.length > 0 ? (
-                <>
-                  <TargetIcon className="h-3 w-3 shrink-0" />
-                  Tracking {trackedHabits.length} habit{trackedHabits.length === 1 ? "" : "s"} for{" "}
-                  <span className="text-white/80">
-                    {linkedGoals.map((g) => g.title).join(", ")}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <TargetIcon className="h-3 w-3 shrink-0" />
-                  No daily habits feed{" "}
-                  <span className="text-white/80">
-                    {linkedGoals.map((g) => g.title).join(", ")}
-                  </span>{" "}
-                  yet — add one below and link it to{" "}
-                  {linkedGoals.length === 1 ? "this goal" : "one of these goals"}.
-                </>
-              )
+              <>
+                Feeding{" "}
+                <span className="text-white/80">{linkedGoals.map((g) => g.title).join(", ")}</span>
+              </>
             ) : (
-              <>Tracking your full daily routine — link a goal to narrow this down.</>
+              <>Link a daily habit to a 2026 goal and it'll show up here.</>
             )}
           </p>
+          {reset.resetCount > 0 && (
+            <p className="flex items-center gap-1.5 text-xs text-amber-200/80 mt-1">
+              Restarted {reset.resetCount} time{reset.resetCount === 1 ? "" : "s"} — this run began{" "}
+              {fmtDate(reset.effectiveStart)}, sir. The earlier days still count in your history below.
+            </p>
+          )}
+          {reset.resetCount === 0 && reset.currentMissStreak > 0 && cfg.resetAfterMisses && (
+            <p className="flex items-center gap-1.5 text-xs text-white/55 mt-1">
+              {reset.currentMissStreak} blank day{reset.currentMissStreak === 1 ? "" : "s"} in a row —{" "}
+              {cfg.resetAfterMisses - reset.currentMissStreak === 1
+                ? "one more and it restarts"
+                : `${cfg.resetAfterMisses - reset.currentMissStreak} more and it restarts`}
+              . Anything today undoes it.
+            </p>
+          )}
         </div>
 
         <div className="text-right shrink-0">
@@ -320,6 +359,36 @@ export function ChallengeHeader({
           <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-white/60 mt-1">Day</p>
         </div>
       </div>
+
+      {/* This IS the challenge, front and center: what's actually feeding each
+          2026 goal, given the same visual weight as "Habits at risk" — not a
+          buried footnote below a day counter. */}
+      {status.state !== "upcoming" && linkedGoals.length > 0 && (
+        <div className="relative mt-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-10 w-10 rounded-md bg-white/10 flex items-center justify-center shrink-0">
+              <TargetIcon className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-display text-xl text-white leading-tight">Moving your goals</h3>
+              <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-white/55 mt-0.5">
+                {linkedGoals.length} goal{linkedGoals.length === 1 ? "" : "s"} fed by this campaign
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {linkedGoals.map((g) => (
+              <GoalFeedbackRow
+                key={g.id}
+                goal={g}
+                habits={habits}
+                habitLogs={habitLogs}
+                onLogMilestone={onLogMilestone}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Today's list — what this challenge actually asks of you right now. */}
       {status.state === "active" && trackedHabits.length > 0 && (
@@ -432,17 +501,6 @@ export function ChallengeHeader({
         </>
       )}
 
-      {status.state !== "upcoming" && linkedGoals.length > 0 && (
-        <div className="relative mt-5 space-y-2">
-          <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-white/55">
-            Goal feedback
-          </p>
-          {linkedGoals.map((g) => (
-            <GoalFeedbackRow key={g.id} goal={g} habits={habits} habitLogs={habitLogs} />
-          ))}
-        </div>
-      )}
-
       {status.state === "complete" && rewardIdea && (
         <div className="relative mt-5 flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5">
           <p className="text-sm text-white/85 min-w-0">
@@ -493,15 +551,31 @@ function GoalFeedbackRow({
   goal,
   habits,
   habitLogs,
+  onLogMilestone,
 }: {
   goal: Goal;
   habits: Habit[];
   habitLogs: HabitLog[];
+  onLogMilestone?: (habit: Habit) => void;
 }) {
   const hasTarget = typeof goal.target === "number" && goal.target > 0 && !goal.done;
   const goalHabits = useMemo(
     () => habits.filter((h) => !h.archived && h.cadence === "daily" && h.goalId === goal.id),
     [habits, goal.id],
+  );
+  // Any one of the goal's habits works as the milestone target — they all
+  // feed the same goal, so which one logs the "+1" is arbitrary.
+  const milestoneHabit = goalHabits[0];
+
+  const milestoneButton = onLogMilestone && milestoneHabit && (
+    <button
+      type="button"
+      onClick={() => onLogMilestone(milestoneHabit)}
+      title={`Log +${milestoneHabit.goalIncrement ?? 1} toward ${goal.title} — a one-off, not tied to today's habit tick`}
+      className="shrink-0 h-7 px-2 rounded-lg border border-white/25 bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all font-mono text-[10px] font-semibold"
+    >
+      +{milestoneHabit.goalIncrement ?? 1}
+    </button>
   );
 
   if (hasTarget) {
@@ -520,6 +594,7 @@ function GoalFeedbackRow({
             <p className="text-xs text-white/55 mt-0.5 leading-snug">{projection.detail}</p>
           )}
         </div>
+        {milestoneButton}
       </div>
     );
   }

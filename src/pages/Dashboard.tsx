@@ -33,13 +33,15 @@ import {
   toggleHabitForToday,
 } from "@/lib/habits";
 import { applyHabitToggle } from "@/lib/habitToggle";
+import { awardXp, progressXp } from "@/lib/gamification";
+import { toast } from "sonner";
 import { useCloudHabits } from "@/hooks/useCloudHabits";
 import { useCloudGoals } from "@/hooks/useCloudGoals";
 import { RecoveryPanel } from "@/components/RecoveryPanel";
 import { TodayAgendaCard } from "@/components/TodayAgendaCard";
 import { TodayNowNext } from "@/components/TodayNowNext";
 import { useAuth } from "@/hooks/useAuth";
-import { computeProjection } from "@/lib/goalsHistory";
+import { computeProjection, logProgress } from "@/lib/goalsHistory";
 import { ProgressRing } from "@/components/ProgressRing";
 import { GoalEmoji } from "@/components/GoalEmoji";
 import { OnboardingWizard, ONBOARDED_KEY } from "@/components/OnboardingWizard";
@@ -301,6 +303,23 @@ export default function Dashboard() {
           const next = applyHabitToggle(habit, habitLogs, goals);
           setHabitLogs(next.logs);
           if (next.goals !== goals) setGoals(next.goals);
+        }}
+        onLogMilestone={(habit) => {
+          const goal = goals.find((g) => g.id === habit.goalId);
+          if (!goal) return;
+          const delta = habit.goalIncrement ?? 1;
+          const next = logProgress({ goal, delta });
+          setGoals(
+            goals.map((g) =>
+              g.id === goal.id
+                ? { ...g, current: next.current, progressLog: next.progressLog, lastCheckIn: next.lastCheckIn, localUpdatedAt: Date.now() }
+                : g,
+            ),
+          );
+          const xp = progressXp(delta, goal.target);
+          awardXp(xp, "progress", { goalCurrent: next.current, unit: goal.unit ?? "" });
+          const u = goal.unit ? ` ${goal.unit}` : "";
+          toast.success(`+${delta}${u} logged toward ${goal.title}`, { duration: 2500 });
         }}
       />
 

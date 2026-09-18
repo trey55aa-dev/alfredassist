@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { awardXp, makeUpMissedDay, XP_VALUES } from "@/lib/gamification";
+import { awardXp, makeUpMissedDay, progressXp, XP_VALUES } from "@/lib/gamification";
 import { toast } from "sonner";
 import { Plus, Flame, Target as TargetIcon, ChevronRight, ArrowRight, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -129,6 +129,26 @@ export default function Checklist() {
     if (!isCompleteForPeriod(habit, logs)) handleToggle(habit);
   };
 
+  // A discrete milestone (e.g. "finished a book") on a goal-linked habit —
+  // independent of today's tick, since finishing isn't a daily occurrence.
+  const handleLogMilestone = (habit: Habit) => {
+    const goal = goals.find((g) => g.id === habit.goalId);
+    if (!goal) return;
+    const delta = habit.goalIncrement ?? 1;
+    const next = logProgress({ goal, delta });
+    setGoals(
+      goals.map((g) =>
+        g.id === goal.id
+          ? { ...g, current: next.current, progressLog: next.progressLog, lastCheckIn: next.lastCheckIn, localUpdatedAt: Date.now() }
+          : g,
+      ),
+    );
+    const xp = progressXp(delta, goal.target);
+    awardXp(xp, "progress", { goalCurrent: next.current, unit: goal.unit ?? "" });
+    const u = goal.unit ? ` ${goal.unit}` : "";
+    toast.success(`+${delta}${u} logged toward ${goal.title}`, { duration: 2500 });
+  };
+
   // Edit history from the calendar: backfill a missed day or undo a stray tick.
   const handleToggleDate = (habit: Habit, dateYmd: string) => {
     // Editing *today* runs the full flow (streak, XP, linked-goal, completion time).
@@ -181,6 +201,7 @@ export default function Checklist() {
         habitLogs={logs}
         goals={goals}
         onToggleHabit={handleToggle}
+        onLogMilestone={handleLogMilestone}
       />
 
       {/* Recovery */}
@@ -229,6 +250,7 @@ export default function Checklist() {
               challengeHabitIds={challengeHabitIds}
               onToggle={handleToggle}
               onOpen={(h) => setSelectedId(h.id)}
+              onLogMilestone={handleLogMilestone}
             />
           </TabsContent>
         ))}
@@ -385,6 +407,7 @@ function CadenceSection({
   challengeHabitIds,
   onToggle,
   onOpen,
+  onLogMilestone,
 }: {
   cadence: Cadence;
   habits: Habit[];
@@ -393,6 +416,7 @@ function CadenceSection({
   challengeHabitIds: Set<string>;
   onToggle: (h: Habit) => void;
   onOpen: (h: Habit) => void;
+  onLogMilestone: (h: Habit) => void;
 }) {
   if (habits.length === 0) {
     return (
@@ -426,6 +450,7 @@ function CadenceSection({
             inChallenge={challengeHabitIds.has(h.id)}
             onToggle={() => onToggle(h)}
             onOpen={() => onOpen(h)}
+            onLogMilestone={() => onLogMilestone(h)}
           />
         ))}
       </ul>
@@ -442,6 +467,7 @@ function HabitRow({
   inChallenge,
   onToggle,
   onOpen,
+  onLogMilestone,
 }: {
   habit: Habit;
   logs: HabitLog[];
@@ -449,11 +475,13 @@ function HabitRow({
   inChallenge: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onLogMilestone: () => void;
 }) {
   const done = isCompleteForPeriod(habit, logs);
   const streak = currentStreakFor(habit, logs);
   const week = last7Periods(habit, logs);
   const linkedGoal = goals.find((g) => g.id === habit.goalId);
+  const auto = habit.habitMode === "auto";
 
   return (
     <li
@@ -467,6 +495,7 @@ function HabitRow({
         <Checkbox
           checked={done}
           onCheckedChange={onToggle}
+          title={auto ? (done ? "Tap to mark today missed" : "Tap to clear the miss") : undefined}
           className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground"
         />
         <button onClick={onOpen} className="flex-1 min-w-0 text-left group">
@@ -479,6 +508,14 @@ function HabitRow({
               {habit.title}
             </span>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {auto && (
+                <span
+                  title="Counted done automatically until marked missed"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-[0.15em] bg-teal/10 text-teal border-teal/30"
+                >
+                  Auto
+                </span>
+              )}
               {inChallenge && (
                 <span
                   title="Counts toward the active challenge"
@@ -519,6 +556,20 @@ function HabitRow({
             ))}
           </div>
         </button>
+        {/* A discrete milestone (e.g. "finished a book") independent of today's tick */}
+        {linkedGoal && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onLogMilestone();
+            }}
+            title={`Log +${habit.goalIncrement ?? 1} toward ${linkedGoal.title} (doesn't affect today's tick)`}
+            className="shrink-0 h-8 px-2.5 rounded-lg border border-gold/30 bg-gold/10 text-gold hover:bg-gold/25 active:scale-95 transition-all font-mono text-[11px] font-semibold"
+          >
+            +{habit.goalIncrement ?? 1}
+          </button>
+        )}
       </div>
     </li>
   );

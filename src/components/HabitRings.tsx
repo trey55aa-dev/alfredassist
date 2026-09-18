@@ -42,12 +42,17 @@ export function HabitRings({
         const done = isCompleteForPeriod(h, logs);
         const streak = currentStreakFor(h, logs);
         const color = colorForHabit(h.id);
+        const auto = h.habitMode === "auto";
         return (
           <button
             key={h.id}
             type="button"
             onClick={() => onToggle(h)}
-            title={`${h.title} — tap to ${done ? "undo" : "mark done"}`}
+            title={
+              auto
+                ? `${h.title} — counted automatically. Tap to ${done ? "mark missed" : "clear the miss"}.`
+                : `${h.title} — tap to ${done ? "undo" : "mark done"}`
+            }
             className="flex flex-col items-center gap-1.5 w-16 active:scale-95 transition-transform"
           >
             <ProgressRing

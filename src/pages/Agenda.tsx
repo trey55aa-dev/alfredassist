@@ -373,6 +373,23 @@ export default function Agenda() {
           setHabitLogs(next.logs);
           if (next.goals !== goals) setGoals(next.goals);
         }}
+        onLogMilestone={(habit) => {
+          const goal = goals.find((g) => g.id === habit.goalId);
+          if (!goal) return;
+          const delta = habit.goalIncrement ?? 1;
+          const next = logProgress({ goal, delta });
+          setGoals(
+            goals.map((g) =>
+              g.id === goal.id
+                ? { ...g, current: next.current, progressLog: next.progressLog, lastCheckIn: next.lastCheckIn, localUpdatedAt: Date.now() }
+                : g,
+            ),
+          );
+          const xp = progressXp(delta, goal.target);
+          awardXp(xp, "progress", { goalCurrent: next.current, unit: goal.unit ?? "" });
+          const u = goal.unit ? ` ${goal.unit}` : "";
+          toast({ title: `+${delta}${u} logged toward ${goal.title}` });
+        }}
       />
 
       {/* Hero — current / next */}

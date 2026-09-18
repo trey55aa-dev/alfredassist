@@ -4,7 +4,7 @@
 
 import { useSyncExternalStore } from "react";
 import { todayKey } from "./alfred";
-import type { Habit, HabitLog } from "./habits";
+import { isCompleteForPeriod, type Habit, type HabitLog } from "./habits";
 import { isApplicableToDate, type RecurringTemplate } from "./recurring";
 
 /** Color themes for the challenge banner. Keyed so only the id is persisted;
@@ -95,6 +95,13 @@ export interface ChallengeConfig {
   goalId?: string;
   /** Banner color theme. Defaults to "ember" (the original fiery look). */
   color?: ChallengeColor;
+  /**
+   * Optional: restart the day count from Day 1 after this many consecutive
+   * fully-blank days (1-7) — every tracked habit missed, none of the day's
+   * routine done at all. A partial day (something done) never counts toward
+   * this. Undefined/0 = never auto-reset.
+   */
+  resetAfterMisses?: number;
 }
 
 const KEY = "alfred.challenge";
@@ -280,7 +287,7 @@ export function computeAdherence(
 
     for (const h of dailyHabits) {
       applicable++;
-      if (habitLogs.some((l) => l.habitId === h.id && l.date === dateStr)) completed++;
+      if (isCompleteForPeriod(h, habitLogs, cursor)) completed++;
     }
 
     for (const t of enabledTemplates) {
@@ -291,4 +298,82 @@ export function computeAdherence(
   }
 
   return { completed, applicable, pct: applicable > 0 ? completed / applicable : 0 };
+}
+
+/* ---------- Miss-streak reset: restart the count after too many blank days ---------- */
+
+export interface ChallengeResetInfo {
+  /** The start date the day-count should actually be measured from — the
+   *  original `cfg.startDate`, unless a miss-streak reset moved it forward. */
+  effectiveStart: string; // YYYY-MM-DD
+  /** How many times this challenge has auto-reset so far. */
+  resetCount: number;
+  /** Consecutive fully-blank days counting back from yesterday (today is
+   *  never judged — grace before penalty — so this never includes it). */
+  currentMissStreak: number;
+}
+
+const NO_RESET: ChallengeResetInfo = { effectiveStart: "", resetCount: 0, currentMissStreak: 0 };
+
+/**
+ * Walks the challenge day-by-day from its original start, restarting the
+ * count whenever `cfg.resetAfterMisses` consecutive fully-blank days occur
+ * (zero of the tracked routine done, not just under target). Grace before
+ * penalty: today is never judged blank until it's over, so a reset only
+ * ever fires off fully-elapsed days, and the trailing (not-yet-reset) streak
+ * is surfaced separately so the UI can warn before it actually fires.
+ */
+export function challengeReset(
+  cfg: ChallengeConfig,
+  habits: Habit[],
+  habitLogs: HabitLog[],
+  templates: RecurringTemplate[],
+  completions: Record<string, true>,
+  now = new Date(),
+): ChallengeResetInfo {
+  const threshold = cfg.resetAfterMisses;
+  const start = dateOnly(new Date(cfg.startDate + "T00:00:00"));
+  const today = dateOnly(now);
+  if (!threshold || threshold < 1 || today <= start) {
+    return { ...NO_RESET, effectiveStart: cfg.startDate };
+  }
+
+  const dailyHabits = challengeHabits(cfg, habits);
+  const enabledTemplates = (cfg.goalIds?.length ?? 0) > 0 ? [] : templates.filter((t) => t.enabled);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  let effectiveStart = new Date(start);
+  let missStreak = 0;
+  let resetCount = 0;
+
+  for (const cursor = new Date(start); cursor <= yesterday; cursor.setDate(cursor.getDate() + 1)) {
+    const dateStr = todayKey(cursor);
+    let applicable = 0;
+    let completed = 0;
+    for (const h of dailyHabits) {
+      applicable++;
+      if (isCompleteForPeriod(h, habitLogs, cursor)) completed++;
+    }
+    for (const t of enabledTemplates) {
+      if (!isApplicableToDate(t, cursor)) continue;
+      applicable++;
+      if (completions[`${t.id}:${dateStr}`]) completed++;
+    }
+    const blank = applicable > 0 && completed === 0;
+    if (blank) {
+      missStreak++;
+      if (missStreak >= threshold) {
+        resetCount++;
+        missStreak = 0;
+        const next = new Date(cursor);
+        next.setDate(next.getDate() + 1);
+        effectiveStart = next; // the day after the miss streak becomes the new Day 1
+      }
+    } else {
+      missStreak = 0;
+    }
+  }
+
+  return { effectiveStart: todayKey(effectiveStart), resetCount, currentMissStreak: missStreak };
 }

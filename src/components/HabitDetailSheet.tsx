@@ -210,6 +210,7 @@ function CalendarTab({
       {/* Selected-day inspector / editor */}
       <DayDetail
         cell={selectedCell}
+        auto={habit.habitMode === "auto"}
         onToggle={() => selectedCell && onToggleDate(habit, selectedCell.ymd)}
       />
     </div>
@@ -286,7 +287,15 @@ function DayCircle({
 
 /* ─── Selected-day inspector + editor ───────────────────── */
 
-function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => void }) {
+function DayDetail({
+  cell,
+  auto,
+  onToggle,
+}: {
+  cell: DayCell | null;
+  auto: boolean;
+  onToggle: () => void;
+}) {
   if (!cell) {
     return (
       <p className="text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/45 pt-1">
@@ -303,7 +312,9 @@ function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => v
     day: "numeric",
   });
   const stateLabel = done
-    ? "Completed"
+    ? auto
+      ? "Counted automatically"
+      : "Completed"
     : isToday
       ? "Not done yet today"
       : cell.state === "pending"
@@ -330,7 +341,11 @@ function DayDetail({ cell, onToggle }: { cell: DayCell | null; onToggle: () => v
             : "bg-gradient-gold text-primary-foreground shadow-gold hover:opacity-90"
         }`}
       >
-        {done ? <><X className="h-3.5 w-3.5" /> Undo</> : <><Check className="h-3.5 w-3.5" /> Mark done</>}
+        {done ? (
+          <><X className="h-3.5 w-3.5" /> {auto ? "Mark missed" : "Undo"}</>
+        ) : (
+          <><Check className="h-3.5 w-3.5" /> {auto ? "Clear miss" : "Mark done"}</>
+        )}
       </button>
     </div>
   );
@@ -604,6 +619,27 @@ function SettingsTab({
           options={["", ...goals.map((g) => g.id)]}
           render={(v) => (v === "" ? "None" : goals.find((g) => g.id === v)?.title ?? "—")}
         />
+      </div>
+
+      <div className="rounded-xl border border-border/60 bg-white/3 p-3 space-y-2">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={habit.habitMode === "auto"}
+            onChange={(e) => onUpdate(habit.id, { habitMode: e.target.checked ? "auto" : "checkin" })}
+            className="mt-0.5 h-4 w-4 rounded border-border/60 accent-gold"
+          />
+          <span>
+            <span className="block font-mono text-[10px] tracking-[0.2em] uppercase text-foreground">
+              Auto-count as done
+            </span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Skip the daily tap — this counts as done automatically every day until you tell Alfred
+              it wasn't. Good for a "still going" streak (like an abstinence habit) instead of a
+              daily check-in.
+            </span>
+          </span>
+        </label>
       </div>
 
       {linkedGoal && (

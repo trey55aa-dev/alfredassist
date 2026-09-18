@@ -30,12 +30,23 @@ export interface Habit {
   recoverySteps?: string[]; // user-defined "what to do to get back on track"
   createdAt: number;
   archived?: boolean;
+  /**
+   * "checkin" (default, omitted): the period counts done only once tapped.
+   * "auto": the period is presumed done automatically — every day from
+   * creation through today counts as complete unless explicitly marked
+   * missed. Powers habits framed as "still going unless you say otherwise"
+   * (e.g. an abstinence streak) without requiring a daily tap.
+   */
+  habitMode?: "checkin" | "auto";
 }
 
 /** A single tick of a habit on a specific date. */
 export interface HabitLog {
   habitId: string;
   date: string; // YYYY-MM-DD
+  /** Set only for "auto"-mode habits: an explicit override marking this
+   *  period as NOT done, rebutting the default presumption of completion. */
+  missed?: boolean;
 }
 
 export const HABITS_KEY = "alfred.habits";
@@ -197,14 +208,51 @@ export function previousPeriodDate(cadence: Cadence, date: Date): Date {
 
 /* ---------- Streak math ---------- */
 
-/** Build a Set of period-keys this habit was completed in. */
+/** Safety cap on dense period-by-period walks for "auto" mode habits (~10 years of daily periods). */
+const MAX_AUTO_PERIODS = 3660;
+
+/** Build a Set of period-keys this habit was completed in (checkin mode only — see `isPeriodDone`). */
 function completedPeriods(habit: Habit, logs: HabitLog[]): Set<string> {
   const set = new Set<string>();
   for (const l of logs) {
-    if (l.habitId !== habit.id) continue;
+    if (l.habitId !== habit.id || l.missed) continue;
     set.add(periodKey(habit.cadence, new Date(l.date + "T00:00:00")));
   }
   return set;
+}
+
+/** Whether `habit` has an explicit "missed" log for the period containing `date`. */
+function hasMissedLog(habit: Habit, logs: HabitLog[], date: Date): boolean {
+  const key = periodKey(habit.cadence, date);
+  return logs.some(
+    (l) =>
+      l.habitId === habit.id &&
+      l.missed &&
+      periodKey(habit.cadence, new Date(l.date + "T00:00:00")) === key
+  );
+}
+
+/**
+ * Whether the period containing `date` counts as done for `habit`.
+ * - "checkin" (default): done only if a plain (non-missed) log exists for it.
+ * - "auto": presumed done for every period from the habit's creation through
+ *   today, unless explicitly marked missed — see `Habit.habitMode`.
+ */
+export function isPeriodDone(habit: Habit, logs: HabitLog[], date: Date): boolean {
+  if (habit.habitMode === "auto") {
+    if (habit.createdAt) {
+      const createdKey = periodKey(habit.cadence, new Date(habit.createdAt));
+      if (periodKey(habit.cadence, date) < createdKey) return false;
+    }
+    return !hasMissedLog(habit, logs, date);
+  }
+  const key = periodKey(habit.cadence, date);
+  return logs.some(
+    (l) =>
+      l.habitId === habit.id &&
+      !l.missed &&
+      periodKey(habit.cadence, new Date(l.date + "T00:00:00")) === key
+  );
 }
 
 export function isCompleteForPeriod(
@@ -212,16 +260,23 @@ export function isCompleteForPeriod(
   logs: HabitLog[],
   date = new Date()
 ): boolean {
-  const key = periodKey(habit.cadence, date);
-  return logs.some(
-    (l) =>
-      l.habitId === habit.id &&
-      periodKey(habit.cadence, new Date(l.date + "T00:00:00")) === key
-  );
+  return isPeriodDone(habit, logs, date);
 }
 
 /** Consecutive completed periods ending at the current period (or the previous one if current isn't done yet). */
 export function currentStreakFor(habit: Habit, logs: HabitLog[], today = new Date()): number {
+  if (habit.habitMode === "auto") {
+    // No "still pending today" grace here — marking today missed is a
+    // deliberate action (not an ambiguous absence), so it breaks the streak
+    // immediately rather than waiting for tomorrow to notice.
+    let cursor = new Date(today);
+    let count = 0;
+    for (let i = 0; i < MAX_AUTO_PERIODS && isPeriodDone(habit, logs, cursor); i++) {
+      count++;
+      cursor = previousPeriodDate(habit.cadence, cursor);
+    }
+    return count;
+  }
   const set = completedPeriods(habit, logs);
   let cursor = new Date(today);
   // anchor: include current period if done; otherwise start from previous
@@ -236,12 +291,29 @@ export function currentStreakFor(habit: Habit, logs: HabitLog[], today = new Dat
   return count;
 }
 
-export function longestStreakFor(habit: Habit, logs: HabitLog[]): number {
+export function longestStreakFor(habit: Habit, logs: HabitLog[], today = new Date()): number {
+  if (habit.habitMode === "auto") {
+    // Dense walk backward from today through creation (presumed-done by
+    // default) — direction doesn't matter for a longest-run computation.
+    let cursor = new Date(today);
+    let best = 0;
+    let run = 0;
+    for (let i = 0; i < MAX_AUTO_PERIODS; i++) {
+      if (isPeriodDone(habit, logs, cursor)) {
+        run++;
+        if (run > best) best = run;
+      } else {
+        run = 0;
+      }
+      cursor = previousPeriodDate(habit.cadence, cursor);
+    }
+    return best;
+  }
   const set = completedPeriods(habit, logs);
   if (set.size === 0) return 0;
   // sort dates of logs ascending; walk and check period continuity
   const dates = logs
-    .filter((l) => l.habitId === habit.id)
+    .filter((l) => l.habitId === habit.id && !l.missed)
     .map((l) => new Date(l.date + "T00:00:00"))
     .sort((a, b) => +a - +b);
   let best = 0;
@@ -268,6 +340,14 @@ export function longestStreakFor(habit: Habit, logs: HabitLog[]): number {
 
 /** How many full periods have elapsed since this habit was last completed. 0 = current period done; 1 = missed last period; etc. */
 export function periodsSinceLast(habit: Habit, logs: HabitLog[], today = new Date()): number {
+  if (habit.habitMode === "auto") {
+    let cursor = new Date(today);
+    for (let i = 0; i < MAX_AUTO_PERIODS; i++) {
+      if (isPeriodDone(habit, logs, cursor)) return i;
+      cursor = previousPeriodDate(habit.cadence, cursor);
+    }
+    return Infinity;
+  }
   const set = completedPeriods(habit, logs);
   if (set.size === 0) return Infinity;
   let cursor = new Date(today);
@@ -286,13 +366,12 @@ export function last7Periods(
   logs: HabitLog[],
   today = new Date()
 ): { key: string; done: boolean; isCurrent: boolean }[] {
-  const set = completedPeriods(habit, logs);
   const currentKey = periodKey(habit.cadence, today);
   const out: { key: string; done: boolean; isCurrent: boolean }[] = [];
   let cursor = new Date(today);
   for (let i = 0; i < 7; i++) {
     const k = periodKey(habit.cadence, cursor);
-    out.unshift({ key: k, done: set.has(k), isCurrent: k === currentKey });
+    out.unshift({ key: k, done: isPeriodDone(habit, logs, cursor), isCurrent: k === currentKey });
     cursor = previousPeriodDate(habit.cadence, cursor);
   }
   return out;
@@ -369,11 +448,9 @@ export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()
     missed === Infinity
       ? null
       : (() => {
-          const set = completedPeriods(habit, logs);
           let cursor = anchor;
           for (let i = 0; i < 366; i++) {
-            const k = periodKey(habit.cadence, cursor);
-            if (set.has(k)) return k;
+            if (isPeriodDone(habit, logs, cursor)) return periodKey(habit.cadence, cursor);
             cursor = previousPeriodDate(habit.cadence, cursor);
           }
           return null;
@@ -410,8 +487,28 @@ export function toggleHabitForToday(
   logs: HabitLog[],
   today = new Date()
 ): { logs: HabitLog[]; nowComplete: boolean } {
-  const isDone = isCompleteForPeriod(habit, logs, today);
   const key = periodKey(habit.cadence, today);
+  if (habit.habitMode === "auto") {
+    // Presumed done by default — tapping records the exception, not the norm.
+    const wasDone = isPeriodDone(habit, logs, today);
+    if (wasDone) {
+      return {
+        logs: [...logs, { habitId: habit.id, date: todayKey(today), missed: true }],
+        nowComplete: false,
+      };
+    }
+    // Already marked missed — clear the override, back to presumed done.
+    const next = logs.filter(
+      (l) =>
+        !(
+          l.habitId === habit.id &&
+          l.missed &&
+          periodKey(habit.cadence, new Date(l.date + "T00:00:00")) === key
+        )
+    );
+    return { logs: next, nowComplete: true };
+  }
+  const isDone = isCompleteForPeriod(habit, logs, today);
   if (isDone) {
     // remove every log of this habit that falls in current period
     const next = logs.filter(
