@@ -302,6 +302,9 @@ export default function Dashboard() {
           setHabitLogs(next.logs);
           if (next.goals !== goals) setGoals(next.goals);
         }}
+        onAddHabit={(h) =>
+          setHabits([...habits, { ...h, id: crypto.randomUUID(), createdAt: Date.now() }])
+        }
       />
 
       {/* Right now / Up next */}

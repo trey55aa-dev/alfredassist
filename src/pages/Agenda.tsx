@@ -92,7 +92,7 @@ export default function Agenda() {
   );
   const { user } = useAuth();
   const { pushCompletionOp } = useRecurringSync(user?.id);
-  const { habits, habitLogs, setHabitLogs } = useCloudHabits();
+  const { habits, setHabits, habitLogs, setHabitLogs } = useCloudHabits();
   const { goals, setGoals } = useCloudGoals();
   const recoveries = useMemo(
     () => habitsAtRisk(habits, habitLogs, now),
@@ -373,6 +373,9 @@ export default function Agenda() {
           setHabitLogs(next.logs);
           if (next.goals !== goals) setGoals(next.goals);
         }}
+        onAddHabit={(h) =>
+          setHabits([...habits, { ...h, id: crypto.randomUUID(), createdAt: Date.now() }])
+        }
       />
 
       {/* Hero — current / next */}

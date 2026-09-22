@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flame, Pencil, Shuffle, Target as TargetIcon, Check, ChevronDown } from "lucide-react";
+import { Flame, Pencil, Shuffle, Target as TargetIcon, Check, ChevronDown, Plus } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -53,12 +53,15 @@ export function ChallengeHeader({
   habitLogs,
   goals,
   onToggleHabit,
+  onAddHabit,
 }: {
   habits: Habit[];
   habitLogs: HabitLog[];
   goals: Goal[];
   /** Tick a habit straight from the challenge card. Omit to render read-only. */
   onToggleHabit?: (habit: Habit) => void;
+  /** Add a new daily habit straight from the card. Omit to hide the add row. */
+  onAddHabit?: (habit: Omit<Habit, "id" | "createdAt">) => void;
 }) {
   const cfg = useChallenge();
   const theme = challengeTheme(cfg);
@@ -77,6 +80,27 @@ export function ChallengeHeader({
     () => trackedHabits.filter((h) => isCompleteForPeriod(h, habitLogs)).length,
     [trackedHabits, habitLogs],
   );
+
+  // Add-a-habit row — which linked goal a new habit feeds, when there's more
+  // than one to choose from.
+  const [newHabitTitle, setNewHabitTitle] = useState("");
+  const [newHabitGoalId, setNewHabitGoalId] = useState<string>(() => linkedGoals[0]?.id ?? "");
+  useEffect(() => {
+    if (linkedGoals.length > 0 && !linkedGoals.some((g) => g.id === newHabitGoalId)) {
+      setNewHabitGoalId(linkedGoals[0].id);
+    }
+  }, [linkedGoals, newHabitGoalId]);
+
+  const addHabitToChallenge = () => {
+    const title = newHabitTitle.trim();
+    if (!title || !onAddHabit) return;
+    onAddHabit({
+      title,
+      cadence: "daily",
+      goalId: linkedGoals.length > 0 ? newHabitGoalId : undefined,
+    });
+    setNewHabitTitle("");
+  };
 
   // Today's recap note. Same store the Agenda's recap card writes to, so this
   // is one note about the day rather than a second copy of it.
@@ -322,7 +346,7 @@ export function ChallengeHeader({
       </div>
 
       {/* Today's list — what this challenge actually asks of you right now. */}
-      {status.state === "active" && trackedHabits.length > 0 && (
+      {status.state === "active" && (trackedHabits.length > 0 || !!onAddHabit) && (
         <div className="relative mt-5">
           <button
             type="button"
@@ -331,7 +355,9 @@ export function ChallengeHeader({
             className="w-full flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-left hover:bg-white/10 transition-colors"
           >
             <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-white/75">
-              Today · {doneToday}/{trackedHabits.length} done
+              {trackedHabits.length > 0
+                ? `Today · ${doneToday}/${trackedHabits.length} done`
+                : "No habits linked yet — add one"}
             </span>
             <span className="flex items-center gap-1.5 shrink-0 font-mono text-[9px] uppercase tracking-wider text-white/55">
               {expanded ? "Hide" : "Show"}
@@ -392,6 +418,42 @@ export function ChallengeHeader({
                 );
               })}
               </ul>
+
+              {onAddHabit && (
+                <div className="mt-3 flex gap-2">
+                  {linkedGoals.length > 1 && (
+                    <select
+                      value={newHabitGoalId}
+                      onChange={(e) => setNewHabitGoalId(e.target.value)}
+                      aria-label="Which goal this habit feeds"
+                      className="shrink-0 max-w-[9rem] rounded-xl border border-white/15 bg-black/20 px-2 text-xs text-white/80 outline-none focus:border-white/35"
+                    >
+                      {linkedGoals.map((g) => (
+                        <option key={g.id} value={g.id} className="text-black">
+                          {g.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    value={newHabitTitle}
+                    onChange={(e) => setNewHabitTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addHabitToChallenge()}
+                    placeholder="Add a habit to this challenge…"
+                    className="flex-1 min-w-0 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white/90 placeholder:text-white/35 outline-none transition-colors focus:border-white/35"
+                  />
+                  <button
+                    type="button"
+                    onClick={addHabitToChallenge}
+                    disabled={!newHabitTitle.trim()}
+                    aria-label="Add habit"
+                    title="Add habit"
+                    className="shrink-0 flex items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-white/80 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
 
               <div className="mt-3">
                 <label

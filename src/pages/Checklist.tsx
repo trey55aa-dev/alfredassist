@@ -181,6 +181,7 @@ export default function Checklist() {
         habitLogs={logs}
         goals={goals}
         onToggleHabit={handleToggle}
+        onAddHabit={addHabit}
       />
 
       {/* Recovery */}
