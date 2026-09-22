@@ -42,6 +42,7 @@ const SYNCED_KEYS = [
   "alfred.rewardPrefs",     // string[] of reward tags — treat-yourself suggestions follow you
   "alfred.goalTargets",     // GoalDailyTarget[] — daily sub-goals hanging off a 2026 goal
   "alfred.goalTargetLog",   // { targetId|date: entry } — each day's answer to them
+  "alfred.dailyHighlight",  // { date: text } — the day's "one thing" set each morning
 ];
 
 // Extra change events to fire after adopting a cloud value, so a screen that's

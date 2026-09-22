@@ -20,6 +20,10 @@ import {
   LineChart,
   Smile,
   Link2,
+  Sunrise,
+  Moon,
+  Star,
+  Plug,
 } from "lucide-react";
 
 export interface NavItem {
@@ -45,14 +49,17 @@ export const NAV_CATEGORIES: NavCategory[] = [
     items: [{ title: "Dashboard", url: "/", icon: LayoutDashboard }],
   },
   {
-    id: "today",
-    label: "Today",
+    id: "day",
+    label: "Day",
     icon: CalendarDays,
     items: [
-      { title: "Agenda",          url: "/agenda",    icon: CalendarDays },
-      { title: "Daily Schedule",  url: "/schedule",  icon: Repeat },
-      { title: "Daily Checklist", url: "/checklist", icon: CheckSquare },
-      { title: "Focus Timer",     url: "/focus",     icon: Timer },
+      { title: "Daily Planning",  url: "/daily-planning",  icon: Sunrise },
+      { title: "Agenda",          url: "/agenda",          icon: CalendarDays },
+      { title: "Daily Schedule",  url: "/schedule",        icon: Repeat },
+      { title: "Daily Task List", url: "/checklist",       icon: CheckSquare },
+      { title: "Focus Timer",     url: "/focus",           icon: Timer },
+      { title: "Daily Shutdown",  url: "/daily-shutdown",  icon: Moon },
+      { title: "Daily Highlights", url: "/daily-highlights", icon: Star },
     ],
   },
   {
@@ -67,16 +74,23 @@ export const NAV_CATEGORIES: NavCategory[] = [
     ],
   },
   {
+    id: "week",
+    label: "Week",
+    icon: CalendarRange,
+    items: [
+      { title: "Weekly Planning", url: "/planner", icon: CalendarRange },
+      { title: "Weekly Review",   url: "/review",  icon: LineChart },
+    ],
+  },
+  {
     id: "goals",
     label: "Goals",
     icon: Target,
     items: [
-      { title: "2026 Goals",     url: "/goals-2026",   icon: Target },
-      { title: "Weekly Review",  url: "/review",       icon: LineChart },
-      { title: "Weekly Planner", url: "/planner",      icon: CalendarRange },
-      { title: "Health",         url: "/health",       icon: Activity },
-      { title: "Mood",           url: "/mood",         icon: Smile },
-      { title: "Achievements",   url: "/achievements", icon: Trophy },
+      { title: "2026 Goals",   url: "/goals-2026",   icon: Target },
+      { title: "Health",       url: "/health",       icon: Activity },
+      { title: "Mood",         url: "/mood",         icon: Smile },
+      { title: "Achievements", url: "/achievements", icon: Trophy },
     ],
   },
   {
@@ -84,6 +98,12 @@ export const NAV_CATEGORIES: NavCategory[] = [
     label: "Guide",
     icon: BookOpen,
     items: [{ title: "Feature Guide", url: "/guide", icon: BookOpen }],
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Plug,
+    items: [{ title: "Integrations", url: "/integrations", icon: Plug }],
   },
 ];
 

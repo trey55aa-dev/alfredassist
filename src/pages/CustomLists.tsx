@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Plus,
   Trash2,
@@ -8,6 +8,9 @@ import {
   ListChecks,
   GripVertical,
   Palette,
+  Clock,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -23,10 +26,15 @@ import {
 import {
   CustomList,
   CustomListItem,
+  CustomListSubtask,
+  ESTIMATE_PRESETS_MIN,
   LIST_COLORS,
   LIST_EMOJIS,
+  formatMinutes,
+  listMinutesSummary,
   newItem,
   newList,
+  newSubtask,
 } from "@/lib/customLists";
 import { useCloudCustomLists } from "@/hooks/useCloudCustomLists";
 
@@ -117,6 +125,9 @@ function ListCard({
   const done = list.items.filter((i) => i.done).length;
   const total = list.items.length;
   const pct = total ? Math.round((done / total) * 100) : 0;
+
+  const { totalMinutes, doneMinutes } = listMinutesSummary(list);
+  const minutesPct = totalMinutes ? Math.round((doneMinutes / totalMinutes) * 100) : 0;
 
   const accent = list.color ?? LIST_COLORS[0].value;
 
@@ -286,6 +297,19 @@ function ListCard({
         <Progress value={pct} className="h-1" />
       </div>
 
+      {/* Time budget — only shown once at least one item carries an estimate */}
+      {totalMinutes > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-1.5">
+            <Clock className="h-3 w-3" />
+            <span>
+              {formatMinutes(doneMinutes)} of {formatMinutes(totalMinutes)} done
+            </span>
+          </div>
+          <Progress value={minutesPct} className="h-1" />
+        </div>
+      )}
+
       {/* Items */}
       <ul className="space-y-1.5 mb-3">
         {list.items.map((item) => (
@@ -296,6 +320,7 @@ function ListCard({
             onToggle={() => updateItem(item.id, { done: !item.done })}
             onEdit={(text) => updateItem(item.id, { text })}
             onDelete={() => deleteItem(item.id)}
+            onUpdateItem={(patch) => updateItem(item.id, patch)}
           />
         ))}
         {list.items.length === 0 && (
@@ -345,15 +370,19 @@ function ListItemRow({
   onToggle,
   onEdit,
   onDelete,
+  onUpdateItem,
 }: {
   item: CustomListItem;
   accent: string;
   onToggle: () => void;
   onEdit: (text: string) => void;
   onDelete: () => void;
+  onUpdateItem: (patch: Partial<CustomListItem>) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.text);
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const [newSubtaskText, setNewSubtaskText] = useState("");
 
   const save = () => {
     const t = draft.trim();
@@ -362,58 +391,203 @@ function ListItemRow({
     setEditing(false);
   };
 
+  const subtasks = item.subtasks ?? [];
+  const subtasksDone = subtasks.filter((s) => s.done).length;
+
+  const setEstimate = (min: number | undefined) => onUpdateItem({ estimatedMinutes: min });
+
+  const addSubtask = () => {
+    if (!newSubtaskText.trim()) return;
+    onUpdateItem({ subtasks: [...subtasks, newSubtask(newSubtaskText)] });
+    setNewSubtaskText("");
+  };
+  const toggleSubtask = (id: string) =>
+    onUpdateItem({
+      subtasks: subtasks.map((s) => (s.id === id ? { ...s, done: !s.done } : s)),
+    });
+  const deleteSubtask = (id: string) =>
+    onUpdateItem({ subtasks: subtasks.filter((s) => s.id !== id) });
+
   return (
     <li
-      className={`group flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${
+      className={`group rounded-md transition-colors ${
         item.done ? "bg-muted/30" : "hover:bg-background/40"
       }`}
     >
-      <GripVertical className="h-3 w-3 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-      <Checkbox
-        checked={item.done}
-        onCheckedChange={onToggle}
-        className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground flex-shrink-0"
-        style={
-          item.done
-            ? ({ borderColor: `hsl(${accent})`, background: `hsl(${accent})` } as React.CSSProperties)
-            : undefined
-        }
-      />
-      {editing ? (
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") save();
-            if (e.key === "Escape") {
-              setDraft(item.text);
-              setEditing(false);
-            }
-          }}
-          autoFocus
-          className="h-7 text-sm bg-background/60 border-border focus-visible:ring-gold/40 focus-visible:border-gold/40"
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <GripVertical className="h-3 w-3 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+        <Checkbox
+          checked={item.done}
+          onCheckedChange={onToggle}
+          className="border-gold/40 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground flex-shrink-0"
+          style={
+            item.done
+              ? ({ borderColor: `hsl(${accent})`, background: `hsl(${accent})` } as React.CSSProperties)
+              : undefined
+          }
         />
-      ) : (
+        {editing ? (
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") {
+                setDraft(item.text);
+                setEditing(false);
+              }
+            }}
+            autoFocus
+            className="h-7 text-sm bg-background/60 border-border focus-visible:ring-gold/40 focus-visible:border-gold/40"
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setDraft(item.text);
+              setEditing(true);
+            }}
+            className={`flex-1 text-left text-sm truncate ${
+              item.done ? "line-through text-muted-foreground" : "text-foreground"
+            }`}
+          >
+            {item.text}
+          </button>
+        )}
+
+        {/* Subtasks toggle */}
         <button
-          onClick={() => {
-            setDraft(item.text);
-            setEditing(true);
-          }}
-          className={`flex-1 text-left text-sm truncate ${
-            item.done ? "line-through text-muted-foreground" : "text-foreground"
+          onClick={() => setSubtasksOpen((v) => !v)}
+          className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[9px] transition-colors flex-shrink-0 ${
+            subtasks.length > 0
+              ? "text-muted-foreground hover:text-gold"
+              : "text-muted-foreground/0 group-hover:text-muted-foreground/50 hover:text-gold"
           }`}
+          title={subtasks.length > 0 ? `${subtasksDone}/${subtasks.length} steps` : "Add steps"}
         >
-          {item.text}
+          {subtasksOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          {subtasks.length > 0 && (
+            <span>
+              {subtasksDone}/{subtasks.length}
+            </span>
+          )}
         </button>
+
+        {/* Time estimate */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className={`px-1.5 py-0.5 rounded font-mono text-[9px] tracking-wider transition-colors flex-shrink-0 ${
+                item.estimatedMinutes
+                  ? "text-gold border border-gold/30 bg-gold/10"
+                  : "text-muted-foreground/0 group-hover:text-muted-foreground/50 hover:text-gold border border-transparent"
+              }`}
+              title="Set a time estimate"
+            >
+              {item.estimatedMinutes ? formatMinutes(item.estimatedMinutes) : <Clock className="h-3 w-3" />}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 bg-popover border-border" align="end">
+            <p className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground mb-2">
+              How long will this take?
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ESTIMATE_PRESETS_MIN.map((min) => (
+                <button
+                  key={min}
+                  onClick={() => setEstimate(min)}
+                  className={`px-2 py-1 rounded font-mono text-[10px] transition-colors ${
+                    item.estimatedMinutes === min
+                      ? "bg-gold text-primary-foreground"
+                      : "bg-muted/40 text-muted-foreground hover:text-gold"
+                  }`}
+                >
+                  {formatMinutes(min)}
+                </button>
+              ))}
+            </div>
+            {item.estimatedMinutes !== undefined && (
+              <button
+                onClick={() => setEstimate(undefined)}
+                className="mt-2 font-mono text-[9px] tracking-wider uppercase text-muted-foreground hover:text-destructive"
+              >
+                Clear estimate
+              </button>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        <button
+          onClick={onDelete}
+          className="p-1 text-muted-foreground/40 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          aria-label="Delete item"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+
+      {subtasksOpen && (
+        <div className="pl-9 pr-2 pb-2 space-y-1">
+          {subtasks.map((s) => (
+            <SubtaskRow
+              key={s.id}
+              subtask={s}
+              onToggle={() => toggleSubtask(s.id)}
+              onDelete={() => deleteSubtask(s.id)}
+            />
+          ))}
+          <div className="flex gap-1.5">
+            <Input
+              value={newSubtaskText}
+              onChange={(e) => setNewSubtaskText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+              placeholder="Add a step…"
+              className="h-6 text-xs bg-background/40 border-border focus-visible:ring-gold/40 focus-visible:border-gold/40"
+            />
+            <button
+              onClick={addSubtask}
+              disabled={!newSubtaskText.trim()}
+              className="px-2 text-muted-foreground hover:text-gold disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
       )}
+    </li>
+  );
+}
+
+function SubtaskRow({
+  subtask,
+  onToggle,
+  onDelete,
+}: {
+  subtask: CustomListSubtask;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="group/sub flex items-center gap-2">
+      <Checkbox
+        checked={subtask.done}
+        onCheckedChange={onToggle}
+        className="h-3.5 w-3.5 border-border/60 data-[state=checked]:bg-gold data-[state=checked]:text-primary-foreground flex-shrink-0"
+      />
+      <span
+        className={`flex-1 text-xs truncate ${
+          subtask.done ? "line-through text-muted-foreground" : "text-foreground/80"
+        }`}
+      >
+        {subtask.text}
+      </span>
       <button
         onClick={onDelete}
-        className="p-1 text-muted-foreground/40 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-        aria-label="Delete item"
+        className="p-0.5 text-muted-foreground/40 hover:text-destructive opacity-0 group-hover/sub:opacity-100 transition-opacity flex-shrink-0"
+        aria-label="Delete step"
       >
-        <Trash2 className="h-3 w-3" />
+        <X className="h-3 w-3" />
       </button>
-    </li>
+    </div>
   );
 }

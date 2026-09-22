@@ -28,6 +28,10 @@ const Schedule = lazy(() => import("./pages/Schedule"));
 const Review = lazy(() => import("./pages/Review"));
 const Mood = lazy(() => import("./pages/Mood"));
 const Notion = lazy(() => import("./pages/Notion"));
+const DailyPlanning = lazy(() => import("./pages/DailyPlanning"));
+const DailyShutdown = lazy(() => import("./pages/DailyShutdown"));
+const DailyHighlights = lazy(() => import("./pages/DailyHighlights"));
+const Integrations = lazy(() => import("./pages/Integrations"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
@@ -57,6 +61,10 @@ function usePrefetchRoutes() {
         import("./pages/Review"),
         import("./pages/Mood"),
         import("./pages/Notion"),
+        import("./pages/DailyPlanning"),
+        import("./pages/DailyShutdown"),
+        import("./pages/DailyHighlights"),
+        import("./pages/Integrations"),
       ]);
     };
     if ("requestIdleCallback" in window) {
@@ -113,6 +121,10 @@ const App = () => {
                 <Route path="/review" element={<Review />} />
                 <Route path="/mood" element={<Mood />} />
                 <Route path="/notion" element={<Notion />} />
+                <Route path="/daily-planning" element={<DailyPlanning />} />
+                <Route path="/daily-shutdown" element={<DailyShutdown />} />
+                <Route path="/daily-highlights" element={<DailyHighlights />} />
+                <Route path="/integrations" element={<Integrations />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
