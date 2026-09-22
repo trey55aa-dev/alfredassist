@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Play, Pause, RotateCcw, Maximize2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,19 @@ export default function Focus() {
   const [duration, setDuration] = useState(25 * 60);
   const [remaining, setRemaining] = useState(25 * 60);
   const [running, setRunning] = useState(false);
+  const [zen, setZen] = useState(false);
   const tickRef = useRef<number | null>(null);
   const audio = useFocusAudioContext();
+
+  // Escape backs out of zen view — never trap someone in a full-screen mode.
+  useEffect(() => {
+    if (!zen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zen]);
 
   const [stats, setStats] = useLocalStorage("alfred.focus.stats", {
     date: todayKey(),
@@ -90,7 +102,15 @@ export default function Focus() {
       />
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 p-8 bg-gradient-card border-border flex flex-col items-center">
+        <Card className="lg:col-span-2 p-8 bg-gradient-card border-border flex flex-col items-center relative">
+          <button
+            type="button"
+            onClick={() => setZen(true)}
+            title="Large type — full-screen countdown, readable from across the room"
+            className="absolute top-4 right-4 h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-gold hover:border-gold/40 transition-all"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
           <div className="relative">
             <svg width="320" height="320" className="transform -rotate-90">
               <circle
@@ -189,6 +209,58 @@ export default function Focus() {
         <FocusSoundboard audio={audio} />
         </div>
       </div>
+
+      {zen &&
+        createPortal(
+          // Portaled straight to <body> — a route-transition ancestor sets a
+          // (no-op) transform on the page wrapper, which would otherwise make
+          // this "fixed" overlay contain itself to that scrollable wrapper
+          // instead of the real viewport.
+          <div
+            className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center gap-8"
+            onClick={() => setZen(false)}
+            role="button"
+            tabIndex={-1}
+            title="Tap anywhere to exit"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZen(false);
+              }}
+              aria-label="Exit large type"
+              className="absolute top-6 right-6 h-10 w-10 flex items-center justify-center rounded-full border border-border text-muted-foreground hover:text-gold hover:border-gold/40 transition-all"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="font-mono text-sm tracking-[0.3em] uppercase text-muted-foreground">
+              {running ? "In session" : "Ready"}
+            </div>
+            <div className="font-display tabular-nums text-foreground leading-none text-[min(28vw,14rem)]">
+              {formatTime(remaining)}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRunning((r) => !r);
+              }}
+              className="flex items-center gap-3 rounded-full bg-gradient-gold text-primary-foreground shadow-gold px-8 py-4 text-lg"
+            >
+              {running ? (
+                <>
+                  <Pause className="h-6 w-6" /> Pause
+                </>
+              ) : (
+                <>
+                  <Play className="h-6 w-6" /> Begin
+                </>
+              )}
+            </button>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

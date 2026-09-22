@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Check, Target } from "lucide-react";
+import { Plus, Trash2, Check, Target, Bookmark, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,15 @@ export interface BrainEntry {
   goalId?: string;
 }
 
+export interface QuickTemplate {
+  id: string;
+  text: string;
+  label: BrainLabel;
+}
+
+const TEMPLATES_KEY = "alfred.quickTemplates";
+const MAX_TEMPLATES = 12;
+
 const LABELS: BrainLabel[] = ["career", "nil", "body", "money", "life", "skill"];
 
 const labelStyles: Record<BrainLabel, string> = {
@@ -34,6 +43,7 @@ const labelStyles: Record<BrainLabel, string> = {
 export default function BrainDump() {
   const [entries, setEntries] = useLocalStorage<BrainEntry[]>("alfred.brain", []);
   const [goals] = useLocalStorage<Goal[]>(GOALS_KEY, SEED_GOALS);
+  const [templates, setTemplates] = useLocalStorage<QuickTemplate[]>(TEMPLATES_KEY, []);
   const [text, setText] = useState("");
   const [label, setLabel] = useState<BrainLabel>("career");
   const [goalId, setGoalId] = useState<string>("");
@@ -63,6 +73,22 @@ export default function BrainDump() {
   const linkGoal = (id: string, gid: string) =>
     setEntries(entries.map((e) => (e.id === id ? { ...e, goalId: gid || undefined } : e)));
 
+  const saveTemplate = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (templates.some((t) => t.text === trimmed && t.label === label)) return;
+    const next = [{ id: crypto.randomUUID(), text: trimmed, label }, ...templates].slice(
+      0,
+      MAX_TEMPLATES,
+    );
+    setTemplates(next);
+  };
+  const applyTemplate = (t: QuickTemplate) => {
+    setText(t.text);
+    setLabel(t.label);
+  };
+  const removeTemplate = (id: string) => setTemplates(templates.filter((t) => t.id !== id));
+
   const filtered = useMemo(
     () => (filter === "all" ? entries : entries.filter((e) => e.label === filter)),
     [entries, filter]
@@ -81,6 +107,39 @@ export default function BrainDump() {
         title="Brain Dump"
         description="Empty the mind. Sort it later. Every fragment counts."
       />
+
+      {templates.length > 0 && (
+        <div>
+          <p className="font-mono text-[9px] tracking-[0.25em] uppercase text-muted-foreground mb-2">
+            Quick templates — tap to fill, then Capture
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <div
+                key={t.id}
+                className={`group flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full border text-[11px] transition-all ${labelStyles[t.label]}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => applyTemplate(t)}
+                  className="max-w-[220px] truncate"
+                  title={t.text}
+                >
+                  {t.text}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeTemplate(t.id)}
+                  aria-label={`Delete template "${t.text}"`}
+                  className="opacity-50 hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Card className="p-6 bg-gradient-card border-border">
         <Textarea
@@ -108,12 +167,23 @@ export default function BrainDump() {
               </button>
             ))}
           </div>
-          <Button
-            onClick={add}
-            className="bg-gradient-gold text-primary-foreground hover:opacity-90 shadow-gold"
-          >
-            <Plus className="h-4 w-4 mr-1" /> Capture
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveTemplate}
+              disabled={!text.trim()}
+              title="Save this text + tag as a quick template"
+              className="h-9 w-9 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-gold hover:border-gold/40 transition-all disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <Bookmark className="h-4 w-4" />
+            </button>
+            <Button
+              onClick={add}
+              className="bg-gradient-gold text-primary-foreground hover:opacity-90 shadow-gold"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Capture
+            </Button>
+          </div>
         </div>
         <div className="mt-3 flex items-center gap-2">
           <Target className="h-3.5 w-3.5 text-gold" />

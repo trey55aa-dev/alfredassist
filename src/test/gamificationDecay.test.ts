@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   DECAY_FLOOR_FACTOR,
   addDaysYmd,
+  activeStreakDays,
   daysBetweenYmd,
   decayedXp,
   distributeDecay,
+  type GamificationState,
+  EMPTY_STATE,
 } from "@/lib/gamification";
 
 describe("decayedXp", () => {
@@ -74,5 +77,31 @@ describe("daysBetweenYmd", () => {
   });
   it("counts calendar days across month boundaries", () => {
     expect(daysBetweenYmd("2026-06-28", "2026-07-05")).toBe(7);
+  });
+});
+
+describe("activeStreakDays (powers the Your Rhythm activity view)", () => {
+  const stateWith = (activeDays: string[]): GamificationState => ({
+    ...EMPTY_STATE,
+    activeDays,
+  });
+  const today = new Date("2026-07-10T12:00:00");
+
+  it("no activity at all → 0", () => {
+    expect(activeStreakDays(stateWith([]), today)).toBe(0);
+  });
+
+  it("today inactive, even with a long past streak → 0", () => {
+    expect(activeStreakDays(stateWith(["2026-07-08", "2026-07-09"]), today)).toBe(0);
+  });
+
+  it("counts consecutive days ending today", () => {
+    const days = ["2026-07-08", "2026-07-09", "2026-07-10"];
+    expect(activeStreakDays(stateWith(days), today)).toBe(3);
+  });
+
+  it("a gap stops the count — only the run touching today counts", () => {
+    const days = ["2026-07-01", "2026-07-09", "2026-07-10"];
+    expect(activeStreakDays(stateWith(days), today)).toBe(2);
   });
 });

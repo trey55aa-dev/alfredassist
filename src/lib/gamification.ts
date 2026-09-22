@@ -146,6 +146,10 @@ export interface GamificationState {
   // Per-day decay ledger: what each missed day cost, so making a day up later
   // (backfilling it on the habit calendar) can refund exactly that charge.
   decayByDay?: Record<string, number>;
+  // Days (YYYY-MM-DD) with at least one XP-earning action — powers the
+  // "Your Rhythm" activity view. Capped, not a scoreboard: shows where you've
+  // been, never used to shame a gap.
+  activeDays?: string[];
 }
 
 const KEY = "alfred.gamification";
@@ -181,6 +185,18 @@ export function addDaysYmd(ymd: string, n: number): string {
   const d = new Date(ymd + "T00:00:00");
   d.setDate(d.getDate() + n);
   return ymdOf(d);
+}
+
+/** Consecutive active days ending today (0 if today itself has no activity yet). */
+export function activeStreakDays(state: GamificationState, now = new Date()): number {
+  const set = new Set(state.activeDays ?? []);
+  let cursor = ymdOf(now);
+  let count = 0;
+  while (set.has(cursor)) {
+    count++;
+    cursor = addDaysYmd(cursor, -1);
+  }
+  return count;
 }
 
 /** XP remaining after `absentDays` fully-missed days (pure, testable). */
@@ -455,6 +471,10 @@ export function awardXp(
     lastActiveDay: today,
     decayAppliedUpTo: today,
   };
+  const activeDaysMax = 120;
+  if (!(state.activeDays ?? []).includes(today)) {
+    next.activeDays = [...(state.activeDays ?? []), today].slice(-activeDaysMax);
+  }
   if (reason === "habit") next.habitsCompleted += 1;
   if (reason === "event") {
     next.eventsCompleted += 1;

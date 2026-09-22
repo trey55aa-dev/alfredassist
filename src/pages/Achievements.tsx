@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, History, MoonStar, SlidersHorizontal, Sparkles, Undo2, TrendingDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, History, MoonStar, SlidersHorizontal, Sparkles, Undo2, TrendingDown, CalendarCheck } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +10,7 @@ import {
 import type { XpLogEntry } from "@/lib/gamification";
 import { toast } from "sonner";
 import { useGamification } from "@/hooks/useGamification";
-import { BADGES, LEVELS, recalibrateToLevel } from "@/lib/gamification";
+import { BADGES, LEVELS, recalibrateToLevel, activeStreakDays, addDaysYmd, ymdOf } from "@/lib/gamification";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -28,6 +28,17 @@ export default function Achievements() {
   const lastDecay = (state.xpLog ?? [])
     .filter((e) => e.kind === "decay" && e.at > Date.now() - 7 * 86_400_000)
     .at(-1);
+
+  // Your Rhythm — last 30 days, active or not. A mirror, not a scoreboard.
+  const activeDaysSet = useMemo(() => new Set(state.activeDays ?? []), [state.activeDays]);
+  const rhythmDays = useMemo(() => {
+    const today = ymdOf(new Date());
+    const out: string[] = [];
+    for (let i = 29; i >= 0; i--) out.push(addDaysYmd(today, -i));
+    return out;
+  }, []);
+  const rhythmActiveCount = rhythmDays.filter((d) => activeDaysSet.has(d)).length;
+  const rhythmStreak = activeStreakDays(state);
 
   const applyRecalibrate = () => {
     if (pickedLevel === "" || pickedLevel === level.level) return;
@@ -204,6 +215,49 @@ export default function Achievements() {
             </div>
           )}
         </div>
+      </Card>
+
+      {/* Your Rhythm — days you showed up, last 30 days. Not a streak to lose;
+          just where you've been, so "better than last week" has something to
+          compare against. */}
+      <Card className="p-6 bg-gradient-card border-border">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <h3 className="font-display text-2xl">Your Rhythm</h3>
+            <p className="font-mono text-[9px] tracking-[0.2em] uppercase text-muted-foreground mt-0.5">
+              Days you showed up — last 30 days
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="font-display text-3xl text-gold leading-none">{rhythmActiveCount}</div>
+            <div className="font-mono text-[9px] tracking-wider uppercase text-muted-foreground mt-1">
+              of 30 days
+            </div>
+          </div>
+        </div>
+        <div className="flex items-end gap-[3px] h-10">
+          {rhythmDays.map((d) => {
+            const active = activeDaysSet.has(d);
+            const isToday = d === ymdOf(new Date());
+            return (
+              <div key={d} className="flex-1 h-full flex items-end" title={d}>
+                <div
+                  className={`w-full rounded-sm transition-all ${active ? "bg-gradient-gold" : "bg-muted/30"}`}
+                  style={{
+                    height: active ? "100%" : "20%",
+                    opacity: isToday ? 1 : active ? 0.85 : 0.5,
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {rhythmStreak > 1 && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CalendarCheck className="h-3.5 w-3.5 text-gold shrink-0" />
+            <span className="text-gold font-medium">{rhythmStreak} days</span> active in a row, right up to today.
+          </p>
+        )}
       </Card>
 
       {/* Stats */}
