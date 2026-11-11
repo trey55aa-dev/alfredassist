@@ -64,7 +64,69 @@ describe("computeProjection", () => {
     expect(proj.requiredDailyRate).not.toBeNull();
     expect(proj.requiredDailyRate!).toBeGreaterThan(9);
     expect(proj.requiredDailyRate!).toBeLessThan(11); // 100 / ~10 days
-    expect(proj.daysLeft).toBe(10);
+    // Jun 1 through Jun 11 inclusive — the deadline day is still usable.
+    expect(proj.daysLeft).toBe(11);
+  });
+
+  it("reads a deadline saved by the date picker, not just a plain date string", () => {
+    // The picker stores toISOString(); appending a time to that used to yield
+    // an Invalid Date and silently NaN'd every downstream pace figure.
+    const now = new Date(2026, 5, 1, 12, 0, 0);
+    const goal = mkGoal({
+      target: 100,
+      current: 0,
+      createdAt: now.getTime(),
+      deadline: new Date(2026, 5, 11, 12, 0, 0).toISOString(),
+    });
+    const proj = computeProjection(goal, now);
+    expect(Number.isFinite(proj.daysLeft!)).toBe(true);
+    expect(Number.isFinite(proj.requiredDailyRate!)).toBe(true);
+  });
+
+  it("never reports a day count larger than the goal's own window", () => {
+    // The old math extrapolated shortfall / actual-rate with no bound, which
+    // produced five-digit "days behind" figures on barely-started goals.
+    const start = new Date(2026, 0, 1, 12, 0, 0);
+    const now = new Date(2026, 7, 25, 12, 0, 0);
+    const goal = mkGoal({
+      target: 90,
+      current: 1,
+      createdAt: start.getTime(),
+      deadline: "2026-12-31",
+    });
+    const proj = computeProjection(goal, now);
+    expect(proj.daysLate).toBeNull();
+    expect(proj.label).not.toMatch(/\d{4,}/); // no runaway numbers in the copy
+  });
+
+  it("reports how far behind in units, bounded by the target", () => {
+    const now = new Date(2026, 7, 25, 12, 0, 0);
+    const goal = mkGoal({
+      target: 12,
+      current: 2,
+      unit: "books",
+      createdAt: new Date(2026, 0, 1).getTime(),
+      deadline: "2026-12-31",
+    });
+    const proj = computeProjection(goal, now);
+    expect(proj.paceTarget).toBeGreaterThan(2);
+    expect(proj.paceTarget!).toBeLessThanOrEqual(12);
+    expect(proj.behindBy).toBe(proj.paceTarget! - 2);
+    expect(proj.label).toContain("Behind by");
+  });
+
+  it("does not apply cumulative-rate math to streak goals", () => {
+    const goal = mkGoal({
+      target: 90,
+      current: 3,
+      goalType: "streak",
+      deadline: "2026-12-31",
+      createdAt: new Date(2026, 0, 1).getTime(),
+    });
+    const proj = computeProjection(goal, new Date(2026, 7, 25));
+    expect(proj.status).toBe("streak");
+    expect(proj.daysLate).toBeNull();
+    expect(proj.label).toBe("");
   });
 
   it("keeps the far-behind message supportive, not shaming (grace before penalty)", () => {
@@ -99,11 +161,18 @@ describe("computeProjection", () => {
     });
     const proj = computeProjection(goal, now);
     expect(proj.status).toBe("behind_critical");
-    // daysLate (the overshoot) is enormous here…
-    expect(proj.daysLate!).toBeGreaterThan(1000);
-    // …but the label reflects days LEFT, and never that runaway number.
-    expect(proj.label).toContain(`${proj.daysLeft}`);
-    expect(proj.label).not.toMatch(/\d{4,}/); // no 4+ digit day count
-    expect(proj.label.toLowerCase()).toContain("left");
+    // The overshoot runs far past the goal's own window, so it is withheld
+    // rather than surfaced — a five-digit day count is noise, not information.
+    expect(proj.daysLate).toBeNull();
+    // What the user sees instead is how far short of today's mark they are,
+    // in the goal's own units, and it can never exceed the target.
+    expect(proj.behindBy).toBeGreaterThan(0);
+    expect(proj.behindBy!).toBeLessThanOrEqual(goal.target!);
+    expect(proj.label).toContain(`${proj.behindBy}`);
+    // Never a runaway number anywhere the user reads.
+    expect(proj.label).not.toMatch(/\d{4,}/);
+    expect(proj.detail ?? "").not.toMatch(/\d{4,}/);
+    // The days that remain stay visible as the actionable window.
+    expect(proj.detail ?? "").toContain(`${proj.daysLeft}`);
   });
 });

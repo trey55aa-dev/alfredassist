@@ -1,8 +1,31 @@
 import { todayKey } from "./alfred";
+import { purgeStepTicks, type HabitStep } from "./habitSteps";
 
 export type Cadence = "daily" | "weekly" | "monthly" | "quarterly" | "annual";
 
 export const CADENCES: Cadence[] = ["daily", "weekly", "monthly", "quarterly", "annual"];
+
+/**
+ * Coerce anything to a usable cadence, defaulting to "daily".
+ *
+ * Habits are parsed straight out of localStorage, so a row can arrive without a
+ * cadence (predating the field, a partial write, a hand edit). Several places
+ * index records by `habit.cadence`, and an undefined key there took out the
+ * Dashboard, Checklist, Agenda and Review with no way back — the bad row stayed
+ * in storage, so reloading just crashed again. habitsRepo already defaults the
+ * same way on the cloud round-trip; this is the local half of that guard.
+ */
+export function normalizeCadence(value: unknown): Cadence {
+  return CADENCES.includes(value as Cadence) ? (value as Cadence) : "daily";
+}
+
+/** Habit list from untrusted storage, with every row given a valid cadence. */
+export function normalizeHabits(raw: unknown): Habit[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((h): h is Habit => !!h && typeof h === "object" && typeof (h as Habit).id === "string")
+    .map((h) => (CADENCES.includes(h.cadence) ? h : { ...h, cadence: normalizeCadence(h.cadence) }));
+}
 
 export const CADENCE_LABEL: Record<Cadence, string> = {
   daily: "Daily",
@@ -28,6 +51,9 @@ export interface Habit {
   goalIncrement?: number;   // amount to add to goal.current per tick (default 1)
   target?: number;          // optional target count per period (e.g. 3 / month)
   recoverySteps?: string[]; // user-defined "what to do to get back on track"
+  /** Turns a habit into a routine — the small steps it's actually made of
+   *  ("morning routine" = brush teeth, water, floss). See lib/habitSteps. */
+  steps?: HabitStep[];
   createdAt: number;
   archived?: boolean;
 }
@@ -107,6 +133,9 @@ export function purgeHabitMeta(habitId: string): void {
     delete notes[habitId];
     writeJSON(HABIT_NOTES_KEY, notes);
   }
+
+  // A deleted routine leaves no step ticks behind to age in storage.
+  purgeStepTicks(habitId);
 }
 
 export function loadHabitNotes(): Record<string, string> {
@@ -379,16 +408,17 @@ export function buildRecovery(habit: Habit, logs: HabitLog[], today = new Date()
           return null;
         })();
 
+  const cadence = normalizeCadence(habit.cadence);
   const steps =
     habit.recoverySteps && habit.recoverySteps.length > 0
       ? habit.recoverySteps
-      : DEFAULT_STEPS_BY_CADENCE[habit.cadence](habit.title);
+      : DEFAULT_STEPS_BY_CADENCE[cadence](habit.title);
 
   return {
     habit,
     missedPeriods: effectiveMissed,
     lastDoneKey: lastKey,
-    flavor: FLAVOR_BY_CADENCE[habit.cadence](habit.title, effectiveMissed),
+    flavor: FLAVOR_BY_CADENCE[cadence](habit.title, effectiveMissed),
     steps,
   };
 }

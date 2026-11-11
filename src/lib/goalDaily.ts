@@ -3,7 +3,7 @@
 // in its own local store (NOT goal.progressLog, which the dashboard auto-stamps).
 
 import type { Goal } from "./goals";
-import { computeProjection } from "./goalsHistory";
+import { computeProjection, fmtUnits } from "./goalsHistory";
 import { todayKey } from "./alfred";
 
 export const GOAL_DAILY_KEY = "alfred.goalDaily.done";
@@ -68,13 +68,16 @@ export function paceHint(goal: Goal): string | null {
   if (r == null || !isFinite(r) || r <= 0) return null;
 
   const money = goal.unit === "$";
-  const unit = money ? "" : goal.unit ? ` ${goal.unit}` : "";
   if (r >= 1) {
     const v = Math.round(r);
-    return money ? `$${v.toLocaleString()}/day to stay on pace` : `${v}${unit}/day to stay on pace`;
+    return money
+      ? `$${v.toLocaleString()}/day to stay on pace`
+      : `${fmtUnits(v, goal.unit)}/day to stay on pace`;
   }
   const w = Math.max(1, Math.round(r * 7));
-  return money ? `$${w.toLocaleString()}/wk to stay on pace` : `${w}${unit}/wk to stay on pace`;
+  return money
+    ? `$${w.toLocaleString()}/wk to stay on pace`
+    : `${fmtUnits(w, goal.unit)}/wk to stay on pace`;
 }
 
 /** Order active goals so the actionable ones (pace/streak) come first. */
