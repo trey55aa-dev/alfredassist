@@ -139,7 +139,7 @@ function TodayGoalsCard({
               <button
                 type="button"
                 onClick={() => onQuickLog(g.id, reqDay > 0 ? Math.round(reqDay) || 1 : 1)}
-                className="shrink-0 h-8 w-8 rounded-xl border border-gold/30 bg-gold/10 text-gold hover:bg-gold/25 active:scale-95 transition-all flex items-center justify-center font-mono text-base font-bold"
+                className="shrink-0 mr-10 md:mr-0 h-8 w-8 rounded-xl border border-gold/30 bg-gold/10 text-gold hover:bg-gold/25 active:scale-95 transition-all flex items-center justify-center font-mono text-base font-bold"
               >
                 +
               </button>
