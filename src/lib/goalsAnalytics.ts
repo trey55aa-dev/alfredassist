@@ -137,7 +137,7 @@ export interface StreakPace {
  */
 export function streakPace(goal: Goal, now = new Date()): StreakPace {
   const target = goal.target ?? 90;
-  const currentStreak = computeStreakStats(goal).currentStreak;
+  const currentStreak = computeStreakStats(goal, now).currentStreak;
   const needed = Math.max(0, target - currentStreak);
   const daysLeft = daysToDeadline(goal.deadline, now);
 
@@ -235,14 +235,14 @@ export interface StreakStats {
   todayLogged: boolean;
 }
 
-export function computeStreakStats(goal: Goal): StreakStats {
+export function computeStreakStats(goal: Goal, now: Date = new Date()): StreakStats {
   const log = goal.dailyLog ?? {};
   const relapses = goal.relapseLog ?? [];
   const target = goal.target ?? 90;
 
   // Build a sorted list of all dates in the log
   const allDates = Object.keys(log).sort();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = now.toISOString().slice(0, 10);
 
   const todayEntry = log[todayStr];
   const todayLogged = todayEntry !== undefined || relapses.some((r) => r.date === todayStr);
@@ -289,7 +289,7 @@ export function computeStreakStats(goal: Goal): StreakStats {
   bestStreak = Math.max(bestStreak, currentStreak);
 
   // Is achievable? Need `target - currentStreak` more consecutive days before deadline.
-  const daysLeft = daysToDeadline(goal.deadline);
+  const daysLeft = daysToDeadline(goal.deadline, now);
   const needed = target - currentStreak;
   const isAchievable =
     needed <= 0 || (daysLeft !== null && daysLeft >= needed);
